@@ -41,19 +41,16 @@ pip install .
 python -m plantuml_gui
 ```
 
-
 ## Development
 
 ### Pre-requisites
 
-- hatch
+- uv
 
 ### Setup
 
-Commands to be run in the hatch shell, started by typing `hatch shell`.
-
 ```
-pre-commit install -t pre-commit -t pre-push
+uv run pre-commit install -t pre-commit -t pre-push
 ```
 
 ### Running tests
@@ -63,16 +60,16 @@ pre-commit install -t pre-commit -t pre-push
 ##### Without coverage
 
 ```
-pytest
+uv run pytest
 ```
 
 ##### With coverage
 
 ```
-python -m pytest --cov --cov-report=html
+uv run python -m pytest --cov --cov-report=html
 ```
 
 #### Javascript
 
-1. Run `python -m http.server` and open the server in a browser
+1. Run `uv run python -m http.server` and open the server in a browser
 2. In the browser, open tests/js/SpecRunner.html

@@ -39,8 +39,8 @@ jobs:
         echo "PLANTUML_JAR=plantuml.jar" > .env
     - name: Install dependencies
       run: |
-        python -m pip install hatch
+        python -m pip install uv==0.4.9
     - name: Test with pytest
       run: |
-        hatch run pytest
+        uv run pytest
     
