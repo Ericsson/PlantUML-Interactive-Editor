@@ -352,7 +352,7 @@ wheels = [
 
 [[package]]
 name = "plantuml-gui"
-version = "0.21"
+version = "0.24"
 source = { editable = "." }
 dependencies = [
     { name = "flask" },

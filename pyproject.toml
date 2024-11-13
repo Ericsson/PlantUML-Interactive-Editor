@@ -29,7 +29,7 @@ license = "MIT"
 name = "plantuml-gui"
 readme = "README.md"
 requires-python = ">=3.11"
-version = "0.21"
+dynamic = ["version"]
 
 [project.urls]
 Documentation = "https://github.com/Bertil Varenhorst/plantuml-gui#readme"
@@ -44,6 +44,9 @@ dev-dependencies = [
   "mypy==1.13.0",
   "pytest-cov==6.0.0",
 ]
+
+[tool.hatch.version]
+path = "src/plantuml_gui/__about__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/plantuml_gui"]
