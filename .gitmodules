@@ -1,0 +1,3 @@
+[submodule "plantuml.js"]
+	path = plantuml.js
+	url = https://github.com/plantuml/plantuml.js

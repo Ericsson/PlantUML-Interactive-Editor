@@ -1,0 +1,25 @@
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.3.0
+    hooks:
+    -   id: check-yaml
+    -   id: end-of-file-fixer
+    -   id: trailing-whitespace
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.4.8
+  hooks:
+    - id: ruff
+      args:
+        - --fix
+        - --show-fixes
+        - --exit-non-zero-on-fix
+    - id: ruff-format
+-   repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+    -   id: mypy
+-   repo: https://github.com/aufdenpunkt/pre-commit-js-beautify
+    rev: 1.13.0 # represents the used version of JS Beautify as well
+    hooks:
+    -   id: js-beautify
+        args: [--end-with-newline] # list of arguments like '--editorconfig', '--end-with-newline', '--wrap-attributes=auto', '--wrap-line-length=120'

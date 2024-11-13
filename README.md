@@ -1,4 +1,4 @@
-# plantuml-interactive-editor
+# Plantuml-Interactive-Editor
 
 Welcome to PlantUML Interactive Editor! This application is designed to provide an intuitive and interactive environment for editing PlantUML code and generating diagrams in real-time. Whether you're creating a huge activity diagram or a single while loop, our tool streamlines the process, allowing you to focus on design rather than syntax.
 
