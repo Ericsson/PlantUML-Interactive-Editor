@@ -19,12 +19,12 @@ classifiers = [
 ]
 dependencies = [
   "flask==3.0.3",
-  "pytest==8.2.2",
-  "pyquery==2.0.0",
-  "ruff==0.4.8",
-  "pre-commit==3.7.1",
-  "mypy==1.10.0",
-  "pytest-cov==5.0.0",
+  "pytest==8.3.3",
+  "pyquery==2.0.1",
+  "ruff==0.7.3",
+  "pre-commit==4.0.1",
+  "mypy==1.13.0",
+  "pytest-cov==6.0.0",
   "python-dotenv==1.0.1",
   "loguru==0.7.2",
 ]
