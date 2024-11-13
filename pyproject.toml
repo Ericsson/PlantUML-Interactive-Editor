@@ -4,6 +4,7 @@ requires = ["hatchling"]
 
 [project]
 name = 'package'
+dynamic = ["version"]
 authors = [
   { name = "Bertil Varenhorst", email = "bertil.varenhorst@ericsson.com" },
 ]
