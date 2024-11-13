@@ -1,0 +1,146 @@
+
+html, body {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    display: flex;
+}
+
+#left-side {
+    display: flex;
+    flex-direction: column;
+    width: 40%;
+    height: 100%;
+}
+
+#colb {
+    display: flex;
+    flex-direction: column;
+    width: 60%;
+    height: 100%;
+}
+
+#header {
+    background-color: #dcdcdc;
+    padding: 10px;
+    box-sizing: border-box;
+    border: 2px solid black;
+    border-right: none;
+    display: flex;
+    flex-direction: column;
+    position: relative; /* Ensure absolute positioning within header works */
+}
+
+#editor {
+    visibility: hidden; /* at the beginning we make it hidden so that decode can happen before setting the demo */
+    flex: 1;
+    font-size: 16px;
+}
+
+#colb-container {
+    display: flex;
+    width: 60%;
+    padding: 10px;
+    box-sizing: border-box;
+    justify-content: center;
+    align-items: flex-start;
+    border: 2px solid black;
+    overflow-x: auto;
+    overflow-y: hidden;
+    position: relative; /* This ensures the overlay is confined to this container */
+}
+
+#loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.7); /* Semi-transparent white */
+    z-index: 10; /* Make sure it's on top */
+    display: none; /* Hidden by default */
+}
+
+#colb {
+    width: 100%;
+    height: auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: visible;
+    position: relative;
+}
+
+#colb svg {
+    width: 100%;
+    height: auto;
+    display: block;
+    max-width: none;
+    overflow: visible;
+}
+
+#init-text {
+    text-align: center;
+}
+
+#version {
+    font-size: 14px;
+}
+
+#issue {
+    position: relative;
+    align-self: flex-end;
+    margin-top: auto;
+    font-size: 18px;
+    bottom: 5px;
+    right: 5px;
+}
+
+.button-groups {
+    display: flex;
+    flex-direction: row;
+    gap: 10px; /* Adds space between the button groups */
+}
+
+.btn-group {
+    width: auto; /* Allows button groups to size based on content */
+}
+
+
+.dropdown-menu li {
+    position: relative;
+}
+
+.dropdown-menu .dropdown-submenu {
+    display: none;
+    position: absolute;
+    left: 100%;
+    top: -7px;
+}
+
+.dropdown-menu .dropdown-submenu-left {
+    right: 100%;
+    left: auto;
+}
+
+.dropdown-menu > li:hover > .dropdown-submenu {
+    display: block;
+}
+
+#popup {
+    background-color: #eb604b;
+    padding: 10px;
+    position: fixed;
+    top: 0;
+    right: 0;
+    color: black;
+    border: 2px solid black;
+    visibility: hidden; /* Popup will be hidden by default */
+    z-index: 9999; /* Ensure it appears above other content */
+}
+
+
+.hover {
+    position: absolute;
+    background-color: #56596a;
+  }

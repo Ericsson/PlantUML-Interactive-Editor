@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>PlantUML Interactive Editor</title>
+    <link rel="icon" type="image/x-icon" href="static/favicon-32x32.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css"
+        integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
+        integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js"
+        integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/js/bootstrap.min.js"
+        integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="static/ace.js"></script>
+    <script src="static/panzoom.min.js"></script>
+    <script src="static/script.js"></script>
+    <link rel="stylesheet" href="static/styles.css">
+
+
+
+</head>
+
+<body>
+  <div id=popup>Error message</div>
+  <div id="left-side">
+    <div id="header" class="d-flex flex-column">
+        <h2>PlantUML Interactive Editor <span id="version">v{{version}}</span></h2>
+        <div class="button-groups">
+            <div class="btn-group" id="btn-group-1" role="group" aria-label="Basic example">
+              <div class="btn-group" role="group">
+                <button type="button" class="btn btn-success dropdown-toggle"  data-toggle="dropdown" aria-expanded="false">
+                  New
+                </button>
+                <ul class="dropdown-menu">
+                  <li><a class="dropdown-item" id="clear" href="#">Empty Diagram</a></li>
+                  <li><a class="dropdown-item" id="demo" href="#">Demo</a></li>
+                </ul>
+              </div>
+                <button type="button" id="addTitleButton" class="btn btn-success">Add Title</button>
+            </div>
+            <div class="btn-group" id="btn-group-2" role="group" aria-label="Basic example">
+              <button type="button" id="undo" class="btn btn-primary">Undo</button>
+              <button type="button" id="restore" class="btn btn-primary">Redo</button>
+            </div>
+            <div class="btn-group" id="btn-group-3" role="group" aria-label="Basic example">
+                <button type="button" id="copybutton" class="btn btn-dark">Copy</button>
+                <button type="button" id="pastebutton" class="btn btn-dark">Paste</button>
+                <button type="button" id="png" class="btn btn-dark">PNG</button>
+            </div>
+            <div class="btn-group" id="btn-group-4" role="group" aria-label="Basic example">
+                <button type="button" class="btn btn-info" data-toggle="modal" data-target="#usageModal">Help</button>
+          </div>
+        </div>
+    </div>
+    <div id="editor" ></div>
+  </div>
+<div id="colb-container">
+  <div id="colb">
+    <div id="init-text">
+      <h1>PlantUML is Loading</h1>
+      <img src="static/Circles-menu-3.gif"></img>
+    </div>
+  </div>
+  <div id="loading-overlay"></div>
+</div>
+
+<div class="modal fade" id="modalForm" tabindex="-1" role="dialog" aria-labelledby="myModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content shadow">
+                <div class="modal-header">
+                    <h5 class="modal-title">Change Activity Label</h5>
+                    <button type="button" id="close" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body bg-image" style="background-image: url()">
+                    <form id="inputs" class="needs-validation" novalidate="">
+                        <div class="form-group">
+                            <label for="message-text" class="col-form-label">Activity label:</label>
+                            <textarea class="form-control" id="message-text"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer justify text-14">
+                    <button id="submit" type="submit" class="btn btn-primary" data-toggle="modal"
+                        data-target="#modalForm">Submit</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="dropdown-menu" id="activity-menu">
+      <li><a class="dropdown-item" href="#" id="editactivityinmenu">Edit Text</a></li>
+      <li>
+        <a class="dropdown-item" href="#">Add Below &raquo;</a>
+        <ul class="dropdown-menu dropdown-submenu">
+            <li><a class="dropdown-item" href="#" id="addBelowActivity">Activity</a></li>
+            <li><a class="dropdown-item" href="#" id="addIfBelow">If Statement</a></li>
+            <li><a class="dropdown-item" href="#" id="addBelowFork">Fork</a></li>
+            <li><a class="dropdown-item" href="#" id="addBelowSwitch">Switch</a></li>
+            <li><a class="dropdown-item" href="#" id="addBelowWhile">While</a></li>
+            <li><a class="dropdown-item" href="#" id="addBelowRepeat">Repeat While</a></li>
+            <li><a class="dropdown-item" href="#" id="addConnectorActivityBelow">Connector</a></li>
+            <li>
+                <a class="dropdown-item" href="#">Start, Stop, End &raquo;</a>
+                <ul class="dropdown-menu dropdown-submenu">
+                    <li><a class="dropdown-item" href="#" id="addStartBelow">Start</a></li>
+                    <li><a class="dropdown-item" href="#" id="addStopBelow">Stop</a></li>
+                    <li><a class="dropdown-item" href="#" id="addEndBelow">End</a></li>
+                </ul>
+            </li>
+        </ul>
+    </li>
+      <li><a class="dropdown-item" href="#" id="addNoteActivity">Add Note</a></li>
+      <li>
+        <a class="dropdown-item" href="#">Add Arrow Label &raquo;</a>
+        <ul class="dropdown-menu dropdown-submenu">
+            <li><a class="dropdown-item" href="#" id="addArrowLabelAbove">Above</a></li>
+            <li><a class="dropdown-item" href="#" id="addArrowLabelBelow">Below</a></li>
+        </ul>
+      </li>
+      <li><a class="dropdown-item" href="#" id="detachActivity">Toggle Detach</a></li>
+      <li><a class="dropdown-item" href="#" id="breakActivity">Toggle Break</a></li>
+      <li><hr class="dropdown-divider"></li>
+      <li><a class="dropdown-item" href="#" id="delete">Delete</a></li>
+  </div>
+    <div class="modal fade" id="modalFormif" tabindex="-1" role="dialog" aria-labelledby="myModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content shadow">
+                <div class="modal-header">
+                    <h5 class="modal-title">Change Statement Text</h5>
+                    <button type="button" id="close" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body bg-image" style="background-image: url()">
+                    <form id="inputs" class="needs-validation" novalidate="">
+                        <div class="form-group">
+                            <label for="message-textif" class="col-form-label">Labels:</label>
+                            <textarea class="form-control" id="statement"></textarea>
+                            <textarea class="form-control" id="branch1"></textarea>
+                            <textarea class="form-control" id="branch2"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer justify text-14">
+                    <button id="submitif" type="submit" class="btn btn-primary" data-toggle="modal"
+                        data-target="#modalFormif">Submit</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="dropdown-menu" id = "if-menu">
+        <li><a class="dropdown-item" href="#" id = "editiftextmenu">Edit Text</a>
+        <li>
+          <li>
+            <a class="dropdown-item" href="#">
+              Add To Else Branch &raquo;
+            </a>
+            <ul class="dropdown-menu dropdown-submenu">
+              <li>
+                <a class="dropdown-item" href="#" id = "addright">Activity</a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" id = "addrightif">If Statement</a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" id = "addrightfork">Fork</a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" id = "addrightswitch">Switch</a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" id = "addrightwhile">While</a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" id = "addrightrepeat">Repeat While</a>
+              </li>
+            </ul>
+          </li>
+          <li>
+            <a class="dropdown-item" href="#">
+              Add To If Branch &raquo;
+            </a>
+            <ul class="dropdown-menu dropdown-submenu">
+              <li>
+                  <a class="dropdown-item" href="#" id = "addleft">Activity</a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" id = "addleftif">If Statement</a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" id = "addleftfork">Fork</a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" id = "addleftswitch">Switch</a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" id = "addleftwhile">While</a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" id = "addleftrepeat">Repeat While</a>
+              </li>
+            </ul>
+          </li>
+          <li>
+            <a class="dropdown-item" href="#" id = "detachIf">Toggle Detach</a>
+          </li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item" href="#" id = "delIf">Delete</a>
+    </div>
+    <div class="dropdown-menu" id = "ellipse-menu">
+        <li>
+          <a class="dropdown-item" href="#">
+            Add Below &raquo;
+          </a>
+          <ul class="dropdown-menu dropdown-submenu">
+            <li>
+                <a class="dropdown-item" href="#" id = "addactivitybelowellipse">Activity</a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" id = "addifbelowellipse">If Statement</a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" id = "addforkbelowellipse">Fork</a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" id = "addswitchbelowellipse">Switch</a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" id = "addwhilebelowellipse">While</a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" id = "addrepeatbelowellipse">Repeat While</a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" id = "addconnectorbelowellipse">Connector</a>
+            </li>
+          </ul>
+        </li>
+      <li><hr class="dropdown-divider"></li>
+      <a class="dropdown-item" href="#" id = "ellipsedelete">Delete</a>
+  </div>
+  <div class="modal fade" id="modalFormTitle" tabindex="-1" role="dialog" aria-labelledby="myModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content shadow">
+            <div class="modal-header">
+                <h5 class="modal-title">Change Title</h5>
+                <button type="button" id="close" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body bg-image" style="background-image: url()">
+                <form id="inputs" class="needs-validation" novalidate="">
+                    <div class="form-group">
+                        <label for="title-text" class="col-form-label">Diagram Title:</label>
+                        <textarea class="form-control" id="title-text"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer justify text-14">
+                <button id="submit-title" type="submit" class="btn btn-primary" data-toggle="modal"
+                    data-target="#modalFormTitle">Submit</button>
+            </div>
+        </div>
+    </div>
+  </div>
+<div class="dropdown-menu" id = "title-menu">
+  <li><a class="dropdown-item" href="#" id = "editTitle">Edit</a>
+  <li><hr class="dropdown-divider"></li>
+  <li><a class="dropdown-item" href="#" id = "deleteTitle">Delete</a>
+</div>
+  <div class="dropdown-menu" id = "fork-menu">
+    <li><a class="dropdown-item" href="#" id = "forkAgain">Fork Again</a>
+    <li><a class="dropdown-item" href="#" id = "forkToggle">Toggle Fork/Merge</a>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="#" id = "deleteFork">Delete</a>
+  </div>
+  <div class="modal fade" id="modalFormNote" tabindex="-1" role="dialog" aria-labelledby="myModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content shadow">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Note</h5>
+                    <button type="button" id="close" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body bg-image" style="background-image: url()">
+                    <form id="inputs" class="needs-validation" novalidate="">
+                        <div class="form-group">
+                            <label for="note-text" class="col-form-label">Note text:</label>
+                            <textarea class="form-control" id="note-text"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer justify text-14">
+                    <button id="submit-note" type="submit" class="btn btn-primary" data-toggle="modal"
+                        data-target="#modalFormNote">Submit</button>
+                </div>
+            </div>
+        </div>
+  </div>
+  <div class="dropdown-menu" id = "note-menu">
+    <li><a class="dropdown-item" href="#" id = "noteEdit">Edit Note</a>
+      <li><a class="dropdown-item" href="#" id ="noteToggle">Toggle Left/Right</a>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="#" id = "deleteNote">Delete</a>
+  </div>
+  <div class="modal fade" id="modalFormGroup" tabindex="-1" role="dialog" aria-labelledby="myModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content shadow">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Group</h5>
+                    <button type="button" id="close" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body bg-image" style="background-image: url()">
+                    <form id="inputs" class="needs-validation" novalidate="">
+                        <div class="form-group">
+                            <label for="group-text" class="col-form-label">Group label:</label>
+                            <textarea class="form-control" id="group-text"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer justify text-14">
+                    <button id="submit-group" type="submit" class="btn btn-primary" data-toggle="modal"
+                        data-target="#modalFormGroup">Submit</button>
+                </div>
+            </div>
+        </div>
+  </div>
+  <div class="dropdown-menu" id = "group-menu">
+    <li><a class="dropdown-item" href="#" id = "groupEdit">Edit Label</a>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="#" id = "deleteGroup">Delete</a>
+  </div>
+  <div class="dropdown-menu" id = "merge-menu">
+    <li>
+      <a class="dropdown-item" href="#" id = "addactivitymerge">Activity</a>
+    </li>
+    <li>
+      <a class="dropdown-item" href="#" id = "addifmerge">If Statement</a>
+    </li>
+    <li>
+      <a class="dropdown-item" href="#" id = "addforkmerge">Fork</a>
+    </li>
+    <li>
+      <a class="dropdown-item" href="#" id = "addswitchmerge">Switch</a>
+    </li>
+    <li>
+      <a class="dropdown-item" href="#" id = "addwhilemerge">While</a>
+    </li>
+    <li>
+      <a class="dropdown-item" href="#" id = "addrepeatmerge">Repeat While</a>
+    </li>
+    <li>
+      <a class="dropdown-item" href="#">
+        Start,Stop,End &raquo;
+      </a>
+      <ul class="dropdown-menu dropdown-submenu">
+          <li>
+              <a class="dropdown-item" href="#" id = "addstartmerge">Start</a>
+          </li>
+        <li>
+          <a class="dropdown-item" href="#" id = "addstopmerge">Stop</a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="#" id = "addendmerge">End</a>
+        </li>
+      </ul>
+    </li>
+  </div>
+  <div class="modal fade" id="modalFormWhile" tabindex="-1" role="dialog" aria-labelledby="myModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content shadow">
+                <div class="modal-header">
+                    <h5 class="modal-title">Change While Statement</h5>
+                    <button type="button" id="close" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body bg-image" style="background-image: url()">
+                    <form id="inputs" class="needs-validation" novalidate="">
+                        <div class="form-group">
+                            <label for="message-textwhile" class="col-form-label">While Statement Labels:</label>
+                            <textarea class="form-control" id="whilestatement"></textarea>
+                            <textarea class="form-control" id="break"></textarea>
+                            <textarea class="form-control" id="loop"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer justify text-14">
+                    <button id="submitwhile" type="submit" class="btn btn-primary" data-toggle="modal"
+                        data-target="#modalFormWhile">Submit</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="dropdown-menu" id = "while-menu">
+      <li><a class="dropdown-item" href="#" id = "editwhilemenu">Edit Text</a>
+      <li>
+        <li>
+          <a class="dropdown-item" href="#">
+            Add In Loop &raquo;
+          </a>
+          <ul class="dropdown-menu dropdown-submenu">
+            <li>
+              <a class="dropdown-item" href="#" id = "addactivityloop">Activity</a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" id = "addifloop">If Statement</a>
+          </li>
+            <li>
+              <a class="dropdown-item" href="#" id = "addforkloop">Fork</a>
+          </li>
+          <li>
+            <a class="dropdown-item" href="#" id = "addswitchloop">Switch</a>
+        </li>
+            <li>
+              <a class="dropdown-item" href="#" id = "addwhileloop">While</a>
+          </li>
+          <li>
+            <a class="dropdown-item" href="#" id = "addrepeatloop">Repeat While</a>
+        </li>
+          <li>
+            <a class="dropdown-item" href="#">
+              Start,Stop,End &raquo;
+            </a>
+            <ul class="dropdown-menu dropdown-submenu">
+                <li>
+                    <a class="dropdown-item" href="#" id = "addstartloop">Start</a>
+                </li>
+              <li>
+                <a class="dropdown-item" href="#" id = "addstoploop">Stop</a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" id = "addendloop">End</a>
+              </li>
+            </ul>
+          </li>
+          </ul>
+        </li>
+        <li>
+          <a class="dropdown-item" href="#">
+            Add After &raquo;
+          </a>
+          <ul class="dropdown-menu dropdown-submenu">
+            <li>
+                <a class="dropdown-item" href="#" id = "addactivitybreak">Activity</a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" id = "addifbreak">If Statement</a>
+          </li>
+          <li>
+            <a class="dropdown-item" href="#" id = "addforkbreak">Fork</a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="#" id = "addswitchbreak">Switch</a>
+      </li>
+          <li>
+            <a class="dropdown-item" href="#" id = "addwhilebreak">While</a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="#" id = "addrepeatbreak">Repeat While</a>
+      </li>
+        <li>
+          <a class="dropdown-item" href="#">
+            Start,Stop,End &raquo;
+          </a>
+          <ul class="dropdown-menu dropdown-submenu">
+              <li>
+                  <a class="dropdown-item" href="#" id = "addstartbreak">Start</a>
+              </li>
+            <li>
+              <a class="dropdown-item" href="#" id = "addstopbreak">Stop</a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" id = "addendbreak">End</a>
+            </li>
+          </ul>
+        </li>
+          </ul>
+        </li>
+      <li><hr class="dropdown-divider"></li>
+      <li><a class="dropdown-item" href="#" id = "delwhile">Delete</a>
+  </div>
+  <div class="dropdown-menu" id = "connector-menu">
+    <li>
+      <a class="dropdown-item" href="#" id = "toggledetachconnector">Toggle Detach</a>
+    </li>
+    <li>
+      <a class="dropdown-item" href="#" id = "noteconnector">Add Note</a>
+    </li>
+    <li>
+      <a class="dropdown-item" href="#">
+        Add Below &raquo;
+      </a>
+      <ul class="dropdown-menu dropdown-submenu">
+        <li>
+            <a class="dropdown-item" href="#" id = "addactivitybelowconnector">Activity</a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="#" id = "addifbelowconnector">If Statement</a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="#" id = "addforkbelowconnector">Fork</a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="#" id = "addswitchbelowconnector">Switch</a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="#" id = "addwhilebelowconnector">While</a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="#" id = "addrepeatbelowconnector">Repeat While</a>
+        </li>
+      </ul>
+    </li>
+  <li><hr class="dropdown-divider"></li>
+  <a class="dropdown-item" href="#" id = "connectordelete">Delete</a>
+</div>
+<div class="modal fade" id="modalFormConnector" tabindex="-1" role="dialog" aria-labelledby="myModalLabel"
+aria-hidden="true">
+<div class="modal-dialog modal-dialog-centered" role="document">
+  <div class="modal-content shadow">
+      <div class="modal-header">
+          <h5 class="modal-title">Edit Connector (only one character)</h5>
+          <button type="button" id="close" class="close" data-dismiss="modal" aria-label="Close">
+              <span aria-hidden="true">&times;</span>
+          </button>
+      </div>
+      <div class="modal-body bg-image" style="background-image: url()">
+          <form id="inputs" class="needs-validation" novalidate="">
+              <div class="form-group">
+                  <label for="connector-text" class="col-form-label">Connector label:</label>
+                  <textarea class="form-control" id="connector-text"></textarea>
+              </div>
+          </form>
+      </div>
+      <div class="modal-footer justify text-14">
+          <button id="submit-connector" type="submit" class="btn btn-primary" data-toggle="modal"
+              data-target="#modalFormConnector">Submit</button>
+      </div>
+  </div>
+</div>
+</div>
+<div class="dropdown-menu" id = "arrowlabel-menu">
+  <li><a class="dropdown-item" href="#" id = "arrowlabeledit">Edit</a>
+  <li><hr class="dropdown-divider"></li>
+  <li><a class="dropdown-item" href="#" id = "arrowlabeldelete">Delete</a>
+</div>
+<div class="modal fade" id="modalFormArrow" tabindex="-1" role="dialog" aria-labelledby="myModalLabel"
+aria-hidden="true">
+<div class="modal-dialog modal-dialog-centered" role="document">
+  <div class="modal-content shadow">
+      <div class="modal-header">
+          <h5 class="modal-title">Edit Label</h5>
+          <button type="button" id="close" class="close" data-dismiss="modal" aria-label="Close">
+              <span aria-hidden="true">&times;</span>
+          </button>
+      </div>
+      <div class="modal-body bg-image" style="background-image: url()">
+          <form id="inputs" class="needs-validation" novalidate="">
+              <div class="form-group">
+                  <label for="arrow-text" class="col-form-label">Label: </label>
+                  <textarea class="form-control" id="arrow-text"></textarea>
+              </div>
+          </form>
+      </div>
+      <div class="modal-footer justify text-14">
+          <button id="submit-arrow" type="submit" class="btn btn-primary" data-toggle="modal"
+              data-target="#modalFormArrow">Submit</button>
+      </div>
+  </div>
+</div>
+</div>
+<div class="modal fade" id="duplicateArrowModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLongTitle" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="exampleModalLongTitle">Error: cannot change text of arrow label</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        There are mulitple arrows with this label.<br>
+        Due to a limitation in the PlantUML conversion, duplicate arrow labels cannot be edited in the diagram view.<br>
+        Please use the code editor to change the text of the arrow label instead.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal fade" id="duplicateCaseModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLongTitle" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="exampleModalLongTitle">Error: cannot change text of switch case</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        There are mulitple switch cases with this label.<br>
+        Due to a limitation in the PlantUML conversion, duplicate switch cases cannot be edited in the diagram view.<br>
+        Please use the code editor to change the text of the switch case instead.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="dropdown-menu" id = "repeat-menu">
+  <li><a class="dropdown-item" href="#" id = "editiftextmenurepeat">Edit Text</a>
+  <li>
+    <li>
+      <a class="dropdown-item" href="#">
+        Add Below &raquo;
+      </a>
+      <ul class="dropdown-menu dropdown-submenu">
+        <li>
+          <a class="dropdown-item" href="#" id = "addactivityrightrepeat">Activity</a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="#" id = "addrightifrepeat">If Statement</a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="#" id = "addrightforkrepeat">Fork</a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="#" id = "addrightswitchrepeat">Switch</a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="#" id = "addrightwhilerepeat">While</a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="#" id = "addrightconnectorrepeat">Connector</a>
+        </li>
+      </ul>
+    </li>
+    <li>
+      <a class="dropdown-item" href="#" id = "addbackwards" data-toggle="tooltip" data-placement="right" title="PlantUML only allows for 1 backwards activity" >Add To Loop</a>
+  </li>
+
+  <li><hr class="dropdown-divider"></li>
+  <li><a class="dropdown-item" href="#" id = "delIfrepeat">Delete</a>
+</div>
+<div class="dropdown-menu" id="backward-menu">
+  <li><a class="dropdown-item" href="#" id="editactivityinmenubackward">Edit Text</a></li>
+  <li><hr class="dropdown-divider"></li>
+  <li><a class="dropdown-item" href="#" id="deletebackward">Delete</a></li>
+</div>
+<div class="dropdown-menu" id="forkbottom-menu">
+  <li><a class="dropdown-item" href="#" id="forkbottomtoggle">Toggle Fork/Merge</a></li>
+  <li>
+      <a class="dropdown-item" href="#">Add Below &raquo;</a>
+      <ul class="dropdown-menu dropdown-submenu">
+          <li><a class="dropdown-item" href="#" id="activityfork">Activity</a></li>
+          <li><a class="dropdown-item" href="#" id="iffork">If Statement</a></li>
+          <li><a class="dropdown-item" href="#" id="forkfork">Fork</a></li>
+          <li><a class="dropdown-item" href="#" id="switchfork">Switch</a></li>
+          <li><a class="dropdown-item" href="#" id="whilefork">While</a></li>
+          <li><a class="dropdown-item" href="#" id="repeatfork">Repeat While</a></li>
+          <li><a class="dropdown-item" href="#" id="connectorfork">Connector</a></li>
+          <li>
+              <a class="dropdown-item" href="#">Start, Stop, End &raquo;</a>
+              <ul class="dropdown-menu dropdown-submenu">
+                  <li><a class="dropdown-item" href="#" id="startfork">Start</a></li>
+                  <li><a class="dropdown-item" href="#" id="stopfork">Stop</a></li>
+                  <li><a class="dropdown-item" href="#" id="endfork">End</a></li>
+              </ul>
+          </li>
+      </ul>
+  </li>
+  <li><hr class="dropdown-divider"></li>
+  <li><a class="dropdown-item" href="#" id="deletefork2">Delete</a></li>
+</div>
+<div class="modal fade" id="usageModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLongTitle" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="exampleModalLongTitle">Usage</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        - Right-click on elements to open context menu<br>
+        - Double-click on elements to edit the text<br>
+        - Submit edited text with the button or using CTRL + ENTER<br>
+        - Deleting text of title, note or group deletes the element<br>
+        - Left-click and drag in the diagram to pan<br>
+        - Use mouse wheel or pinch on touch pad to zoom<br>
+        - To share a diagram, copy the URL in the address bar<br>
+        - Hovering over elements highlights the corresponding line<br>
+        - Clicking on activity line in editor highlights it in the diagram<br>
+
+        <br>
+        For support contact bertil.varenhorst@ericsson.com or filip.lange@ericsson.com.<br>
+        <br>
+        <a href="https://plantuml.com/activity-diagram-beta" target="_blank" >Activity Diagram Documentation</a>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="dropdown-menu" id = "switch-menu">
+  <li><a class="dropdown-item" href="#" id = "editiftextmenuswitch">Edit Text</a></li>
+  <li><a class="dropdown-item" href="#" id = "switchagain">Switch Again</a></li>
+  <li><hr class="dropdown-divider"></li>
+  <li><a class="dropdown-item" href="#" id = "delIfswitch">Delete</a>
+</div>
+<div class="modal fade" id="modalFormswitch" tabindex="-1" role="dialog" aria-labelledby="myModalLabel"
+aria-hidden="true">
+<div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content shadow">
+        <div class="modal-header">
+            <h5 class="modal-title">Change Switch Text</h5>
+            <button type="button" id="close" class="close" data-dismiss="modal" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div class="modal-body bg-image" style="background-image: url()">
+            <form id="inputs" class="needs-validation" novalidate="">
+                <div class="form-group">
+                    <label for="message-textswitch" class="col-form-label">Label:</label>
+                    <textarea class="form-control" id="switch-text"></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer justify text-14">
+            <button id="submitswitch" type="submit" class="btn btn-primary" data-toggle="modal"
+                data-target="#modalFormswitch">Submit</button>
+        </div>
+    </div>
+</div>
+</div>
+
+
+<script>
+    (async function() {
+      await initeditor(); // Wait for initeditor() to complete
+      initialize(); // Then run initialize()
+    })();
+    var element = document.getElementById('colb');
+
+  // Initialize Panzoom
+  const panzoomInstance = panzoom(element, {
+    maxZoom: 3,
+    minZoom: 0.25,
+    bounds: true,
+  });
+
+  // Unbind the default double-click zoom
+  element.addEventListener('dblclick', (event) => {
+    event.stopImmediatePropagation();
+  });
+</script>
+
+</body>
+</html>
