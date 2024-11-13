@@ -3,6 +3,7 @@ build-backend = "hatchling.build"
 requires = ["hatchling"]
 
 [project]
+name = 'package'
 authors = [
   { name = "Bertil Varenhorst", email = "bertil.varenhorst@ericsson.com" },
 ]
