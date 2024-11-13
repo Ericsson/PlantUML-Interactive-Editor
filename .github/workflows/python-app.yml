@@ -28,7 +28,7 @@ jobs:
       with:
         distribution: 'temurin'
         java-version: '21'  # PlantUML requires Java; set up a compatible Java version.
-    
+
 
     - name: Download latest PlantUML release
       run: |
@@ -43,4 +43,3 @@ jobs:
     - name: Test with pytest
       run: |
         uv run pytest
-    
