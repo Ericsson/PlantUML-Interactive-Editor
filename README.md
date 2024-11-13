@@ -29,7 +29,7 @@ With PlantUML Interactive Editor, you can:
 
 - Python 3.11
 - PlantUML, https://plantuml.com/starting
-- The path to the PlantUML must be set in an .env file, see .env.example
+- The path to the PlantUML jar file must be set in an .env file, see .env.example
 
 
 ## Installing and running the server
