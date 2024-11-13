@@ -23,9 +23,22 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: "3.11"
+    - name: Set up Java
+      uses: actions/setup-java@v3
+      with:
+        java-version: '11'  # PlantUML requires Java; set up a compatible Java version.
+
+    - name: Download latest PlantUML release
+      run: |
+        # Fetch the latest PlantUML release URL from GitHub API
+        curl -L -o plantuml.jar https://github.com/plantuml/plantuml/releases/download/v1.2024.7/plantuml-mit-1.2024.7.jar
+    - name: Create .env file for PlantUML
+      run: |
+        echo "PLANTUML_JAR=plantuml.jar" > .env
     - name: Install dependencies
       run: |
         python -m pip install hatch
     - name: Test with pytest
       run: |
         hatch run pytest
+    
