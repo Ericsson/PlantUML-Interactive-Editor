@@ -3,8 +3,6 @@ build-backend = "hatchling.build"
 requires = ["hatchling"]
 
 [project]
-name = 'package'
-dynamic = ["version"]
 authors = [
   { name = "Bertil Varenhorst", email = "bertil.varenhorst@ericsson.com" },
 ]
@@ -25,14 +23,6 @@ dependencies = [
   "loguru==0.7.2",
   "python-dotenv==1.0.1"
 ]
-[project.optional-dependencies]
-dev = [
-  "pytest==8.3.3",
-  "pytest-cov==6.0.0",
-  "mypy==1.13.0",
-  "pre-commit==4.0.1",
-  "ruff==0.7.3"
-]
 description = ''
 dynamic = ["version"]
 keywords = []
@@ -41,6 +31,14 @@ name = "plantuml-gui"
 readme = "README.md"
 requires-python = ">=3.8"
 
+[project.optional-dependencies]
+dev = [
+  "pytest==8.3.3",
+  "pytest-cov==6.0.0",
+  "mypy==1.13.0",
+  "pre-commit==4.0.1",
+  "ruff==0.7.3"
+]
 [project.urls]
 Documentation = "https://github.com/Bertil Varenhorst/plantuml-gui#readme"
 Issues = "https://github.com/Bertil Varenhorst/plantuml-gui/issues"
