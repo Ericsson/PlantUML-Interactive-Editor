@@ -19,14 +19,17 @@ classifiers = [
 ]
 dependencies = [
   "flask==3.0.3",
-  "pytest==8.3.3",
   "pyquery==2.0.1",
-  "ruff==0.7.3",
-  "pre-commit==4.0.1",
-  "mypy==1.13.0",
-  "pytest-cov==6.0.0",
-  "python-dotenv==1.0.1",
   "loguru==0.7.2",
+  "python-dotenv==1.0.1"
+]
+[project.optional-dependencies]
+dev = [
+  "pytest==8.3.3",
+  "pytest-cov==6.0.0",
+  "mypy==1.13.0",
+  "pre-commit==4.0.1",
+  "ruff==0.7.3"
 ]
 description = ''
 dynamic = ["version"]
