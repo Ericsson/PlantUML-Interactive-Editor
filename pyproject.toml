@@ -19,35 +19,31 @@ classifiers = [
 ]
 dependencies = [
   "flask==3.0.3",
-  "pytest==8.3.3",
-  "pyquery==2.0.1",
-  "ruff==0.7.3",
-  "pre-commit==4.0.1",
-  "mypy==1.13.0",
-  "pytest-cov==6.0.0",
   "python-dotenv==1.0.1",
   "loguru==0.7.2",
+  "pyquery==2.0.1",
 ]
 description = ''
-dynamic = ["version"]
 keywords = []
 license = "MIT"
 name = "plantuml-gui"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
+version = "0.21"
 
 [project.urls]
 Documentation = "https://github.com/Bertil Varenhorst/plantuml-gui#readme"
 Issues = "https://github.com/Bertil Varenhorst/plantuml-gui/issues"
 Source = "https://github.com/Bertil Varenhorst/plantuml-gui"
 
-[tool.hatch.version]
-path = "src/plantuml_gui/__about__.py"
-
-[tool.hatch.envs.types]
-extra-dependencies = ["mypy>=1.0.0"]
-[tool.hatch.envs.types.scripts]
-check = "mypy --install-types --non-interactive {args:src/plantuml_gui tests}"
+[tool.uv]
+dev-dependencies = [
+  "pytest==8.3.3",
+  "ruff==0.7.3",
+  "pre-commit==4.0.1",
+  "mypy==1.13.0",
+  "pytest-cov==6.0.0",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/plantuml_gui"]
