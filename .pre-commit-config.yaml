@@ -22,4 +22,5 @@ repos:
     rev: 1.13.0 # represents the used version of JS Beautify as well
     hooks:
     -   id: js-beautify
+        files: script\.js
         args: [--end-with-newline] # list of arguments like '--editorconfig', '--end-with-newline', '--wrap-attributes=auto', '--wrap-line-length=120'
