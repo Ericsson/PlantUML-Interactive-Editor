@@ -286,7 +286,7 @@ else (no)
 endif
 detach
 repeat
-:Activity;
+:Activity 1;
 :Activity;
 backward:Activity;
 repeat while (while ?) is (yes) not (no)
@@ -329,7 +329,7 @@ else (no)
 detach
 endif
 repeat
-:Activity;
+:Activity 1;
   :Activity;
   backward:Activity;
 repeat while (while ?) is (yes) not (no)
@@ -372,7 +372,7 @@ else (no)
   :Activity;
 endif
 repeat
-:Activity;
+:Activity 1;
   :Activity;
   backward:Activity;
 repeat while (while ?) is (yes) not (no)
@@ -447,7 +447,7 @@ if (Statement) then (yes)
 else (no)
   :Activity;
 endif
-:Activity;
+:Activity 1;
 repeat
   :Activity;
   :Activity;
@@ -519,7 +519,7 @@ if (Statement) then (yes)
 else (no)
   :Actaivity;
 endif
-:Activity;
+:Activity 1;
 :Activity;
 endif
 :Activity;
@@ -1743,7 +1743,7 @@ note left
 note
 end note
 detach
-:Activity;
+:Activity 1;
 @endumll"""
             assert response.data.decode("utf-8") == expected_puml
 
@@ -1950,7 +1950,7 @@ start
 (A)
 detach
 stop
-:Activity;
+:Activity 1;
 @enduml"""
             assert response.data.decode("utf-8") == expected_puml
 
@@ -3765,7 +3765,7 @@ fork
 fork again
   :action;
 end fork
-:Activity;
+:Activity 1;
 @enduml"""
             assert response.data.decode("utf-8") == expected_puml
 
@@ -4377,6 +4377,27 @@ repeat
 backward:Activity;
 repeat while (while ?) is (yes) not (no)
 :Activity;
+@enduml"""
+            assert response.data.decode("utf-8") == expected_puml
+
+    def test_addactivitytoactivity(self, client):
+        test_data = {
+            "plantuml": """@startuml
+:Activity 1;
+@enduml""",
+            "svg": """<rect fill="#F1F1F1" height="33.9688" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="75" x="11" y="11"></rect><text fill="#000000" font-family="sans-serif" font-size="12" lengthAdjust="spacing" textLength="55" x="21" y="31.9688" style="pointer-events: none;">activity 1</text>""",
+            "svgelement": """<rect fill="#F1F1F1" height="33.9688" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="75" x="11" y="11"></rect>""",
+            "type": "activity",
+        }
+        with client:
+            response = client.post(
+                "/addToActivity",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+:Activity 1;
+:Activity 2;
 @enduml"""
             assert response.data.decode("utf-8") == expected_puml
 
