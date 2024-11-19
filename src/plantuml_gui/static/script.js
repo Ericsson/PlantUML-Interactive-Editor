@@ -2145,7 +2145,19 @@ async function renderPlantUml() {
         displayErrorMessage(`Error with fetch API: ${error.message}`, error);
     }
 
+    if (checkIfStateDiagram(pumlcontent)) { // If state diagram render without interactivity (not supported)
+        fetchSvgFromPlantUml().then((svgContent) => {
+            element.innerHTML = svgContent;
+        })
+        toggleLoadingOverlay();
+    }
+    else {
+        setHandlersForActivityDiagram(pumlcontent, element);
+    }
 
+}
+
+async function setHandlersForActivityDiagram(pumlcontent, element) {
     fetchSvgFromPlantUml().then((svgContent) => {
         element.innerHTML = svgContent;
         const svg = element.querySelector('g');
@@ -3526,4 +3538,16 @@ function restoreeditor() {
         historyPointer++;
         setPuml(history[historyPointer])
     }
+}
+
+function checkIfStateDiagram(puml) {
+    const lines = puml.split('\n');
+    for (let index = 0; index < lines.length; index++) {
+        const line = lines[index];
+        const trimmedLine = line.trim();
+        if (trimmedLine.startsWith('state')) {
+            return true
+        }
+    }
+    return false
 }
