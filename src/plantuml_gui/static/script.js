@@ -2145,14 +2145,15 @@ async function renderPlantUml() {
         displayErrorMessage(`Error with fetch API: ${error.message}`, error);
     }
 
-    if (checkIfStateDiagram(pumlcontent)) { // If state diagram render without interactivity (not supported)
+    if (checkIfActivityDiagram(pumlcontent)) {
+        setHandlersForActivityDiagram(pumlcontent, element)
+    }
+    else {
         fetchSvgFromPlantUml().then((svgContent) => {
             element.innerHTML = svgContent;
         })
         toggleLoadingOverlay();
-    }
-    else {
-        setHandlersForActivityDiagram(pumlcontent, element);
+
     }
 
 }
@@ -3540,14 +3541,19 @@ function restoreeditor() {
     }
 }
 
-function checkIfStateDiagram(puml) {
+function checkIfActivityDiagram(puml) {
+    const activityKeywords = ["if", "while", "fork", "repeat", "switch", ":", "start", "end", "stop"];
+    const notActivityKeywords = ["state", "actor", "boundary", "control", "entity", "database", "collections", "queue"]
     const lines = puml.split('\n');
-    for (let index = 0; index < lines.length; index++) {
-        const line = lines[index];
-        const trimmedLine = line.trim();
-        if (trimmedLine.startsWith('state')) {
-            return true
+    
+    for (const line of lines) {
+        const trimmedLine = line.trim().toLowerCase(); 
+        if (activityKeywords.some(keyword => trimmedLine.startsWith(keyword))) {
+            return true; 
+        }
+        if (notActivityKeywords.some(keyword => trimmedLine.startsWith(keyword))) {
+            return false; 
         }
     }
-    return false
+    return false;
 }
