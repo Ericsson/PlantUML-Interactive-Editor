@@ -3545,14 +3545,14 @@ function checkIfActivityDiagram(puml) {
     const activityKeywords = ["if", "while", "fork", "repeat", "switch", ":", "start", "end", "stop"];
     const notActivityKeywords = ["state", "actor", "boundary", "control", "entity", "database", "collections", "queue"]
     const lines = puml.split('\n');
-    
+
     for (const line of lines) {
-        const trimmedLine = line.trim().toLowerCase(); 
+        const trimmedLine = line.trim().toLowerCase();
         if (activityKeywords.some(keyword => trimmedLine.startsWith(keyword))) {
-            return true; 
+            return true;
         }
         if (notActivityKeywords.some(keyword => trimmedLine.startsWith(keyword))) {
-            return false; 
+            return false;
         }
     }
     return false;
