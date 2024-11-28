@@ -23,6 +23,7 @@
 # SOFTWARE.
 
 
+import re
 from typing import Literal
 
 
@@ -46,7 +47,18 @@ def add(
     lines = puml.splitlines()
 
     if type == "activity":
-        lines.insert(index, ":Activity;")
+        activity_numbers = []
+        for line in lines:
+            match = re.search(r":Activity (\d+)", line)
+            if match:
+                activity_numbers.append(int(match.group(1)))
+
+        if activity_numbers:
+            next_activity_number = max(activity_numbers) + 1
+        else:
+            next_activity_number = 1
+
+        lines.insert(index, f":Activity {next_activity_number};")
 
     if type == "connector":
         lines.insert(index, "(C)")

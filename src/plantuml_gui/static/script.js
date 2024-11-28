@@ -2145,7 +2145,20 @@ async function renderPlantUml() {
         displayErrorMessage(`Error with fetch API: ${error.message}`, error);
     }
 
+    if (checkIfActivityDiagram(pumlcontent)) {
+        setHandlersForActivityDiagram(pumlcontent, element)
+    }
+    else {
+        fetchSvgFromPlantUml().then((svgContent) => {
+            element.innerHTML = svgContent;
+        })
+        toggleLoadingOverlay();
 
+    }
+
+}
+
+async function setHandlersForActivityDiagram(pumlcontent, element) {
     fetchSvgFromPlantUml().then((svgContent) => {
         element.innerHTML = svgContent;
         const svg = element.querySelector('g');
@@ -3526,4 +3539,21 @@ function restoreeditor() {
         historyPointer++;
         setPuml(history[historyPointer])
     }
+}
+
+function checkIfActivityDiagram(puml) {
+    const activityKeywords = ["if", "while", "fork", "repeat", "switch", ":", "start", "end", "stop"];
+    const notActivityKeywords = ["state", "actor", "boundary", "control", "entity", "database", "collections", "queue"]
+    const lines = puml.split('\n');
+
+    for (const line of lines) {
+        const trimmedLine = line.trim().toLowerCase();
+        if (activityKeywords.some(keyword => trimmedLine.startsWith(keyword))) {
+            return true;
+        }
+        if (notActivityKeywords.some(keyword => trimmedLine.startsWith(keyword))) {
+            return false;
+        }
+    }
+    return false;
 }
