@@ -29,7 +29,7 @@ With PlantUML Interactive Editor, you can:
 
 ## Pre-requisites
 
-- Python 3.8 or newer
+- Python 3.10 or newer
 - PlantUML, https://plantuml.com/starting
 - The path to the PlantUML must be set in an .env file, see .env.example
 
