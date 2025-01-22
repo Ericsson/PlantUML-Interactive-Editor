@@ -33,6 +33,10 @@ var Range = ace.require("ace/range").Range
 async function initeditor() {
     editor = ace.edit("editor")
     editor.setTheme("ace/theme/dracula")
+    ace.config.setModuleUrl(
+        "ace/mode/plantuml",
+        "/static/mode-plantuml.js" // Adjust to the correct path where your file is hosted
+      );
     editor.session.setMode("ace/mode/plantuml")
     editor.session.setOption("useWorker", false); // disables syntax validation
     hash = getHashParameter();
