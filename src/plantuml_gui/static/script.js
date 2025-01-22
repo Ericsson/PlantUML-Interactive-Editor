@@ -3542,7 +3542,7 @@ function restoreeditor() {
 }
 
 function checkIfActivityDiagram(puml) {
-    const activityKeywords = ["if", "while", "fork", "repeat", "switch", ":", "start", "end", "stop"];
+    const activityKeywords = ["if", "while", "fork", "repeat", "switch", ":", "start", "stop"];
     const notActivityKeywords = ["state", "actor", "boundary", "control", "entity", "database", "collections", "queue"]
     const lines = puml.split('\n');
 
