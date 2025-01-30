@@ -58,8 +58,9 @@ async function initeditor() {
     }
 
     document.getElementById('editor').style.visibility = 'visible';
-    editor.getSession().on('change', function() {
+    editor.session.on('change', function() {
         debouncedRenderPlantUml(); // Using the debounced version avoids unnecessary API calls
+        //findChangedLines();
     });
 
     editor.session.selection.on('changeCursor', function(e) {
@@ -69,6 +70,29 @@ async function initeditor() {
     });
     console.log("Editor initialization done.")
 }
+
+function findChangedLines() {
+    if (history.length < 2) return; // No previous version to compare
+
+    const prevText = history[historyPointer - 1].split('\n');
+    const currText = history[historyPointer].split('\n');
+
+    let changedIndexes = [];
+    let prevIndex = 0, currIndex = 0;
+
+    while (currIndex < currText.length) {
+        if (prevIndex >= prevText.length || currText[currIndex] !== prevText[prevIndex]) {
+            changedIndexes.push(currIndex); // Use 1-based indexing
+        } else {
+            prevIndex++; // Only move prevIndex when lines match
+        }
+        currIndex++;
+    }
+
+    console.log(changedIndexes)
+    getmarkersinglelines(changedIndexes)
+}
+
 
 const cursorChangeListener = async function(e) {
     const svg = element.querySelector('g');
@@ -2076,13 +2100,16 @@ function saveToHistory(puml) {
 
 function debounce(func, wait) {
     let timeout;
-    return function(...args) {
+    return async function(...args) {
         clearTimeout(timeout);
         timeout = setTimeout(() => func.apply(this, args), wait);
     };
 }
 
-const debouncedRenderPlantUml = debounce(renderPlantUml, 200);
+const debouncedRenderPlantUml = debounce(async () => {
+    await renderPlantUml();
+    findChangedLines(); // Ensure this runs only after rendering is finished
+}, 200);
 
 async function fetchSvgFromPlantUml() {
     try {
