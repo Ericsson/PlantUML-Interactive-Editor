@@ -60,7 +60,6 @@ async function initeditor() {
     document.getElementById('editor').style.visibility = 'visible';
     editor.session.on('change', function() {
         debouncedRenderPlantUml(); // Using the debounced version avoids unnecessary API calls
-        //findChangedLines();
     });
 
     editor.session.selection.on('changeCursor', function(e) {
@@ -2100,7 +2099,7 @@ function saveToHistory(puml) {
 
 function debounce(func, wait) {
     let timeout;
-    return async function(...args) {
+    return function(...args) {
         clearTimeout(timeout);
         timeout = setTimeout(() => func.apply(this, args), wait);
     };
