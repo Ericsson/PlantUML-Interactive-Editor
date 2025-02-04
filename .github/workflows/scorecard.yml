@@ -13,6 +13,9 @@ on:
     - cron: '29 11 * * 3'
   push:
     branches: [ "main" ]
+  pull_request:
+    paths:
+      - '.github/workflows/scorecard.yml'
 
 # Declare default permissions as read only.
 permissions: read-all
