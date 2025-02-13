@@ -22,7 +22,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import hashlib
 import io
+import os
 
 from flask import Blueprint, Flask, jsonify, render_template, request, send_file
 from plantuml_gui.classes import Ellipse, PolyElement, RectElement
@@ -111,9 +113,23 @@ plantuml = Blueprint(
 )
 
 
+def generate_file_hash(file_path):
+    with open(file_path, "rb") as file:
+        file_content = file.read()
+        return hashlib.sha256(file_content).hexdigest()[:8]
+
+
+SCRIPT_PATH = os.path.join(plantuml.static_folder, "script.js")
+
+
 @plantuml.route("/")
 def home():
-    return render_template("index.html", version=__version__)  # pragma: no cover
+    # generate hash for script.js
+    file_hash = generate_file_hash(SCRIPT_PATH)
+    # pass hash to the template
+    return render_template(
+        "index.html", script_hash=file_hash, version=__version__
+    )  # pragma: no cover
 
 
 @plantuml.route("/render", methods=["POST"])
