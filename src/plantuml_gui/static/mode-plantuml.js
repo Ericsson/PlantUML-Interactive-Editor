@@ -1,13 +1,11 @@
 ace.define("ace/mode/plantuml", [
     "require", "exports", "module", "ace/lib/oop", "ace/mode/text", "ace/tokenizer", "ace/mode/plantuml_highlight_rules", "ace/range"
-], function(require, exports, module) {
+], function(require, exports) {
     "use strict";
 
     var oop = require("../lib/oop");
     var TextMode = require("./text").Mode;
-    var Tokenizer = require("../tokenizer").Tokenizer;
     var PlantUMLHighlightRules = require("./plantuml_highlight_rules").PlantUmlHighlightRules;
-    var Range = require("../range").Range;
 
     var PlantUMLMode = function() {
         this.HighlightRules = PlantUMLHighlightRules;
@@ -24,8 +22,8 @@ ace.define("ace/mode/plantuml", [
 });
 
 ace.define("ace/mode/plantuml_highlight_rules", [
-    "require", "exports", "module", "ace/lib/oop", "ace/mode/text_highlight_rules"
-], function(require, exports, module) {
+    "require", "exports", "ace/lib/oop", "ace/mode/text_highlight_rules"
+], function(require, exports) {
     "use strict";
 
     var oop = require("../lib/oop");
@@ -37,81 +35,72 @@ ace.define("ace/mode/plantuml_highlight_rules", [
             "|title|endtitle|note|end note|hide footbox|header|endheader|legend|endlegend|newpage" +
             "|center|footer|scale|autonumber";
 
-        var skinKeywords = [
-            "activityArrowColor", "activityArrowFontColor", "activityArrowFontName",
-            "activityArrowFontSize", "activityArrowFontStyle", "activityBackgroundColor",
-            "activityBarColor", "activityBorderColor", "activityEndColor", "activityFontColor",
-            "activityFontName", "activityFontSize", "activityFontStyle", "activityStartColor",
-            "backgroundColor", "circledCharacterFontColor", "circledCharacterFontName",
-            "circledCharacterFontSize", "circledCharacterFontStyle", "circledCharacterRadius",
-            "classArrowColor", "classArrowFontColor", "classArrowFontName", "classArrowFontSize",
-            "classArrowFontStyle", "classAttributeFontColor", "classAttributeFontName",
-            "classAttributeFontSize", "classAttributeFontStyle", "classAttributeIconSize",
-            "classBackgroundColor", "classBorderColor", "classFontColor", "classFontName",
-            "classFontSize", "classFontStyle", "classStereotypeFontColor", "classStereotypeFontName",
-            "classStereotypeFontSize", "classStereotypeFontStyle", "componentArrowColor",
-            "componentArrowFontColor", "componentArrowFontName", "componentArrowFontSize",
-            "componentArrowFontStyle", "componentBackgroundColor", "componentBorderColor",
-            "componentFontColor", "componentFontName", "componentFontSize", "componentFontStyle",
-            "componentInterfaceBackgroundColor", "componentInterfaceBorderColor",
-            "componentStereotypeFontColor", "componentStereotypeFontName",
-            "componentStereotypeFontSize", "componentStereotypeFontStyle", "footerFontColor",
-            "footerFontName", "footerFontSize", "footerFontStyle", "headerFontColor", "headerFontName",
-            "headerFontSize", "headerFontStyle", "noteBackgroundColor", "noteBorderColor",
-            "noteFontColor", "noteFontName", "noteFontSize", "noteFontStyle", "packageBackgroundColor",
-            "packageBorderColor", "packageFontColor", "packageFontName", "packageFontSize",
-            "packageFontStyle", "sequenceActorBackgroundColor", "sequenceActorBorderColor",
-            "sequenceActorFontColor", "sequenceActorFontName", "sequenceActorFontSize",
-            "sequenceActorFontStyle", "sequenceArrowColor", "sequenceArrowFontColor",
-            "sequenceArrowFontName", "sequenceArrowFontSize", "sequenceArrowFontStyle",
-            "sequenceDividerBackgroundColor", "sequenceDividerFontColor", "sequenceDividerFontName",
-            "sequenceDividerFontSize", "sequenceDividerFontStyle", "sequenceGroupBackgroundColor",
-            "sequenceGroupingFontColor", "sequenceGroupingFontName", "sequenceGroupingFontSize",
-            "sequenceGroupingFontStyle", "sequenceGroupingHeaderFontColor",
-            "sequenceGroupingHeaderFontName", "sequenceGroupingHeaderFontSize",
-            "sequenceGroupingHeaderFontStyle", "sequenceLifeLineBackgroundColor",
-            "sequenceLifeLineBorderColor", "sequenceParticipantBackgroundColor",
-            "sequenceParticipantBorderColor", "sequenceParticipantFontColor",
-            "sequenceParticipantFontName", "sequenceParticipantFontSize",
-            "sequenceParticipantFontStyle", "sequenceTitleFontColor", "sequenceTitleFontName",
-            "sequenceTitleFontSize", "sequenceTitleFontStyle", "stateArrowColor",
-            "stateArrowFontColor", "stateArrowFontName", "stateArrowFontSize", "stateArrowFontStyle",
-            "stateAttributeFontColor", "stateAttributeFontName", "stateAttributeFontSize",
-            "stateAttributeFontStyle", "stateBackgroundColor", "stateBorderColor", "stateEndColor",
-            "stateFontColor", "stateFontName", "stateFontSize", "stateFontStyle", "stateStartColor",
-            "stereotypeABackgroundColor", "stereotypeCBackgroundColor",
-            "stereotypeEBackgroundColor", "stereotypeIBackgroundColor", "titleFontColor",
-            "titleFontName", "titleFontSize", "titleFontStyle", "usecaseActorBackgroundColor",
-            "usecaseActorBorderColor", "usecaseActorFontColor", "usecaseActorFontName",
-            "usecaseActorFontSize", "usecaseActorFontStyle", "usecaseActorStereotypeFontColor",
-            "usecaseActorStereotypeFontName", "usecaseActorStereotypeFontSize",
-            "usecaseActorStereotypeFontStyle", "usecaseArrowColor", "usecaseArrowFontColor",
-            "usecaseArrowFontName", "usecaseArrowFontSize", "usecaseArrowFontStyle",
-            "usecaseBackgroundColor", "usecaseBorderColor", "usecaseFontColor", "usecaseFontName",
-            "usecaseFontSize", "usecaseFontStyle", "usecaseStereotypeFontColor",
-            "usecaseStereotypeFontName", "usecaseStereotypeFontSize", "usecaseStereotypeFontStyle",
-            "ActorBackgroundColor", "ActorBorderColor", "ActorFontColor", "ActorFontName",
-            "ActorFontSize", "ActorFontStyle", "ActorStereotypeFontColor", "ActorStereotypeFontName",
-            "ActorStereotypeFontSize", "ActorStereotypeFontStyle", "ArrowColor", "ArrowFontColor",
-            "ArrowFontName", "ArrowFontSize", "ArrowFontStyle", "AttributeFontColor", "AttributeFontName",
-            "AttributeFontSize", "AttributeFontStyle", "AttributeIconSize", "BackgroundColor", "BarColor",
-            "BorderColor", "CharacterFontColor", "CharacterFontName", "CharacterFontSize",
-            "CharacterFontStyle", "CharacterRadius", "Color", "DividerBackgroundColor",
-            "DividerFontColor", "DividerFontName", "DividerFontSize", "DividerFontStyle", "EndColor",
-            "FontColor", "FontName", "FontSize", "FontStyle", "GroupBackgroundColor", "GroupingFontColor",
-            "GroupingFontName", "GroupingFontSize", "GroupingFontStyle", "GroupingHeaderFontColor",
-            "GroupingHeaderFontName", "GroupingHeaderFontSize", "GroupingHeaderFontStyle",
-            "InterfaceBackgroundColor", "InterfaceBorderColor", "LifeLineBackgroundColor",
-            "LifeLineBorderColor", "ParticipantBackgroundColor", "ParticipantBorderColor",
-            "ParticipantFontColor", "ParticipantFontName", "ParticipantFontSize",
-            "ParticipantFontStyle", "StartColor", "stateArrowColor", "stereotypeABackgroundColor",
-            "stereotypeCBackgroundColor", "stereotypeEBackgroundColor", "StereotypeFontColor",
-            "StereotypeFontName", "StereotypeFontSize", "StereotypeFontStyle",
-            "stereotypeIBackgroundColor", "TitleFontColor", "TitleFontName", "TitleFontSize", "TitleFontStyle"
+        var activityDiagramStyles = [
+            "activityArrowColor", "activityArrowFontColor", "activityArrowFontName", "activityArrowFontSize", "activityArrowFontStyle",
+            "activityBackgroundColor", "activityBarColor", "activityBorderColor", "activityEndColor", "activityFontColor",
+            "activityFontName", "activityFontSize", "activityFontStyle", "activityStartColor"
         ].join("|");
 
+        var classDiagramStyles = [
+            "classArrowColor", "classArrowFontColor", "classArrowFontName", "classArrowFontSize", "classArrowFontStyle",
+            "classAttributeFontColor", "classAttributeFontName", "classAttributeFontSize", "classAttributeFontStyle", "classAttributeIconSize",
+            "classBackgroundColor", "classBorderColor", "classFontColor", "classFontName", "classFontSize", "classFontStyle",
+            "classStereotypeFontColor", "classStereotypeFontName", "classStereotypeFontSize", "classStereotypeFontStyle"
+        ].join("|");
+
+        var componentDiagramStyles = [
+            "componentArrowColor", "componentArrowFontColor", "componentArrowFontName", "componentArrowFontSize", "componentArrowFontStyle",
+            "componentBackgroundColor", "componentBorderColor", "componentFontColor", "componentFontName", "componentFontSize", "componentFontStyle",
+            "componentInterfaceBackgroundColor", "componentInterfaceBorderColor",
+            "componentStereotypeFontColor", "componentStereotypeFontName", "componentStereotypeFontSize", "componentStereotypeFontStyle"
+        ].join("|");
+
+        var sequenceDiagramStyles = [
+            "sequenceActorBackgroundColor", "sequenceActorBorderColor", "sequenceActorFontColor", "sequenceActorFontName", "sequenceActorFontSize", "sequenceActorFontStyle",
+            "sequenceArrowColor", "sequenceArrowFontColor", "sequenceArrowFontName", "sequenceArrowFontSize", "sequenceArrowFontStyle",
+            "sequenceDividerBackgroundColor", "sequenceDividerFontColor", "sequenceDividerFontName", "sequenceDividerFontSize", "sequenceDividerFontStyle",
+            "sequenceGroupBackgroundColor", "sequenceGroupingFontColor", "sequenceGroupingFontName", "sequenceGroupingFontSize", "sequenceGroupingFontStyle",
+            "sequenceGroupingHeaderFontColor", "sequenceGroupingHeaderFontName", "sequenceGroupingHeaderFontSize", "sequenceGroupingHeaderFontStyle",
+            "sequenceLifeLineBackgroundColor", "sequenceLifeLineBorderColor",
+            "sequenceParticipantBackgroundColor", "sequenceParticipantBorderColor",
+            "sequenceParticipantFontColor", "sequenceParticipantFontName", "sequenceParticipantFontSize", "sequenceParticipantFontStyle",
+            "sequenceTitleFontColor", "sequenceTitleFontName", "sequenceTitleFontSize", "sequenceTitleFontStyle"
+        ].join("|");
+
+        var stateDiagramStyles = [
+            "stateArrowColor", "stateArrowFontColor", "stateArrowFontName", "stateArrowFontSize", "stateArrowFontStyle",
+            "stateAttributeFontColor", "stateAttributeFontName", "stateAttributeFontSize", "stateAttributeFontStyle",
+            "stateBackgroundColor", "stateBorderColor", "stateEndColor",
+            "stateFontColor", "stateFontName", "stateFontSize", "stateFontStyle",
+            "stateStartColor"
+        ].join("|");
+
+        var usecaseDiagramStyles = [
+            "usecaseActorBackgroundColor", "usecaseActorBorderColor", "usecaseActorFontColor", "usecaseActorFontName", "usecaseActorFontSize", "usecaseActorFontStyle",
+            "usecaseActorStereotypeFontColor", "usecaseActorStereotypeFontName", "usecaseActorStereotypeFontSize", "usecaseActorStereotypeFontStyle",
+            "usecaseArrowColor", "usecaseArrowFontColor", "usecaseArrowFontName", "usecaseArrowFontSize", "usecaseArrowFontStyle",
+            "usecaseBackgroundColor", "usecaseBorderColor", "usecaseFontColor", "usecaseFontName", "usecaseFontSize", "usecaseFontStyle",
+            "usecaseStereotypeFontColor", "usecaseStereotypeFontName", "usecaseStereotypeFontSize", "usecaseStereotypeFontStyle"
+        ].join("|");
+
+        var generalStyles = [
+            "ActorBackgroundColor", "ActorBorderColor", "ActorFontColor", "ActorFontName", "ActorFontSize", "ActorFontStyle",
+            "ArrowColor", "ArrowFontColor", "ArrowFontName", "ArrowFontSize", "ArrowFontStyle",
+            "AttributeFontColor", "AttributeFontName", "AttributeFontSize", "AttributeFontStyle", "AttributeIconSize",
+            "BackgroundColor", "Color", "BarColor", "BorderColor", "EndColor", "StartColor",
+            "FontColor", "FontName", "FontSize", "FontStyle",
+            "GroupingFontColor", "GroupingFontName", "GroupingFontSize", "GroupingFontStyle",
+            "StereotypeFontColor", "StereotypeFontName", "StereotypeFontSize", "StereotypeFontStyle",
+            "TitleFontColor", "TitleFontName", "TitleFontSize", "TitleFontStyle",
+            "packageBackgroundColor", "packageBorderColor", "packageFontColor", "packageFontName", "packageFontSize", "packageFontStyle",
+            "footerFontColor", "footerFontName", "footerFontSize", "footerFontStyle",
+            "headerFontColor", "headerFontName", "headerFontSize", "headerFontStyle",
+            "stereotypeABackgroundColor", "stereotypeCBackgroundColor", "stereotypeEBackgroundColor", "stereotypeIBackgroundColor"
+        ].join("|");
+
+
         var plantFunctions = [
-            "actor", "boundary", "control", "entity", "database", "participant",
+            "actor", "boundary", "control", "entity", "database", "participant", "queue", "collections",
             "alt", "else", "opt", "loop", "par", "break", "critical", "group", "box", "merge",
             "rnote", "hnote", "right", "left", "top", "bottom", "over", "of", "end",
             "activate", "create", "deactivate", "destroy",
@@ -132,7 +121,15 @@ ace.define("ace/mode/plantuml_highlight_rules", [
 
         var keywordMapper = this.createKeywordMapper({
             "variable.language": langKeywords,
-            "variable.parameter": skinKeywords,
+            "variable.parameter": [
+                activityDiagramStyles,
+                classDiagramStyles,
+                componentDiagramStyles,
+                sequenceDiagramStyles,
+                stateDiagramStyles,
+                usecaseDiagramStyles,
+                generalStyles
+            ].join("|"),
             "keyword.function": plantFunctions,
             "keyword.constant": constants,
             "support.type": "bool(?:ean)?|string|int(?:eger)?|float|double|(?:var)?char|" +
