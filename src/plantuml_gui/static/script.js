@@ -73,25 +73,30 @@ async function initeditor() {
 function findChangedLines() {
     if (history.length < 2) return; // No previous version to compare
 
-    const prevText = history[historyPointer - 1].split('\n');
-    const currText = history[historyPointer].split('\n');
+    const prevText = history[historyPointer - 1];
+    const currText = history[historyPointer];
 
+    let changes = Diff.diffLines(prevText, currText);
     let changedIndexes = [];
-    let prevIndex = 0, currIndex = 0;
+    let currIndex = 0;
 
-    while (currIndex < currText.length) {
-        if (prevIndex >= prevText.length || currText[currIndex] !== prevText[prevIndex]) {
-            changedIndexes.push(currIndex); // Use 1-based indexing
-        } else {
-            prevIndex++; // Only move prevIndex when lines match
+    changes.forEach(part => {
+        if (part.added) {
+            // Newly added lines - mark as changed
+            let newLines = part.value.split('\n').filter(line => line !== "");
+            for (let i = 0; i < newLines.length; i++) {
+                changedIndexes.push(currIndex + i);
+            }
         }
-        currIndex++;
-    }
+        if (!part.removed) {
+            // Unchanged lines still affect the index tracking
+            let removedLines = part.value.split('\n').filter(line => line !== "");
+            currIndex += removedLines.length;
+        }
+    });
 
-    console.log(changedIndexes)
-    getmarkersinglelines(changedIndexes)
+    getmarkersinglelines(changedIndexes);
 }
-
 
 const cursorChangeListener = async function(e) {
     const svg = element.querySelector('g');
