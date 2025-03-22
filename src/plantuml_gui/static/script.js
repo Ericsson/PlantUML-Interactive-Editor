@@ -62,7 +62,7 @@ async function initeditor() {
     }
 
     document.getElementById('editor').style.visibility = 'visible';
-    editor.getSession().on('change', function() {
+    editor.session.on('change', function() {
         debouncedRenderPlantUml(); // Using the debounced version avoids unnecessary API calls
     });
 
@@ -72,6 +72,34 @@ async function initeditor() {
         cursorChangeListener()
     });
     console.log("Editor initialization done.")
+}
+
+function findChangedLines() {
+    if (history.length < 2) return; // No previous version to compare
+
+    const prevText = history[historyPointer - 1];
+    const currText = history[historyPointer];
+
+    let changes = Diff.diffLines(prevText, currText);
+    let changedIndexes = [];
+    let currIndex = 0;
+
+    changes.forEach(part => {
+        if (part.added) {
+            // Newly added lines - mark as changed
+            let newLines = part.value.split('\n').filter(line => line !== "");
+            for (let i = 0; i < newLines.length; i++) {
+                changedIndexes.push(currIndex + i);
+            }
+        }
+        if (!part.removed) {
+            // Unchanged lines still affect the index tracking
+            let removedLines = part.value.split('\n').filter(line => line !== "");
+            currIndex += removedLines.length;
+        }
+    });
+
+    getmarkersinglelines(changedIndexes);
 }
 
 const cursorChangeListener = async function(e) {
@@ -2086,7 +2114,10 @@ function debounce(func, wait) {
     };
 }
 
-const debouncedRenderPlantUml = debounce(renderPlantUml, 200);
+const debouncedRenderPlantUml = debounce(async () => {
+    await renderPlantUml();
+    findChangedLines(); // Ensure this runs only after rendering is finished
+}, 200);
 
 async function fetchSvgFromPlantUml() {
     try {
