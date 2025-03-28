@@ -403,7 +403,7 @@ async function renderPlantUml() {
         document.getElementById('popup').style.visibility = "hidden"; // Hide the error popup when rendering again.
     }
     toggleLoadingOverlay();
-    const element = document.getElementById('colb')
+    let element = document.getElementById('colb')
     const pumlcontent = trimlines(editor.session.getValue());
     saveToHistory(pumlcontent);
     try {
@@ -435,7 +435,6 @@ async function renderPlantUml() {
             break;
         case "sequence":
             setHandlersForSequenceDiagram(pumlcontent, element);
-            console.log("sequence")
             break;
         default:
             fetchSvgFromPlantUml().then((svgContent) => {

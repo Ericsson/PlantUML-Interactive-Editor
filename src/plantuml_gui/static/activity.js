@@ -1740,6 +1740,8 @@ function commandEventListeners() {
 }
 
 async function setHandlersForActivityDiagram(pumlcontent, element) {
+    removeBackgroundMenuListener();
+
     fetchSvgFromPlantUml().then((svgContent) => {
         element.innerHTML = svgContent;
         const svg = element.querySelector('g');
