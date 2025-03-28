@@ -52,6 +52,8 @@ SOFTWARE.
     <script src='https://unpkg.com/panzoom@9.4.0/dist/panzoom.min.js'></script>
     <!-- Dynamically Generated Script with Cache Busting -->
     <script src="static/script.js?v={{ script_hash }}"></script>
+    <script src="static/sequence.js?v={{ script_hash }}"></script>
+    <script src="static/activity.js?v={{ script_hash }}"></script>
     <link rel="stylesheet" href="static/styles.css">
 
 
@@ -787,6 +789,10 @@ aria-hidden="true">
         </div>
     </div>
 </div>
+</div>
+
+<div class="dropdown-menu" id = "sequence-menu">
+  <li><a class="dropdown-item" href="#" id = "addParticipant">Add Participant </a>
 </div>
 
 
