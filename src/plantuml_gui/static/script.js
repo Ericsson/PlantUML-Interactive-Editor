@@ -3155,7 +3155,7 @@ function indentPuml(pumlcontent) {
         }
 
         if ((trimmedLine.startsWith('fork') && !trimmedLine.startsWith('fork again')) || trimmedLine == "repeat") {
-            indentedLines.push('    '.repeat(level) + trimmedLine);
+            indentedLines.push('    '.repeat(Math.max(0, level)) + trimmedLine);
             level++;
             return
         }
@@ -3167,11 +3167,11 @@ function indentPuml(pumlcontent) {
         }
 
         if (sameIndentKeywords.some(keyword => trimmedLine.startsWith(keyword))) {
-            indentedLines.push('    '.repeat(level - 1) + trimmedLine);
+            indentedLines.push('    '.repeat(Math.max(0, level - 1)) + trimmedLine);
             return
 
         } else {
-            indentedLines.push('    '.repeat(level) + trimmedLine);
+            indentedLines.push('    '.repeat(Math.max(0, level)) + trimmedLine);
         }
 
         // Adjust indentation after appending the line if it is a start statement
