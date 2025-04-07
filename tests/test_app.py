@@ -4694,6 +4694,48 @@ participant bob
             )
             expected_puml = """@startuml
 participant bob
-participant Placeholder
+participant participant1
+@enduml"""
+            assert response.data.decode("utf-8") == expected_puml
+
+    def test_add_another_participant(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant bob
+participant participant1
+@enduml""",
+            "svg": """<g><line style="stroke:#181818;stroke-width:0.5;stroke-dasharray:5.0,5.0;" x1="25" x2="25" y1="36.2969" y2="56.2969"></line><line style="stroke:#181818;stroke-width:0.5;stroke-dasharray:5.0,5.0;" x1="108" x2="108" y1="36.2969" y2="56.2969"></line><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="41" x="5" y="5"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="27" x="12" y="24.9951">bob</text><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="41" x="5" y="55.2969"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="27" x="12" y="75.292">bob</text><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="104" x="56" y="5"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="90" x="63" y="24.9951">placeholder1</text><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="104" x="56" y="55.2969"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="90" x="63" y="75.292">placeholder1</text>""",
+            "svgelement": """<rect fill="#FF0000" height="33.9688" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="63" x="11" y="90"></rect>""",
+            "cx": -20,
+        }
+        with client:
+            response = client.post(
+                "/addParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant participant2
+participant bob
+participant participant1
+@enduml"""
+            assert response.data.decode("utf-8") == expected_puml
+
+    def test_add_participant_empty_diagram(self, client):
+        test_data = {
+            "plantuml": """@startuml
+@enduml""",
+            "svg": """<text fill="#000000" font-family="sans-serif" font-size="12" font-weight="bold" lengthAdjust="spacing" textLength="159" x="5" y="16.1387">Welcome to PlantUML!</text>""",
+            "svgelement": """<rect fill="#FF0000" height="33.9688" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="63" x="11" y="90"></rect>""",
+            "cx": -20,
+        }
+        with client:
+            response = client.post(
+                "/addParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant participant1
 @enduml"""
             assert response.data.decode("utf-8") == expected_puml
