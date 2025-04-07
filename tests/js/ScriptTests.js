@@ -107,3 +107,29 @@ describe("window.onerror handler", function () {
         expect(popup.style.visibility).toBe("visible");
     });
 });
+
+describe("indentPuml", function () {
+    it("should not throw RangeError: Invalid count value: -1", function () {
+        const examplePuml = `@startuml
+title title
+'objects diagram
+object obj1
+object obj2{
+name
+}
+object list{
+name
+}
+map map_title{
+placeholder1 =>enum()
+placeholder2 => [type]
+placeholde3 => type2
+placeholder4 *-> obj2
+}
+@enduml`;
+
+        expect(function () {
+            indentPuml(examplePuml);
+        }).not.toThrowError(RangeError, /Invalid count value/);
+    });
+});
