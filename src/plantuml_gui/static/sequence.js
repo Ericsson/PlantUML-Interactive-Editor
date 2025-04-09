@@ -99,7 +99,7 @@ function backgroundContextMenu(e, svgelement) {
     cy = transformedPoint.y
 
     if (isAddMessageActive) {
-        secondClickCoordinates = { cx, cy };
+        secondClickCoordinates = [cx, cy];
         console.log("Second click stored:", secondClickCoordinates);
 
         // Show the modal for message input
@@ -113,7 +113,7 @@ function backgroundContextMenu(e, svgelement) {
         return;
     }
 
-    firstClickCoordinates = {cx, cy}
+    firstClickCoordinates = [cx, cy]
     console.log("First click stored:", firstClickCoordinates);
 
     var contextMenu = document.getElementById('sequence-menu');

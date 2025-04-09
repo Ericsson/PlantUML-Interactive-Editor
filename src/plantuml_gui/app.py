@@ -87,7 +87,7 @@ from .if_statements import (
 )
 from .merge import get_index_merge
 from .note import delete_note, edit_note, get_note_line, get_note_text, note_toggle
-from .participant import add_participant
+from .participant import add_message, add_participant
 from .puml_encoder import plantuml_decode, plantuml_encode
 from .render import _create_png_from_uml, _create_svg_from_uml
 from .title import (
@@ -169,6 +169,16 @@ def addparticipant():
     svg = data["svg"]
     cx = data["cx"]
     return add_participant(puml, svg, cx)
+
+
+@plantuml.route("/addMessage", methods=["POST"])
+def addmessage():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    firstcoordinates = data["firstcoordinates"]
+    secondcoordinates = data["secondcoordinates"]
+    return add_message(puml, svg, firstcoordinates, secondcoordinates)
 
 
 @plantuml.route("/editText", methods=["POST"])
