@@ -22,7 +22,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-
 from dataclasses import dataclass, field
 from typing import Dict, List
 
@@ -34,6 +33,7 @@ class Participant:
     name: str
     cx: float
     cy: float
+    index: int = -1  # default
 
     def __eq__(self, other):
         return isinstance(other, Participant) and self.x == other.x
@@ -58,15 +58,15 @@ class Diagram:
     participants: List[Participant] = field(default_factory=list)
 
     @classmethod
-    def from_svg(cls, svgtext: str):
+    def from_svg(cls, svgtext: str, puml: str):
         svg = Pq(svgtext)
         diagram = cls()
 
-        diagram._parse_participants(svg)
+        diagram._parse_participants(svg, puml)
 
         return diagram
 
-    def _parse_participants(self, svg):
+    def _parse_participants(self, svg, puml):
         """Extract unique participants based on `cx` value."""
         unique_participants: Dict[int, Participant] = {}
 
@@ -78,3 +78,16 @@ class Diagram:
                 unique_participants[participant.cx] = participant
 
         self.participants.extend(unique_participants.values())
+        self._assign_participant_indexes(puml)
+
+    def _assign_participant_indexes(self, puml: str):
+        """Assign indexes in the puml code to corresponding participant"""
+        lines = puml.splitlines()
+
+        participant_lines = [
+            i for i, line in enumerate(lines) if line.startswith("participant")
+        ]
+
+        for i, line_index in enumerate(participant_lines):
+            if i < len(self.participants):
+                self.participants[i].index = line_index

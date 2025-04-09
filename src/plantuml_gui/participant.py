@@ -22,7 +22,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import re
 from typing import List
 
 from .sequence_classes import Diagram, Participant
@@ -30,7 +29,7 @@ from .sequence_classes import Diagram, Participant
 
 def add_participant(puml: str, svg: str, cx: int) -> str:
     """Add a participant at the correct position in the puml code."""
-    diagram = Diagram.from_svg(svg)
+    diagram = Diagram.from_svg(svg, puml)
     closest_participant = find_closest_participant(diagram.participants, cx)
 
     lines = puml.splitlines()
@@ -39,22 +38,12 @@ def add_participant(puml: str, svg: str, cx: int) -> str:
         lines.insert(1, "participant participant1")
         return "\n".join(lines)
 
-    count = 0
-    index = -1
-    participant_numbers = []
-    for i, line in enumerate(lines):
-        if line.startswith("participant"):
-            match = re.search(r"participant participant(\d+)", line)
-
-            if match:
-                participant_numbers.append(int(match.group(1)))
-
-            if count == diagram.participants.index(closest_participant):
-                index = i if cx < closest_participant.cx else i + 1
-            count += 1
-
-    next_participant_number = max(participant_numbers, default=0) + 1
-    lines.insert(index, f"participant participant{next_participant_number}")
+    index = (
+        closest_participant.index
+        if cx < closest_participant.cx
+        else closest_participant.index + 1
+    )
+    lines.insert(index, f"participant participant{len(diagram.participants)}")
     return "\n".join(lines)
 
 
