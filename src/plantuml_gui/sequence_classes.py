@@ -31,6 +31,7 @@ from pyquery import PyQuery as Pq  # pragma: no cover
 
 @dataclass
 class Participant:
+    name: str
     cx: float
     cy: float
 
@@ -38,9 +39,7 @@ class Participant:
         return isinstance(other, Participant) and self.x == other.x
 
     @classmethod
-    def from_svg(cls, svgtext: str):
-        svg = Pq(svgtext)
-        rect = svg("rect")
+    def from_svg(cls, rect: Pq, text: Pq):
         x = float(rect.attr("x"))
         y = float(rect.attr("y"))
         width = float(rect.attr("width"))
@@ -49,7 +48,9 @@ class Participant:
         cx = x + width / 2
         cy = y + height / 2
 
-        return cls(cx, cy)
+        name = text.text()
+
+        return cls(name, cx, cy)
 
 
 @dataclass
@@ -70,7 +71,8 @@ class Diagram:
         unique_participants: Dict[int, Participant] = {}
 
         for rect in svg("rect").items():
-            participant = Participant.from_svg(rect)
+            text = rect.next()
+            participant = Participant.from_svg(rect, text)
 
             if participant.cx not in unique_participants:
                 unique_participants[participant.cx] = participant
