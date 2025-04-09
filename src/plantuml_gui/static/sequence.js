@@ -1,7 +1,44 @@
 let currentContextMenuHandler = null;
-let cx = null;
+let firstClickCoordinates = null;
+let secondClickCoordinates = null;
+let isAddMessageActive = null;
 
 function sequenceEventListeners() {
+    document.getElementById('addMessage').addEventListener('click', async () => {
+        isAddMessageActive = true;
+        console.log("addMessage selected, waiting for second click")
+    });
+
+
+    $('#submit-participant-message').on('click', async () => {
+        const element = document.getElementById('colb')
+        const svg = element.querySelector('g');
+
+        var newmessage = $('#participant-message-text').val();
+        try {
+
+            const plantuml = trimlines(editor.session.getValue());
+            const response = await fetch("addMessage", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    'plantuml': plantuml,
+                    'svg': svg.innerHTML,
+                    'message': newmessage,
+                    'svgelement': lastclickedsvgelement.outerHTML,
+                    'firstcoordinates': firstClickCoordinates,
+                    'secondcoordinates': secondClickCoordinates,
+                }),
+            });
+            const pumlcontentcode = await response.text()
+            setPuml(pumlcontentcode)
+        } catch (error) {
+            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+        }
+    })
+
 
     const sequenceList = [{
         id: 'addParticipant',
@@ -19,7 +56,7 @@ function sequenceEventListeners() {
                     'plantuml': plantuml,
                     'svg': svg.innerHTML,
                     'svgelement': lastclickedsvgelement.outerHTML,
-                    'cx' : cx
+                    'cx' : firstClickCoordinates.cx
                 }
                 if (item.arguments) {
                     for (let [key, value] of Object.entries(item.arguments)) {
@@ -59,6 +96,25 @@ function backgroundContextMenu(e, svgelement) {
     point.y = e.clientY;
     let transformedPoint = point.matrixTransform(svgelement.getScreenCTM().inverse());
     cx = transformedPoint.x
+    cy = transformedPoint.y
+
+    if (isAddMessageActive) {
+        secondClickCoordinates = { cx, cy };
+        console.log("Second click stored:", secondClickCoordinates);
+
+        // Show the modal for message input
+        $('#participant-modalForm').modal('show');
+        $('#participant-modalForm').on('shown.bs.modal', function() {
+            $('#participant-message-text').trigger('focus');
+        });
+
+        // Deactivate addMessage mode after the second click
+        isAddMessageActive = false;
+        return;
+    }
+
+    firstClickCoordinates = {cx, cy}
+    console.log("First click stored:", firstClickCoordinates);
 
     var contextMenu = document.getElementById('sequence-menu');
     contextMenu.style.display = 'block';

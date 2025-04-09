@@ -791,9 +791,37 @@ aria-hidden="true">
 </div>
 </div>
 
+<div class="modal fade" id="participant-modalForm" tabindex="-1" role="dialog" aria-labelledby="myModalLabel"
+  aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+      <div class="modal-content shadow">
+          <div class="modal-header">
+              <h5 class="modal-title">Change Message</h5>
+              <button type="button" id="close" class="close" data-dismiss="modal" aria-label="Close">
+                  <span aria-hidden="true">&times;</span>
+              </button>
+          </div>
+          <div class="modal-body bg-image" style="background-image: url()">
+              <form id="inputs" class="needs-validation" novalidate="">
+                  <div class="form-group">
+                      <label for="participant-message-text" class="col-form-label">Message:</label>
+                      <textarea class="form-control" id="message-text"></textarea>
+                  </div>
+              </form>
+          </div>
+          <div class="modal-footer justify text-14">
+              <button id="submit-participant-message" type="submit" class="btn btn-primary" data-toggle="modal"
+                  data-target="#participant-modalForm">Submit</button>
+          </div>
+      </div>
+  </div>
+</div>
+
 <div class="dropdown-menu" id = "sequence-menu">
   <li><a class="dropdown-item" href="#" id = "addParticipant">Add Participant </a>
+  <li><a class="dropdown-item" href="#" id = "addMessage">Add Message </a>
 </div>
+
 
 
 <script>
