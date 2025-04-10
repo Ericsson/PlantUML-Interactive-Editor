@@ -102,7 +102,7 @@ class Diagram:
         diagram = cls()
 
         diagram._parse_participants(svg, puml)
-        diagram._parse_messages(svg)
+        diagram._parse_messages(svg, puml)
 
         return diagram
 
@@ -132,7 +132,8 @@ class Diagram:
             if i < len(self.participants):
                 self.participants[i].index = line_index
 
-    def _parse_messages(self, svg):
+    def _parse_messages(self, svg, puml):
+        """Parse messages from svg"""
         parsed_messages = []
 
         elements = list(svg("polygon, line, text").items())
@@ -148,3 +149,16 @@ class Diagram:
             parsed_messages.append(Message.from_svg(message_group, self.participants))
 
         self.messages.extend(parsed_messages)
+        self._assign_message_indexes(puml)
+
+    def _assign_message_indexes(self, puml: str):
+        """Assign indexes in the puml code to corresponding message"""
+        lines = puml.splitlines()
+
+        # Find all lines that represent messages (lines with '->')
+        message_lines = [i for i, line in enumerate(lines) if "->" in line]
+
+        # Messages are already in occuring order
+        for i, line_index in enumerate(message_lines):
+            if i < len(self.messages):
+                self.messages[i].index = line_index
