@@ -43,7 +43,7 @@ def add_participant(puml: str, svg: str, cx: int) -> str:
         if cx < closest_participant.cx
         else closest_participant.index + 1
     )
-    lines.insert(index, f"participant participant{len(diagram.participants)}")
+    lines.insert(index, f"participant participant{len(diagram.participants) + 1}")
     return "\n".join(lines)
 
 
