@@ -41,7 +41,7 @@ class Participant:
         return self.x_origin <= x_val <= self.x_origin + self.width
 
     def __eq__(self, other):
-        return isinstance(other, Participant) and self.cx == other.x
+        return isinstance(other, Participant) and self.cx == other.cx
 
     @classmethod
     def from_svg(cls, rect: Pq, text: Pq):

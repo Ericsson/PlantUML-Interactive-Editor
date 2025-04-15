@@ -91,3 +91,17 @@ def add_message(
     lines = puml.splitlines()
     lines.insert(-1, f"{sender.name} -> {reciever.name}: {message}")
     return "\n".join(lines)
+
+
+def get_participant_name(puml: str, svg: str, cx: int):
+    diagram = Diagram.from_svg(svg, puml)
+    participant = find_closest_participant(diagram.participants, cx)
+
+    return participant.name
+
+
+def edit_participant_name(puml: str, svg: str, newname: str, cx: int):
+    diagram = Diagram.from_svg(svg, puml)
+    participant = find_closest_participant(diagram.participants, cx)
+
+    return puml.replace(participant.name, newname)
