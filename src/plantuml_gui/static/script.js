@@ -367,6 +367,11 @@ function commandEventListeners() {
             if ($(participantModal).hasClass('show')) {
                 document.getElementById('submit-participant-message').click();
             }
+
+            var participantModal = document.getElementById('participant-name-modalForm');
+            if ($(participantModal).hasClass('show')) {
+                document.getElementById('submit-participant-name').click();
+            }
         }
     });
 }
