@@ -213,17 +213,32 @@ stop
         setPuml(puml)
 }
 
+function setSequence() {
+    puml = `@startuml
+participant bob
+participant fred
+participant participant3
+bob -> fred: hello
+bob -> participant3: hello!
+participant3 -> participant3: test
+@enduml`;
+        setPuml(puml)
+}
+
 function buttonEventListeners() {
 
     document.getElementById('demo').addEventListener('click', function() {
     setDemo()
     });
 
-
     document.getElementById('clear').addEventListener('click', function() {
         puml = "@startuml\nstart\n@enduml"
         setPuml(puml)
     });
+
+    document.getElementById('sequence').addEventListener('click', function() {
+        setSequence()
+        });
 
     document.getElementById('undo').addEventListener('click', function() {
         undoeditor();
