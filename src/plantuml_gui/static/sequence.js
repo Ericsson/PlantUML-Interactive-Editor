@@ -9,7 +9,6 @@ function sequenceEventListeners() {
         console.log("addMessage selected, waiting for second click")
     });
 
-
     $('#submit-participant-message').on('click', async () => {
         const element = document.getElementById('colb')
         const svg = element.querySelector('g');
@@ -56,7 +55,7 @@ function sequenceEventListeners() {
                     'plantuml': plantuml,
                     'svg': svg.innerHTML,
                     'svgelement': lastclickedsvgelement.outerHTML,
-                    'cx' : firstClickCoordinates.cx
+                    'cx' : firstClickCoordinates[0]
                 }
                 if (item.arguments) {
                     for (let [key, value] of Object.entries(item.arguments)) {
@@ -87,7 +86,7 @@ function removeBackgroundMenuListener() {
     }
 }
 
-function backgroundContextMenu(e, svgelement) {
+async function backgroundContextMenu(e, svgelement) {
     e.preventDefault();
 
     // Get coordinates of click relative to the svg
@@ -100,9 +99,10 @@ function backgroundContextMenu(e, svgelement) {
 
     if (isAddMessageActive) {
         secondClickCoordinates = [cx, cy];
-        console.log("Second click stored:", secondClickCoordinates);
+        console.log(secondClickCoordinates)
 
         // Show the modal for message input
+        $('#participant-message-text').val("");
         $('#participant-modalForm').modal('show');
         $('#participant-modalForm').on('shown.bs.modal', function() {
             $('#participant-message-text').trigger('focus');
@@ -114,12 +114,41 @@ function backgroundContextMenu(e, svgelement) {
     }
 
     firstClickCoordinates = [cx, cy]
-    console.log("First click stored:", firstClickCoordinates);
+    console.log(firstClickCoordinates)
+
+    const isInValidArea = await checkIfInsideParticipant(firstClickCoordinates);
+
+    // If click is inside a participant, display addMessage option
+    const addMessageItem = document.getElementById("addMessage");
+    addMessageItem.style.display = isInValidArea ? "block" : "none";
 
     var contextMenu = document.getElementById('sequence-menu');
     contextMenu.style.display = 'block';
     contextMenu.style.left = e.pageX + 'px';
     contextMenu.style.top = e.pageY + 'px';
+}
+
+async function checkIfInsideParticipant(clickCoordinates) {
+    const svg = element.querySelector('g');
+    try {
+        const plantuml = trimlines(editor.session.getValue());
+        const toBeStringified = {
+            'plantuml': plantuml,
+            'svg': svg.innerHTML,
+            'coordinates': clickCoordinates
+        }
+
+        const response = await fetch('checkIfInsideParticipant', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(toBeStringified)
+        });
+
+        const data = await response.json();
+        return data.isValid;
+    } catch (error) {
+        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+    }
 }
 
 async function handleContextMenuBackground(svgelement) {

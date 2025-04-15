@@ -63,15 +63,31 @@ def find_closest_participant(
     return closest_participant
 
 
+def check_if_inside_participant(puml: str, svg: str, coords: List[int]):
+    cx, cy = coords
+    diagram = Diagram.from_svg(svg, puml)
+    for participant in diagram.participants:
+        if participant.contains_x(cx):
+            return True
+
+    return False
+
+
 def add_message(
-    puml: str, svg: str, firstcoordinates: List[int], secondcoordinates: List[int]
+    puml: str,
+    svg: str,
+    message: str,
+    firstcoordinates: List[int],
+    secondcoordinates: List[int],
 ):
     """Add a message between two participants at the correct index"""
     first_x, first_y = firstcoordinates
     second_x, second_y = secondcoordinates
 
-    diagram = Diagram.from_svg(svg)
+    diagram = Diagram.from_svg(svg, puml)
     sender = find_closest_participant(diagram.participants, first_x)
     reciever = find_closest_participant(diagram.participants, second_x)
 
-    return sender, reciever
+    lines = puml.splitlines()
+    lines.insert(-1, f"{sender.name} -> {reciever.name}: {message}")
+    return "\n".join(lines)
