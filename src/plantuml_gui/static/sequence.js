@@ -1,7 +1,43 @@
 let currentContextMenuHandler = null;
-let cx = null;
+let firstClickCoordinates = null;
+let secondClickCoordinates = null;
+let isAddMessageActive = null;
 
 function sequenceEventListeners() {
+    document.getElementById('addMessage').addEventListener('click', async () => {
+        isAddMessageActive = true;
+        console.log("addMessage selected, waiting for second click")
+    });
+
+    $('#submit-participant-message').on('click', async () => {
+        const element = document.getElementById('colb')
+        const svg = element.querySelector('g');
+
+        var newmessage = $('#participant-message-text').val();
+        try {
+
+            const plantuml = trimlines(editor.session.getValue());
+            const response = await fetch("addMessage", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    'plantuml': plantuml,
+                    'svg': svg.innerHTML,
+                    'message': newmessage,
+                    'svgelement': lastclickedsvgelement.outerHTML,
+                    'firstcoordinates': firstClickCoordinates,
+                    'secondcoordinates': secondClickCoordinates,
+                }),
+            });
+            const pumlcontentcode = await response.text()
+            setPuml(pumlcontentcode)
+        } catch (error) {
+            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+        }
+    })
+
 
     const sequenceList = [{
         id: 'addParticipant',
@@ -19,7 +55,7 @@ function sequenceEventListeners() {
                     'plantuml': plantuml,
                     'svg': svg.innerHTML,
                     'svgelement': lastclickedsvgelement.outerHTML,
-                    'cx' : cx
+                    'cx' : firstClickCoordinates[0]
                 }
                 if (item.arguments) {
                     for (let [key, value] of Object.entries(item.arguments)) {
@@ -50,7 +86,7 @@ function removeBackgroundMenuListener() {
     }
 }
 
-function backgroundContextMenu(e, svgelement) {
+async function backgroundContextMenu(e, svgelement) {
     e.preventDefault();
 
     // Get coordinates of click relative to the svg
@@ -59,11 +95,60 @@ function backgroundContextMenu(e, svgelement) {
     point.y = e.clientY;
     let transformedPoint = point.matrixTransform(svgelement.getScreenCTM().inverse());
     cx = transformedPoint.x
+    cy = transformedPoint.y
+
+    if (isAddMessageActive) {
+        secondClickCoordinates = [cx, cy];
+        console.log(secondClickCoordinates)
+
+        // Show the modal for message input
+        $('#participant-message-text').val("");
+        $('#participant-modalForm').modal('show');
+        $('#participant-modalForm').on('shown.bs.modal', function() {
+            $('#participant-message-text').trigger('focus');
+        });
+
+        // Deactivate addMessage mode after the second click
+        isAddMessageActive = false;
+        return;
+    }
+
+    firstClickCoordinates = [cx, cy]
+    console.log(firstClickCoordinates)
+
+    const isInValidArea = await checkIfInsideParticipant(firstClickCoordinates);
+
+    // If click is inside a participant, display addMessage option
+    const addMessageItem = document.getElementById("addMessage");
+    addMessageItem.style.display = isInValidArea ? "block" : "none";
 
     var contextMenu = document.getElementById('sequence-menu');
     contextMenu.style.display = 'block';
     contextMenu.style.left = e.pageX + 'px';
     contextMenu.style.top = e.pageY + 'px';
+}
+
+async function checkIfInsideParticipant(clickCoordinates) {
+    const svg = element.querySelector('g');
+    try {
+        const plantuml = trimlines(editor.session.getValue());
+        const toBeStringified = {
+            'plantuml': plantuml,
+            'svg': svg.innerHTML,
+            'coordinates': clickCoordinates
+        }
+
+        const response = await fetch('checkIfInsideParticipant', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(toBeStringified)
+        });
+
+        const data = await response.json();
+        return data.isValid;
+    } catch (error) {
+        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+    }
 }
 
 async function handleContextMenuBackground(svgelement) {

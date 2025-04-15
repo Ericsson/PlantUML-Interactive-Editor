@@ -4694,7 +4694,7 @@ participant bob
             )
             expected_puml = """@startuml
 participant bob
-participant participant1
+participant participant2
 @enduml"""
             assert response.data.decode("utf-8") == expected_puml
 
@@ -4715,7 +4715,7 @@ participant participant1
                 content_type="application/json",
             )
             expected_puml = """@startuml
-participant participant2
+participant participant3
 participant bob
 participant participant1
 @enduml"""
@@ -4737,5 +4737,60 @@ participant participant1
             )
             expected_puml = """@startuml
 participant participant1
+@enduml"""
+            assert response.data.decode("utf-8") == expected_puml
+
+    def test_add_participant_messages(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant bob
+participant fred
+
+bob -> fred: Hello
+fred -> bob: Bye
+
+@enduml""",
+            "svg": """<g><line style="stroke:#181818;stroke-width:0.5;stroke-dasharray:5.0,5.0;" x1="25" x2="25" y1="36.2969" y2="114.5625"></line><line style="stroke:#181818;stroke-width:0.5;stroke-dasharray:5.0,5.0;" x1="81" x2="81" y1="36.2969" y2="114.5625"></line><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="41" x="5" y="5"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="27" x="12" y="24.9951">bob</text><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="41" x="5" y="113.5625"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="27" x="12" y="133.5576">bob</text><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="41" x="61" y="5"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="27" x="68" y="24.9951">fred</text><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="41" x="61" y="113.5625"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="27" x="68" y="133.5576">fred</text><polygon fill="#181818" points="69.5,63.4297,79.5,67.4297,69.5,71.4297,73.5,67.4297" style="stroke:#181818;stroke-width:1.0;"></polygon><line style="stroke:#181818;stroke-width:1.0;" x1="25.5" x2="75.5" y1="67.4297" y2="67.4297"></line><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacing" textLength="32" x="32.5" y="62.3638">Hello</text><polygon fill="#181818" points="36.5,92.5625,26.5,96.5625,36.5,100.5625,32.5,96.5625" style="stroke:#181818;stroke-width:1.0;"></polygon><line style="stroke:#181818;stroke-width:1.0;" x1="30.5" x2="80.5" y1="96.5625" y2="96.5625"></line><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacing" textLength="24" x="42.5" y="91.4966">Bye</text></g>""",
+            "svgelement": """<rect fill="#FF0000" height="33.9688" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="63" x="11" y="90"></rect>""",
+            "cx": -20,
+        }
+        with client:
+            response = client.post(
+                "/addParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant participant3
+participant bob
+participant fred
+
+bob -> fred: Hello
+fred -> bob: Bye
+
+@enduml"""
+            assert response.data.decode("utf-8") == expected_puml
+
+    def test_add_message(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant bob
+participant fred
+@enduml""",
+            "svg": """<g><line style="stroke:#181818;stroke-width:0.5;stroke-dasharray:5.0,5.0;" x1="25" x2="25" y1="36.2969" y2="56.2969"></line><line style="stroke:#181818;stroke-width:0.5;stroke-dasharray:5.0,5.0;" x1="76" x2="76" y1="36.2969" y2="56.2969"></line><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="41" x="5" y="5"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="27" x="12" y="24.9951">bob</text><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="41" x="5" y="55.2969"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="27" x="12" y="75.292">bob</text><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="41" x="56" y="5"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="27" x="63" y="24.9951">fred</text><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="41" x="56" y="55.2969"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="27" x="63" y="75.292">fred</text></g>""",
+            "message": "hello fred",
+            "firstcoordinates": [34, 43],
+            "secondcoordinates": [71, 39],
+        }
+        with client:
+            response = client.post(
+                "/addMessage",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant bob
+participant fred
+bob -> fred: hello fred
 @enduml"""
             assert response.data.decode("utf-8") == expected_puml

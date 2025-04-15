@@ -22,7 +22,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import re
 from typing import List
 
 from .sequence_classes import Diagram, Participant
@@ -30,47 +29,65 @@ from .sequence_classes import Diagram, Participant
 
 def add_participant(puml: str, svg: str, cx: int) -> str:
     """Add a participant at the correct position in the puml code."""
-    diagram = Diagram.from_svg(svg)
-    index_of_closest_participant, closest_participant_cx = find_closest_participant(
-        diagram.participants, cx
-    )
+    diagram = Diagram.from_svg(svg, puml)
+    closest_participant = find_closest_participant(diagram.participants, cx)
 
     lines = puml.splitlines()
 
-    if index_of_closest_participant == -1:
+    if not closest_participant:
         lines.insert(1, "participant participant1")
         return "\n".join(lines)
 
-    count = 0
-    index = -1
-    participant_numbers = []
-    for i, line in enumerate(lines):
-        if line.startswith("participant"):
-            match = re.search(r"participant participant(\d+)", line)
-
-            if match:
-                participant_numbers.append(int(match.group(1)))
-
-            if count == index_of_closest_participant:
-                index = i if cx < closest_participant_cx else i + 1
-            count += 1
-
-    next_participant_number = max(participant_numbers, default=0) + 1
-    lines.insert(index, f"participant participant{next_participant_number}")
+    index = (
+        closest_participant.index
+        if cx < closest_participant.cx
+        else closest_participant.index + 1
+    )
+    lines.insert(index, f"participant participant{len(diagram.participants) + 1}")
     return "\n".join(lines)
 
 
-def find_closest_participant(participants: List[Participant], target_cx: int) -> tuple:
+def find_closest_participant(
+    participants: List[Participant], target_cx: int
+) -> Participant:
     """Find the index of the participant with the closest cx value to the target_cx, and return their cx."""
-    closest_index = -1
     min_distance = float("inf")
-    closest_cx = None
+    closest_participant = None
 
     for index, participant in enumerate(participants):
         distance = abs(participant.cx - target_cx)
         if distance < min_distance:
             min_distance = distance
-            closest_index = index
-            closest_cx = participant.cx
+            closest_participant = participant
 
-    return closest_index, closest_cx
+    return closest_participant
+
+
+def check_if_inside_participant(puml: str, svg: str, coords: List[int]):
+    cx, cy = coords
+    diagram = Diagram.from_svg(svg, puml)
+    for participant in diagram.participants:
+        if participant.contains_x(cx):
+            return True
+
+    return False
+
+
+def add_message(
+    puml: str,
+    svg: str,
+    message: str,
+    firstcoordinates: List[int],
+    secondcoordinates: List[int],
+):
+    """Add a message between two participants at the correct index"""
+    first_x, first_y = firstcoordinates
+    second_x, second_y = secondcoordinates
+
+    diagram = Diagram.from_svg(svg, puml)
+    sender = find_closest_participant(diagram.participants, first_x)
+    reciever = find_closest_participant(diagram.participants, second_x)
+
+    lines = puml.splitlines()
+    lines.insert(-1, f"{sender.name} -> {reciever.name}: {message}")
+    return "\n".join(lines)

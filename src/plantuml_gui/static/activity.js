@@ -1676,69 +1676,6 @@ function arrowLabelEventListeners() {
 
 }
 
-function commandEventListeners() {
-    document.addEventListener('keydown', function(event) {
-        if (event.ctrlKey && event.key === "z") {
-            event.preventDefault();
-            undoeditor();
-        }
-
-        if (event.ctrlKey && event.key === "y") {
-            event.preventDefault();
-            restoreeditor();
-        }
-
-
-        if (event.ctrlKey && event.key === 'Enter') {
-            event.preventDefault();
-
-            var activityModal = document.getElementById('modalForm');
-            if ($(activityModal).hasClass('show')) {
-                document.getElementById('submit').click();
-            }
-
-            var arrowModal = document.getElementById('modalFormArrow');
-            if ($(arrowModal).hasClass('show')) {
-                document.getElementById('submit-arrow').click();
-            }
-            var ifModal = document.getElementById('modalFormif');
-            if ($(ifModal).hasClass('show')) {
-                document.getElementById('submitif').click();
-            }
-
-            var switchModal = document.getElementById('modalFormswitch');
-            if ($(switchModal).hasClass('show')) {
-                document.getElementById('submitswitch').click();
-            }
-
-            var titleModal = document.getElementById('modalFormTitle');
-            if ($(titleModal).hasClass('show')) {
-                document.getElementById('submit-title').click();
-            }
-
-            var noteModal = document.getElementById('modalFormNote');
-            if ($(noteModal).hasClass('show')) {
-                document.getElementById('submit-note').click();
-            }
-
-            var groupModal = document.getElementById('modalFormGroup');
-            if ($(groupModal).hasClass('show')) {
-                document.getElementById('submit-group').click();
-            }
-
-            var whileModal = document.getElementById('modalFormWhile');
-            if ($(whileModal).hasClass('show')) {
-                document.getElementById('submitwhile').click();
-            }
-
-            var connectorModal = document.getElementById('modalFormConnector');
-            if ($(connectorModal).hasClass('show')) {
-                document.getElementById('submit-connector').click();
-            }
-        }
-    });
-}
-
 async function setHandlersForActivityDiagram(pumlcontent, element) {
     removeBackgroundMenuListener();
 
