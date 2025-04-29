@@ -27,10 +27,10 @@ from typing import List
 from .sequence_classes import Diagram, Participant
 
 
-def add_participant(puml: str, svg: str, cx: int) -> str:
+def add_participant(puml: str, svg: str, clicked_x: int) -> str:
     """Add a participant at the correct position in the puml code."""
     diagram = Diagram.from_svg(svg, puml)
-    closest_participant = find_closest_participant(diagram.participants, cx)
+    closest_participant = find_closest_participant(diagram.participants, clicked_x)
 
     lines = puml.splitlines()
 
@@ -40,7 +40,7 @@ def add_participant(puml: str, svg: str, cx: int) -> str:
 
     index = (
         closest_participant.index
-        if cx < closest_participant.cx
+        if clicked_x < closest_participant.cx
         else closest_participant.index + 1
     )
     lines.insert(index, f"participant participant{len(diagram.participants) + 1}")
@@ -64,10 +64,10 @@ def find_closest_participant(
 
 
 def check_if_inside_participant(puml: str, svg: str, coords: List[int]):
-    cx, cy = coords
+    x, y = coords
     diagram = Diagram.from_svg(svg, puml)
     for participant in diagram.participants:
-        if participant.contains_x(cx):
+        if participant.contains_x(x):
             return True
 
     return False
@@ -93,15 +93,15 @@ def add_message(
     return "\n".join(lines)
 
 
-def get_participant_name(puml: str, svg: str, cx: int):
+def get_participant_name(puml: str, svg: str, clicked_x: int):
     diagram = Diagram.from_svg(svg, puml)
-    participant = find_closest_participant(diagram.participants, cx)
+    participant = find_closest_participant(diagram.participants, clicked_x)
 
     return participant.name
 
 
-def edit_participant_name(puml: str, svg: str, newname: str, cx: int):
+def edit_participant_name(puml: str, svg: str, newname: str, clicked_x: int):
     diagram = Diagram.from_svg(svg, puml)
-    participant = find_closest_participant(diagram.participants, cx)
+    participant = find_closest_participant(diagram.participants, clicked_x)
 
     return puml.replace(participant.name, newname)
