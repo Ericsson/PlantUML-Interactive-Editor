@@ -21,6 +21,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import re
 
 from flask import json
 from plantuml_gui.activity import activity_indices
@@ -32,6 +33,15 @@ from plantuml_gui.if_statements import (
     findelsebounds,
     findifbounds,
 )
+from plantuml_gui.render import _create_svg_from_uml
+
+
+# Extract <g> element from rendered svg
+def extract_g_element(svg_string):
+    match = re.search(r"<g>(.*?)</g>", svg_string, re.DOTALL)
+    if match:
+        return f"<g>{match.group(1)}</g>"
+    return None
 
 
 class TestRender:
@@ -4792,5 +4802,57 @@ participant fred
 participant bob
 participant fred
 bob -> fred: hello fred
+@enduml"""
+            assert response.data.decode("utf-8") == expected_puml
+
+    def test_edit_participant_name(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant bob
+participant fred
+bob -> fred: test
+fred -> bob: test2
+@enduml""",
+            "svg": """<g><line style="stroke:#181818;stroke-width:0.5;stroke-dasharray:5.0,5.0;" x1="25" x2="25" y1="36.2969" y2="114.5625"></line><line style="stroke:#181818;stroke-width:0.5;stroke-dasharray:5.0,5.0;" x1="82" x2="82" y1="36.2969" y2="114.5625"></line><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="41" x="5" y="5"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="27" x="12" y="24.9951" style="pointer-events: none;">bob</text><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="41" x="5" y="113.5625"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="27" x="12" y="133.5576" style="pointer-events: none;">bob</text><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="41" x="62" y="5"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="27" x="69" y="24.9951" style="pointer-events: none;">fred</text><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="41" x="62" y="113.5625"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="27" x="69" y="133.5576" style="pointer-events: none;">fred</text><polygon fill="#181818" points="70.5,63.4297,80.5,67.4297,70.5,71.4297,74.5,67.4297" style="stroke:#181818;stroke-width:1.0;"></polygon><line style="stroke:#181818;stroke-width:1.0;" x1="25.5" x2="76.5" y1="67.4297" y2="67.4297"></line><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacing" textLength="25" x="32.5" y="62.3638" style="pointer-events: none;">test</text><polygon fill="#181818" points="36.5,92.5625,26.5,96.5625,36.5,100.5625,32.5,96.5625" style="stroke:#181818;stroke-width:1.0;"></polygon><line style="stroke:#181818;stroke-width:1.0;" x1="30.5" x2="81.5" y1="96.5625" y2="96.5625"></line><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacing" textLength="33" x="42.5" y="91.4966" style="pointer-events: none;">test2</text></g>""",
+            "name": "bobby",
+            "cx": 5,
+        }
+        with client:
+            response = client.post(
+                "/editParticipantName",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant bobby
+participant fred
+bobby -> fred: test
+fred -> bobby: test2
+@enduml"""
+            assert response.data.decode("utf-8") == expected_puml
+
+    def test_edit_participant_name_selfmessage(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant bobby
+participant fred
+bobby -> bobby: hello
+@enduml""",
+            "name": "bob",
+            "cx": 5,
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        with client:
+            response = client.post(
+                "/editParticipantName",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant bob
+participant fred
+bob -> bob: hello
 @enduml"""
             assert response.data.decode("utf-8") == expected_puml

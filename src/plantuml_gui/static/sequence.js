@@ -36,7 +36,34 @@ function sequenceEventListeners() {
         } catch (error) {
             displayErrorMessage(`Error with fetch API: ${error.message}`, error);
         }
-    })
+    });
+
+    $('#submit-participant-name').on('click', async () => {
+        const element = document.getElementById('colb');
+        const svg = element.querySelector('g');
+
+        var newname = $('#participant-name-text').val()
+        participant_cx = parseFloat(lastclickedsvgelement.getAttribute('x'))
+        try {
+            const plantuml = trimlines(editor.session.getValue());
+            const response = await fetch("editParticipantName", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    'plantuml': plantuml,
+                    'svg': svg.innerHTML,
+                    'name': newname,
+                    'cx': participant_cx
+                }),
+            });
+            const pumlcontentcode = await response.text();
+            setPuml(pumlcontentcode);
+        } catch (error) {
+            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+        }
+    });
 
 
     const sequenceList = [{
@@ -177,11 +204,64 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
         }
         const svgelements = svg.querySelectorAll('*');
         handleContextMenuBackground(svgContainer);
+        for (let index = 0; index < svgelements.length;) {
+            let svgelement = svgelements[index]
+            if (svgelement.tagName.toLowerCase() === 'text') {
+                svgelement.style.pointerEvents = 'none';
+            }
+
+            if (checkIfParticipant(svgelements, index)) {
+                svgelement.addEventListener('dblclick', async () => {
+                    lastclickedsvgelement = svgelement
+                    participant_cx = parseFloat(lastclickedsvgelement.getAttribute('x'))
+                    try {
+                        const plantuml = trimlines(editor.session.getValue());
+                        const response = await fetch("getParticipantName", {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                'plantuml': plantuml,
+                                'svg': svg.innerHTML,
+                                'cx': participant_cx
+                            })
+                        });
+                        $('#participant-name-text').val(await response.text());
+                        $('#participant-name-modalForm').modal('show');
+                        $('#participant-name-modalForm').on('shown.bs.modal', function () {
+                            $('#participant-name-text').trigger('focus');
+                        });
 
 
+                    } catch (error) {
+                        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+                    }
+                });
+
+                let rectcolor = ""
+                svgelement.addEventListener('mouseover', function() {
+                    const svg = element.querySelector('g');
+                    resetHighlight(svg);
+
+                    rectcolor = svgelement.getAttribute('fill')
+                    svgelement.setAttribute('fill', '#d8d8d8')
+                });
+
+                svgelement.addEventListener('mouseout', function() {
+                    svgelement.setAttribute('fill', rectcolor)
+                });
+            }
+            index++
+        }
         toggleLoadingOverlay();
 
     }).catch((error) => {
         displayErrorMessage(`Error rendering SVG: ${error.message}`, error);
     });
+}
+
+
+function checkIfParticipant(svgelements, index) {
+    return (svgelements[index].tagName.toLowerCase() === 'rect') && (svgelements[index].getAttribute('style') == "stroke:#181818;stroke-width:0.5;")
 }
