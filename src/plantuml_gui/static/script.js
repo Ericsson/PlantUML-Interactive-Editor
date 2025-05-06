@@ -706,11 +706,6 @@ function checkDiagramType(puml) {
     for (const line of lines) {
         const trimmedLine = line.trim().toLowerCase();
 
-        // Check for activity keywords first
-        if (activityKeywords.some(keyword => trimmedLine.startsWith(keyword))) {
-            addActivityEventListeners();
-            return "activity";
-        }
 
         // Check for sequence keywords
         if (sequenceKeywords.some(keyword => trimmedLine.startsWith(keyword))) {
@@ -726,6 +721,16 @@ function checkDiagramType(puml) {
     if (foundSequence) {
         addSequenceEventListeners();
         return "sequence";
+    }
+
+    for (const line of lines) {
+        const trimmedLine = line.trim().toLowerCase();
+
+        if (activityKeywords.some(keyword => trimmedLine.startsWith(keyword))) {
+            addActivityEventListeners();
+            return "activity";
+        }
+
     }
 
     return "unknown";
