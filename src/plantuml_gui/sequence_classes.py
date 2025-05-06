@@ -64,12 +64,13 @@ class Message:
     to_participant: Participant
     message: str
     cy: float
-    index: int = -1  # default
+    index: int = -1
 
     @classmethod
-    def from_normal_svg(cls, elements: List[Pq], participants: List[Participant]):
+    def from_normal_svg(
+        cls, polygon: Pq, line: Pq, text: Pq, participants: List[Participant]
+    ):
         """for normal messages <-, <--, -->, ->"""
-        polygon, line, text = elements
 
         # arrow_x is the average x-value of the message arrow/polygon (used to find 'to')
         points = polygon.attr("points")
@@ -93,10 +94,9 @@ class Message:
 
     @classmethod
     def from_bidirectional_svg(
-        cls, elements: List[Pq], participants: List["Participant"]
+        cls, poly1: Pq, poly2: Pq, line: Pq, text: Pq, participants: List["Participant"]
     ):
         """for bidirectional messages <-> or <-->"""
-        poly1, poly2, line, text = elements
 
         x1 = float(line.attr("x1"))
         x2 = float(line.attr("x2"))
@@ -117,9 +117,16 @@ class Message:
         )
 
     @classmethod
-    def from_self_svg(cls, elements: List[Pq], participants: List["Participant"]):
+    def from_self_svg(
+        cls,
+        line1: Pq,
+        line2: Pq,
+        line3: Pq,
+        polygon: Pq,
+        text: Pq,
+        participants: List["Participant"],
+    ):
         """for self messages"""
-        line1, line2, line3, polygon, text = elements
 
         # First line is the horizontal start of the loop
         start_x = float(line1.attr("x1"))
@@ -189,18 +196,25 @@ class Diagram:
             tags = [el[0].tag for el in group]
 
             if tags[:4] == ["polygon", "polygon", "line", "text"]:
+                polygon1, polygon2, line, text = group[:4]
                 parsed_messages.append(
-                    Message.from_bidirectional_svg(group[:4], self.participants)
+                    Message.from_bidirectional_svg(
+                        polygon1, polygon2, line, text, self.participants
+                    )
                 )
                 i += 4
             elif tags[:5] == ["line", "line", "line", "polygon", "text"]:
+                line1, line2, line3, polygon, text = group[:5]
                 parsed_messages.append(
-                    Message.from_self_svg(group[:5], self.participants)
+                    Message.from_self_svg(
+                        line1, line2, line3, polygon, text, self.participants
+                    )
                 )
                 i += 5
             elif tags[:3] == ["polygon", "line", "text"]:
+                polygon, line, text = group[:3]
                 parsed_messages.append(
-                    Message.from_normal_svg(group[:3], self.participants)
+                    Message.from_normal_svg(polygon, line, text, self.participants)
                 )
                 i += 3
             else:
