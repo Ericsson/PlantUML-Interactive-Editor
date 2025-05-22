@@ -697,28 +697,71 @@ function restoreeditor() {
 
 
 function checkDiagramType(puml) {
-    const activityKeywords = ["if", "while", "fork", "repeat", "switch", ":", "start", "stop"];
+    const activityKeywords = ["if", "while", "fork", "repeat", "switch", "start", "stop", ":"];
     const sequenceKeywords = ["state", "actor", "boundary", "control", "entity", "database", "collections", "queue", "participant"];
 
+    // Configurable ignored block definitions
+    const ignoreBlocks = [
+        { start: /^note\b/, end: /^end\s*note\b/ },
+    ];
+
     const lines = puml.split('\n');
+    const filteredLines = [];
+
+    let ignoring = false;
+    let currentBlock = null;
+    let inMultilineActivity = false;
+
+    for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim().toLowerCase();
+
+        // Handle end of ignore blocks
+        if (ignoring && currentBlock?.end.test(trimmed)) {
+            ignoring = false;
+            currentBlock = null;
+            filteredLines.push(trimmed); // include end line
+            continue;
+        }
+
+        // Handle start of ignore blocks
+        if (!ignoring) {
+            const block = ignoreBlocks.find(b => b.start.test(trimmed));
+            if (block) {
+                ignoring = true;
+                currentBlock = block;
+                filteredLines.push(trimmed); // include the start line
+                continue;
+            }
+        }
+
+        // Handle multiline activity block
+        if (!inMultilineActivity && /^:.*/.test(trimmed) && !/;/.test(trimmed)) {
+            inMultilineActivity = true;
+            filteredLines.push(trimmed); // include the start line
+            continue;
+        }
+
+        if (inMultilineActivity) {
+            if (/.*;/.test(trimmed)) {
+                inMultilineActivity = false;
+                continue;
+            }
+            continue; // skip lines that are inside a multiline activity
+        }
+
+        if (!ignoring) {
+            filteredLines.push(trimmed);
+        }
+    }
+
+    // Analyze filtered lines
     let foundSequence = false;
 
-    for (const line of lines) {
-        const trimmedLine = line.trim().toLowerCase();
-
-        // Check for activity keywords first
-        if (activityKeywords.some(keyword => trimmedLine.startsWith(keyword))) {
-            addActivityEventListeners();
-            return "activity";
-        }
-
-        // Check for sequence keywords
-        if (sequenceKeywords.some(keyword => trimmedLine.startsWith(keyword))) {
+    for (const line of filteredLines) {
+        if (sequenceKeywords.some(keyword => line.startsWith(keyword))) {
             foundSequence = true;
         }
-
-        // Check for sequence diagram arrows
-        if (/\b\w+\s*(->|-->|<--|<-)\s*\w+/.test(trimmedLine)) { // matches on message interaction
+        if (/\b\w+\s*(->|-->|<--|<-)\s*\w+/.test(line)) { // message arrows in sequence diagrams
             foundSequence = true;
         }
     }
@@ -726,6 +769,13 @@ function checkDiagramType(puml) {
     if (foundSequence) {
         addSequenceEventListeners();
         return "sequence";
+    }
+
+    for (const line of filteredLines) {
+        if (activityKeywords.some(keyword => line.startsWith(keyword))) {
+            addActivityEventListeners();
+            return "activity";
+        }
     }
 
     return "unknown";
