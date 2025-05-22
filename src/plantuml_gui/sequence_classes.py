@@ -64,11 +64,13 @@ class Message:
     to_participant: Participant
     message: str
     cy: float
-    index: int = -1  # default
+    index: int = -1
 
     @classmethod
-    def from_svg(cls, elements: List[Pq], participants: List[Participant]):
-        polygon, line, text = elements
+    def from_normal_svg(
+        cls, polygon: Pq, line: Pq, text: Pq, participants: List[Participant]
+    ):
+        """for normal messages <-, <--, -->, ->"""
 
         # arrow_x is the average x-value of the message arrow/polygon (used to find 'to')
         points = polygon.attr("points")
@@ -89,6 +91,57 @@ class Message:
         to_participant = next((p for p in participants if p.contains_x(arrow_x)))
 
         return cls(from_participant, to_participant, message, cy)
+
+    @classmethod
+    def from_bidirectional_svg(
+        cls, poly1: Pq, poly2: Pq, line: Pq, text: Pq, participants: List["Participant"]
+    ):
+        """for bidirectional messages <-> or <-->"""
+
+        x1 = float(line.attr("x1"))
+        x2 = float(line.attr("x2"))
+        cy = float(line.attr("y1"))
+
+        message = text.text()
+        start_x = x1
+        to_x = x2
+
+        from_participant = next((p for p in participants if p.contains_x(start_x)))
+        to_participant = next((p for p in participants if p.contains_x(to_x)))
+
+        return cls(
+            from_participant=from_participant,
+            to_participant=to_participant,
+            message=message,
+            cy=cy,
+        )
+
+    @classmethod
+    def from_self_svg(
+        cls,
+        line1: Pq,
+        line2: Pq,
+        line3: Pq,
+        polygon: Pq,
+        text: Pq,
+        participants: List["Participant"],
+    ):
+        """for self messages"""
+
+        # First line is the horizontal start of the loop
+        start_x = float(line1.attr("x1"))
+        cy = float(line1.attr("y1"))
+
+        message = text.text()
+
+        from_participant = next((p for p in participants if p.contains_x(start_x)))
+
+        return cls(
+            from_participant=from_participant,
+            to_participant=from_participant,
+            message=message,
+            cy=cy,
+        )
 
 
 @dataclass
@@ -134,19 +187,38 @@ class Diagram:
 
     def _parse_messages(self, svg, puml):
         """Parse messages from svg"""
+        elements = list(svg("*").items())
+        i = 0
         parsed_messages = []
 
-        elements = list(svg("polygon, line, text").items())
-        message_groups = [
-            [elements[i], elements[i + 1], elements[i + 2]]
-            for i in range(len(elements) - 2)
-            if elements[i][0].tag == "polygon"
-            and elements[i + 1][0].tag == "line"
-            and elements[i + 2][0].tag == "text"
-        ]
+        while i < len(elements):
+            group = elements[i : i + 5]
+            tags = [el[0].tag for el in group]
 
-        for message_group in message_groups:
-            parsed_messages.append(Message.from_svg(message_group, self.participants))
+            if tags[:4] == ["polygon", "polygon", "line", "text"]:
+                polygon1, polygon2, line, text = group[:4]
+                parsed_messages.append(
+                    Message.from_bidirectional_svg(
+                        polygon1, polygon2, line, text, self.participants
+                    )
+                )
+                i += 4
+            elif tags[:5] == ["line", "line", "line", "polygon", "text"]:
+                line1, line2, line3, polygon, text = group[:5]
+                parsed_messages.append(
+                    Message.from_self_svg(
+                        line1, line2, line3, polygon, text, self.participants
+                    )
+                )
+                i += 5
+            elif tags[:3] == ["polygon", "line", "text"]:
+                polygon, line, text = group[:3]
+                parsed_messages.append(
+                    Message.from_normal_svg(polygon, line, text, self.participants)
+                )
+                i += 3
+            else:
+                i += 1
 
         self.messages.extend(parsed_messages)
         self._assign_message_indexes(puml)
