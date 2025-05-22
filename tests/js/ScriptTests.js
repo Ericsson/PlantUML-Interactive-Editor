@@ -133,3 +133,37 @@ placeholder4 *-> obj2
         }).not.toThrowError(RangeError, /Invalid count value/);
     });
 });
+
+describe("checkDiagramType", function () {
+    beforeEach(function () { // return activity even though sequence keywords are in the activity text
+        spyOn(window, "addActivityEventListeners").and.stub(); // Disable real execution for this test
+    });
+
+    it("should return 'activity' without running addActivityEventListeners", function () {
+        const activityPuml = `@startuml\nstart\n:activity\nparticipant 23;\n@enduml`;
+
+        const result = window.checkDiagramType(activityPuml);
+
+        expect(result).toBe("activity");
+        expect(window.addActivityEventListeners).toHaveBeenCalled();
+    });
+
+    beforeEach(function () {
+        spyOn(window, "addSequenceEventListeners").and.stub(); // Disable real execution for this test
+    });
+    it("should return 'sequence'", function () { // return sequence even though activity keywords are in the note text
+        const sequencePuml = `@startuml
+participant Alice
+participant Bob
+Alice -> Bob
+note right
+if
+:
+fork
+end note
+@enduml`;
+        const result = window.checkDiagramType(sequencePuml);
+        expect(result).toBe("sequence")
+    })
+
+});
