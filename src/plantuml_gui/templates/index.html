@@ -64,7 +64,7 @@ SOFTWARE.
   <div id="left-side">
     <div id="header" class="d-flex flex-column">
         <h2>PlantUML Interactive Editor <span id="version">v{{version}}</span></h2>
-        <div class="button-groups">
+        <div class="button-groups btn-toolbar">
             <div class="btn-group" id="btn-group-1" role="group" aria-label="Basic example">
               <div class="btn-group" role="group">
                 <button type="button" class="btn btn-success dropdown-toggle"  data-toggle="dropdown" aria-expanded="false">
@@ -76,7 +76,11 @@ SOFTWARE.
                   <li><a class="dropdown-item" id="sequence" href="#">Sequence</a></li>
                 </ul>
               </div>
-                <button type="button" id="addTitleButton" class="btn btn-success">Add Title</button>
+              <button type="button" id="load" class="btn btn-success">Load</button>
+              <!-- Hidden file input -->
+              <input type="file" id="file-input" style="display: none;">
+              <button type="button" id="save" class="btn btn-success">Save</button>
+              <button type="button" id="addTitleButton" class="btn btn-success">Add Title</button>
             </div>
             <div class="btn-group" id="btn-group-2" role="group" aria-label="Basic example">
               <button type="button" id="undo" class="btn btn-primary">Undo</button>

@@ -250,6 +250,55 @@ function buttonEventListeners() {
 
     });
 
+    document.getElementById('load').addEventListener('click', function() {
+        document.getElementById('file-input').click()
+    });
+
+    document.getElementById('file-input').addEventListener('change', function(event) {
+        const file = event.target.files[0];
+        const reader = new FileReader();
+        reader.onload = () => editor.session.setValue(reader.result);
+        reader.readAsText(file);
+    });
+
+    document.getElementById('save').addEventListener('click', async function() {
+        // Open the "Save As" dialog
+        const handle = await window.showSaveFilePicker({
+          suggestedName: "untitled.txt",
+          types: [
+            {
+              description: "Text Files",
+              accept: { "text/plain": [".txt"] },
+            },
+          ],
+        });
+
+        // Create a writable stream
+        const writable = await handle.createWritable();
+
+        // Get editor content (Ace Editor example)
+        const content = editor.session.getValue();
+
+        // Write the content
+        await writable.write(content);
+
+        // Close the file
+        await writable.close();
+    });
+
+    function download(filename, text) {
+    //   var element = document.createElement('a');
+    //   element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+    //   element.setAttribute('download', filename);
+
+    //   element.style.display = 'none';
+    //   document.body.appendChild(element);
+
+    //   element.click();
+
+    //   document.body.removeChild(element);
+    }
+
     document.getElementById('addTitleButton').addEventListener('click', async () => {
         try {
             const plantuml = trimlines(editor.session.getValue());
