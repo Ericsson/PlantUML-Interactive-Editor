@@ -38,6 +38,8 @@ html, body {
     flex-direction: column;
     width: 40%;
     height: 100%;
+    resize: horizontal;
+    overflow: scroll;
 }
 
 #colb {
@@ -72,9 +74,10 @@ html, body {
     justify-content: center;
     align-items: flex-start;
     border: 2px solid black;
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: hidden;
     position: relative; /* This ensures the overlay is confined to this container */
+    flex-grow: 1;
 }
 
 #loading-overlay {
