@@ -285,7 +285,7 @@ function buttonEventListeners() {
         // Close the file
         await writable.close();
     });
-    
+
     function download(filename, text) {
     //   var element = document.createElement('a');
     //   element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
