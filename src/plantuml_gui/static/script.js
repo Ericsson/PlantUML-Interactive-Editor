@@ -317,29 +317,31 @@ function buttonEventListeners() {
             displayErrorMessage(`Error with fetch API: ${error.message}`, error);
         }
     })
-
     document.getElementById('png').addEventListener('click', async () => {
         try {
             const plantuml = trimlines(editor.session.getValue());
             const response = await fetch("/renderPNG", {
                 method: "POST",
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    'plantuml': plantuml
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 'plantuml': plantuml })
             });
 
             const blob = await response.blob();
-            const imageUrl = URL.createObjectURL(blob);
-            const newTab = window.open('', '_blank');
 
-            const img = newTab.document.createElement('img');
-            img.src = imageUrl;
-            newTab.document.body.appendChild(img);
-            newTab.document.body.style.textAlign = 'center';
-            newTab.document.close();
+            // Convert blob → base64 Data URL to make image copiable
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const imageUrl = reader.result; // data:image/png;base64,...
+
+                const newTab = window.open('', '_blank');
+                const img = newTab.document.createElement('img');
+                img.src = imageUrl;
+                newTab.document.body.appendChild(img);
+                newTab.document.body.style.textAlign = 'center';
+                newTab.document.close();
+            };
+
+            reader.readAsDataURL(blob);
 
         } catch (error) {
             displayErrorMessage(`Error with fetch API: ${error.message}`, error);
