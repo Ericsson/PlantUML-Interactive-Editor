@@ -31,8 +31,7 @@ Enterprise developers and technical teams (primarily at Ericsson and similar com
 - Groups and partitions (partial support)
 
 ### Sequence Diagrams
-- Add participants
-- Edit participant names
+- Participants
 - Add messages between participants
 
 ## Business Objectives
