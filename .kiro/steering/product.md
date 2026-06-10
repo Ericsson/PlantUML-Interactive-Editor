@@ -21,6 +21,7 @@ Enterprise developers and technical teams (primarily at Ericsson and similar com
 
 ## Supported Diagram Elements
 
+### Activity Diagrams
 - Activities (colored, with embedded links)
 - If/else statements, switch statements
 - While loops, repeat-while loops
@@ -29,12 +30,12 @@ Enterprise developers and technical teams (primarily at Ericsson and similar com
 - Connectors, notes, titles
 - Groups and partitions (partial support)
 
+### Sequence Diagrams
+- Participants
+- Add messages between participants
+
 ## Business Objectives
 
 1. Streamline activity diagram creation for technical documentation
 2. Lower the barrier to entry for PlantUML adoption
 3. Improve documentation quality through easier diagram maintenance
-
-## Planned Features
-
-- Sequence diagram support (in progress)
