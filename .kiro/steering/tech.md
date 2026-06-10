@@ -39,10 +39,10 @@
 
 ```bash
 # Install dependencies
-pip install .
+uv sync
 
 # Run server
-python -m plantuml_gui
+uv run python -m plantuml_gui
 
 # Run Python tests
 uv run pytest
