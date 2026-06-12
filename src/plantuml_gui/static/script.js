@@ -261,25 +261,32 @@ function buttonEventListeners() {
         reader.readAsText(file);
     });
 
-    // Save editor content to a file. Uses the File System Access API when available (Chromium + secure context),
-    // otherwise falls back to a download link approach that works in all browsers.
+    // Save editor content to a file. Uses the File System Access API when
+    // available (Chromium + secure context), otherwise falls back to a
+    // download link approach that works in all browsers.
     document.getElementById('save').addEventListener('click', async function() {
         const content = editor.session.getValue();
 
         if (window.showSaveFilePicker) {
-            // File System Access API: opens a native "Save As" dialog
-            const handle = await window.showSaveFilePicker({
-                suggestedName: "untitled.puml",
-                types: [
-                    {
-                        description: "PlantUML Files",
-                        accept: { "text/plain": [".puml", ".txt"] },
-                    },
-                ],
-            });
-            const writable = await handle.createWritable();
-            await writable.write(content);
-            await writable.close();
+            try {
+                // File System Access API: opens a native "Save As" dialog
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: "untitled.puml",
+                    types: [
+                        {
+                            description: "PlantUML Files",
+                            accept: { "text/plain": [".puml", ".txt"] },
+                        },
+                    ],
+                });
+                const writable = await handle.createWritable();
+                await writable.write(content);
+                await writable.close();
+            } catch (e) {
+                // When the user clicks "Cancel" in the Save dialog, the browser throws an AbortError.
+                // We catch and ignore it to avoid an unhandled rejection error in the console.
+                if (e.name !== 'AbortError') throw e;
+            }
         } else {
             // Fallback: create a temporary download link and click it
             const blob = new Blob([content], { type: "text/plain" });
