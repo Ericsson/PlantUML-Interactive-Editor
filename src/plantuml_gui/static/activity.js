@@ -1768,7 +1768,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
                 }
                 let rectcolor = ""
                 svgelement.addEventListener('mouseover', function() {
-                    getmarkersinglelines(parseInt(svgelement.getAttribute('fline'), 10))
+                    setEditorMarkers(parseInt(svgelement.getAttribute('fline'), 10))
                     rectcolor = svgelement.getAttribute('fill')
                     svgelement.setAttribute('fill', '#d8d8d8')
                 });
@@ -2707,7 +2707,7 @@ async function processEllipseLine(pumlcontent, svg, svgelement) {
 
         const data = await response.json();
         number = data.result - 1
-        getmarkersinglelines(number)
+        setEditorMarkers(number)
 
     } catch (error) {
         displayErrorMessage(`Error with fetch API: ${error.message}`, error);
@@ -2732,7 +2732,7 @@ async function processConnectorLine(pumlcontent, svg, svgelement) {
 
         const data = await response.json();
         number = data.result - 1
-        getmarkersinglelines(number)
+        setEditorMarkers(number)
 
     } catch (error) {
         displayErrorMessage(`Error with fetch API: ${error.message}`, error);
@@ -2757,7 +2757,7 @@ async function processGroupLine(pumlcontent, svg, svgelement) {
 
         const data = await response.json();
         number = data.result
-        getmarkersinglelines(number)
+        setEditorMarkers(number)
 
     } catch (error) {
         displayErrorMessage(`Error with fetch API: ${error.message}`, error);
@@ -2782,7 +2782,7 @@ async function processIfLine(pumlcontent, svg, svgelement) {
 
         const data = await response.json();
         number = data.result
-        getmarkersinglelines(number)
+        setEditorMarkers(number)
 
     } catch (error) {
         displayErrorMessage(`Error with fetch API: ${error.message}`, error);
@@ -2807,7 +2807,7 @@ async function processMergeLine(pumlcontent, svg, svgelement) {
 
         const data = await response.json();
         number = data.result
-        getmarkersinglelines(number)
+        setEditorMarkers(number)
 
     } catch (error) {
         displayErrorMessage(`Error with fetch API: ${error.message}`, error);
@@ -2832,7 +2832,7 @@ async function processWhileLine(pumlcontent, svg, svgelement) {
 
         const data = await response.json();
         number = data.result
-        getmarkersinglelines(number)
+        setEditorMarkers(number)
 
     } catch (error) {
         displayErrorMessage(`Error with fetch API: ${error.message}`, error);
@@ -2857,7 +2857,7 @@ async function processArrowLine(pumlcontent, svg, svgelement) {
 
         const data = await response.json();
         number = data.result
-        getmarkersinglelines(number)
+        setEditorMarkers(number)
 
     } catch (error) {
         displayErrorMessage(`Error with fetch API: ${error.message}`, error);

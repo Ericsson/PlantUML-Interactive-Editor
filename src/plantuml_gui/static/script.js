@@ -81,7 +81,7 @@ function findChangedLines() {
     const currText = history[historyPointer];
 
     let changes = Diff.diffLines(prevText, currText);
-    let changedIndexes = [];
+    let changedIndices = [];
     let currIndex = 0;
 
     changes.forEach(part => {
@@ -89,7 +89,7 @@ function findChangedLines() {
             // Newly added lines - mark as changed
             let newLines = part.value.split('\n').filter(line => line !== "");
             for (let i = 0; i < newLines.length; i++) {
-                changedIndexes.push(currIndex + i);
+                changedIndices.push(currIndex + i);
             }
         }
         if (!part.removed) {
@@ -99,7 +99,7 @@ function findChangedLines() {
         }
     });
 
-    getmarkersinglelines(changedIndexes);
+    return changedIndices
 }
 
 const cursorChangeListener = async function(e) {
@@ -551,7 +551,9 @@ function debounce(func, wait) {
 
 const debouncedRenderPlantUml = debounce(async () => {
     await renderPlantUml();
-    findChangedLines(); // Ensure this runs only after rendering is finished
+    let changedIndices = findChangedLines(); // Ensure this runs only after rendering is finished
+    setEditorMarkers(changedIndices);
+
 }, 200);
 
 async function fetchSvgFromPlantUml() {
@@ -719,7 +721,7 @@ function getmarker(bounds) {
 
 }
 
-function getmarkersinglelines(bounds) {
+function setEditorMarkers(bounds) {
     clearMarkers()
     if (typeof bounds === 'number') {
         editor.session.addMarker(new Range(bounds, 0, bounds, 200), "hover", "fullLine");
