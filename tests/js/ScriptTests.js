@@ -167,3 +167,20 @@ end note
     })
 
 });
+
+describe("findChangedLines", function () {
+    beforeEach(function () {
+        history = [];
+        historyPointer = -1;
+        spyOn(window, "getmarkersinglelines").and.stub(); // avoid calling Ace editor marker APIs not available in test
+    });
+
+    it("should not throw when historyPointer is 0", function () {
+        history = ["initial", "change1", "change2"];
+        historyPointer = 0;
+
+        expect(function () {
+            findChangedLines();
+        }).not.toThrow();
+    });
+});
