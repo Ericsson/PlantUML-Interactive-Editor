@@ -261,7 +261,7 @@ function buttonEventListeners() {
         reader.readAsText(file);
     });
 
-    // Save editor content to a file. Uses the File System Access API when available (Chromium + secure context), 
+    // Save editor content to a file. Uses the File System Access API when available (Chromium + secure context),
     // otherwise falls back to a download link approach that works in all browsers.
     document.getElementById('save').addEventListener('click', async function() {
         const content = editor.session.getValue();
