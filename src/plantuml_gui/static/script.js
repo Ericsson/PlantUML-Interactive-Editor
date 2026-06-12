@@ -261,29 +261,44 @@ function buttonEventListeners() {
         reader.readAsText(file);
     });
 
+    // Save editor content to a file. Uses the File System Access API when
+    // available (Chromium + secure context), otherwise falls back to a
+    // download link approach that works in all browsers.
     document.getElementById('save').addEventListener('click', async function() {
-        // Open the "Save As" dialog
-        const handle = await window.showSaveFilePicker({
-          suggestedName: "untitled.txt",
-          types: [
-            {
-              description: "Text Files",
-              accept: { "text/plain": [".txt"] },
-            },
-          ],
-        });
-
-        // Create a writable stream
-        const writable = await handle.createWritable();
-
-        // Get editor content (Ace Editor example)
         const content = editor.session.getValue();
 
-        // Write the content
-        await writable.write(content);
-
-        // Close the file
-        await writable.close();
+        if (window.showSaveFilePicker) {
+            try {
+                // File System Access API: opens a native "Save As" dialog
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: "untitled.puml",
+                    types: [
+                        {
+                            description: "PlantUML Files",
+                            accept: { "text/plain": [".puml", ".txt"] },
+                        },
+                    ],
+                });
+                const writable = await handle.createWritable();
+                await writable.write(content);
+                await writable.close();
+            } catch (e) {
+                // When the user clicks "Cancel" in the Save dialog, the browser throws an AbortError.
+                // We catch and ignore it to avoid an unhandled rejection error in the console.
+                if (e.name !== 'AbortError') throw e;
+            }
+        } else {
+            // Fallback: create a temporary download link and click it
+            const blob = new Blob([content], { type: "text/plain" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "untitled.puml";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
     });
 
     function download(filename, text) {
