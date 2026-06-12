@@ -77,7 +77,7 @@ async function initeditor() {
 function findChangedLines() {
     // historyPointer < 1: even with many history entries, pointer at 0 means
     // there's no previous entry to diff against (history[-1] is undefined)
-    if (history. Length < 2 || historyPointer < 1) return;
+    if (history.length < 2 || historyPointer < 1) return;
 
     const prevText = history[historyPointer - 1];
     const currText = history[historyPointer];
