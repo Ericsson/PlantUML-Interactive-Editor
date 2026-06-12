@@ -27,15 +27,28 @@ from typing import List
 from .sequence_classes import Diagram, Participant
 
 
+def _next_participant_number(puml: str) -> int:
+    """Find the highest existing participantN number in source and return N+1."""
+    import re
+
+    max_num = 0
+    for line in puml.splitlines():
+        match = re.match(r"participant participant(\d+)", line.strip())
+        if match:
+            max_num = max(max_num, int(match.group(1)))
+    return max_num + 1
+
+
 def add_participant(puml: str, svg: str, clicked_x: int) -> str:
     """Add a participant at the correct position in the puml code."""
     diagram = Diagram.from_svg(svg, puml)
     closest_participant = find_closest_participant(diagram.participants, clicked_x)
+    next_num = _next_participant_number(puml)
 
     lines = puml.splitlines()
 
     if not closest_participant:
-        lines.insert(1, "participant participant1")
+        lines.insert(1, f"participant participant{next_num}")
         return "\n".join(lines)
 
     index = (
@@ -43,7 +56,7 @@ def add_participant(puml: str, svg: str, clicked_x: int) -> str:
         if clicked_x < closest_participant.cx
         else closest_participant.index + 1
     )
-    lines.insert(index, f"participant participant{len(diagram.participants) + 1}")
+    lines.insert(index, f"participant participant{next_num}")
     return "\n".join(lines)
 
 
@@ -105,3 +118,19 @@ def edit_participant_name(puml: str, svg: str, newname: str, clicked_x: int):
     participant = find_closest_participant(diagram.participants, clicked_x)
 
     return puml.replace(participant.name, newname)
+
+
+def delete_participant(puml: str, svg: str, clicked_x: float) -> str:
+    """Delete a participant and all messages involving it."""
+    diagram = Diagram.from_svg(svg, puml)
+    participant = find_closest_participant(diagram.participants, clicked_x)
+
+    lines = puml.splitlines()
+    lines_to_delete = {participant.index}
+    for msg in diagram.messages:
+        if msg.from_participant == participant or msg.to_participant == participant:
+            lines_to_delete.add(msg.index)
+
+    for idx in sorted(lines_to_delete, reverse=True):
+        del lines[idx]
+    return "\n".join(lines)

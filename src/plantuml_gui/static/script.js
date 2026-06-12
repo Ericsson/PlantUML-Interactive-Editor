@@ -500,7 +500,8 @@ function addSequenceEventListeners() {
 
     document.addEventListener('click', function(e) {
         var menuIds = [
-            'sequence-menu'
+            'sequence-menu',
+            'participant-menu'
         ];
 
         menuIds.forEach(function(id) {

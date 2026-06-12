@@ -4704,7 +4704,7 @@ participant bob
             )
             expected_puml = """@startuml
 participant bob
-participant participant2
+participant participant1
 @enduml"""
             assert response.data.decode("utf-8") == expected_puml
 
@@ -4725,7 +4725,7 @@ participant participant1
                 content_type="application/json",
             )
             expected_puml = """@startuml
-participant participant3
+participant participant2
 participant bob
 participant participant1
 @enduml"""
@@ -4771,7 +4771,7 @@ fred -> bob: Bye
                 content_type="application/json",
             )
             expected_puml = """@startuml
-participant participant3
+participant participant1
 participant bob
 participant fred
 

@@ -9,6 +9,24 @@ function sequenceEventListeners() {
         console.log("addMessage selected, waiting for second click")
     });
 
+    document.getElementById('deleteParticipant').addEventListener('click', async () => {
+        const element = document.getElementById('colb');
+        const svg = element.querySelector('g');
+        const cx = parseFloat(lastclickedsvgelement.getAttribute('x')) + parseFloat(lastclickedsvgelement.getAttribute('width')) / 2;
+        try {
+            const plantuml = trimlines(editor.session.getValue());
+            const response = await fetch('deleteParticipant', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ plantuml: plantuml, svg: svg.innerHTML, cx: cx })
+            });
+            const pumlcontentcode = await response.text();
+            setPuml(pumlcontentcode);
+        } catch (error) {
+            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+        }
+    });
+
     $('#submit-participant-message').on('click', async () => {
         const element = document.getElementById('colb')
         const svg = element.querySelector('g');
@@ -237,6 +255,16 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
                     } catch (error) {
                         displayErrorMessage(`Error with fetch API: ${error.message}`, error);
                     }
+                });
+
+                svgelement.addEventListener('contextmenu', function(e) {
+                    lastclickedsvgelement = svgelement;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    var contextMenu = document.getElementById('participant-menu');
+                    contextMenu.style.display = 'block';
+                    contextMenu.style.left = e.pageX + 'px';
+                    contextMenu.style.top = e.pageY + 'px';
                 });
 
                 let rectcolor = ""
