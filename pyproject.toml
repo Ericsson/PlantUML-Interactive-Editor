@@ -5,6 +5,7 @@ requires = ["hatchling"]
 [project]
 authors = [
   { name = "Bertil Varenhorst", email = "bertil.varenhorst@ericsson.com" },
+  { name = "Rima Safady", email = "rima.safady@ericsson.com" },
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -17,7 +18,7 @@ classifiers = [
 ]
 dependencies = [
   "flask==3.1.3",
-  "python-dotenv==1.2.1",
+  "python-dotenv==1.2.2",
   "loguru==0.7.3",
   "pyquery==2.0.1",
 ]
@@ -30,9 +31,9 @@ requires-python = ">=3.10"
 dynamic = ["version"]
 
 [project.urls]
-Documentation = "https://github.com/Bertil Varenhorst/plantuml-gui#readme"
-Issues = "https://github.com/Bertil Varenhorst/plantuml-gui/issues"
-Source = "https://github.com/Bertil Varenhorst/plantuml-gui"
+Documentation = "https://github.com/Ericsson/PlantUML-Interactive-Editor#readme"
+Issues = "https://github.com/Ericsson/PlantUML-Interactive-Editor/issues"
+Source = "https://github.com/Ericsson/PlantUML-Interactive-Editor"
 
 [tool.uv]
 dev-dependencies = [

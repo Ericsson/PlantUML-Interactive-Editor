@@ -81,7 +81,7 @@ function findChangedLines() {
     const currText = history[historyPointer];
 
     let changes = Diff.diffLines(prevText, currText);
-    let changedIndexes = [];
+    let changedIndices = [];
     let currIndex = 0;
 
     changes.forEach(part => {
@@ -89,7 +89,7 @@ function findChangedLines() {
             // Newly added lines - mark as changed
             let newLines = part.value.split('\n').filter(line => line !== "");
             for (let i = 0; i < newLines.length; i++) {
-                changedIndexes.push(currIndex + i);
+                changedIndices.push(currIndex + i);
             }
         }
         if (!part.removed) {
@@ -99,7 +99,7 @@ function findChangedLines() {
         }
     });
 
-    getmarkersinglelines(changedIndexes);
+    return changedIndices
 }
 
 const cursorChangeListener = async function(e) {
@@ -261,29 +261,44 @@ function buttonEventListeners() {
         reader.readAsText(file);
     });
 
+    // Save editor content to a file. Uses the File System Access API when
+    // available (Chromium + secure context), otherwise falls back to a
+    // download link approach that works in all browsers.
     document.getElementById('save').addEventListener('click', async function() {
-        // Open the "Save As" dialog
-        const handle = await window.showSaveFilePicker({
-          suggestedName: "untitled.txt",
-          types: [
-            {
-              description: "Text Files",
-              accept: { "text/plain": [".txt"] },
-            },
-          ],
-        });
-
-        // Create a writable stream
-        const writable = await handle.createWritable();
-
-        // Get editor content (Ace Editor example)
         const content = editor.session.getValue();
 
-        // Write the content
-        await writable.write(content);
-
-        // Close the file
-        await writable.close();
+        if (window.showSaveFilePicker) {
+            try {
+                // File System Access API: opens a native "Save As" dialog
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: "untitled.puml",
+                    types: [
+                        {
+                            description: "PlantUML Files",
+                            accept: { "text/plain": [".puml", ".txt"] },
+                        },
+                    ],
+                });
+                const writable = await handle.createWritable();
+                await writable.write(content);
+                await writable.close();
+            } catch (e) {
+                // When the user clicks "Cancel" in the Save dialog, the browser throws an AbortError.
+                // We catch and ignore it to avoid an unhandled rejection error in the console.
+                if (e.name !== 'AbortError') throw e;
+            }
+        } else {
+            // Fallback: create a temporary download link and click it
+            const blob = new Blob([content], { type: "text/plain" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "untitled.puml";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
     });
 
     function download(filename, text) {
@@ -537,7 +552,9 @@ function debounce(func, wait) {
 
 const debouncedRenderPlantUml = debounce(async () => {
     await renderPlantUml();
-    findChangedLines(); // Ensure this runs only after rendering is finished
+    let changedIndices = findChangedLines(); // Ensure this runs only after rendering is finished
+    setEditorMarkers(changedIndices);
+
 }, 200);
 
 async function fetchSvgFromPlantUml() {
@@ -705,7 +722,7 @@ function getmarker(bounds) {
 
 }
 
-function getmarkersinglelines(bounds) {
+function setEditorMarkers(bounds) {
     clearMarkers()
     if (typeof bounds === 'number') {
         editor.session.addMarker(new Range(bounds, 0, bounds, 200), "hover", "fullLine");
