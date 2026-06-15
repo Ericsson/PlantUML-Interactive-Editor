@@ -1,6 +1,6 @@
 # Routes
 
-All routes are defined in `app.py` on the `plantuml` Blueprint (mounted at `/`). Unless stated otherwise, every route accepts `Content-Type: application/json` and returns plain text (the modified puml). Routes returning JSON are noted.
+All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) for general/render/encode routes, and `plantuml` (in `app.py`) for diagram-specific routes. All are mounted at `/`. Unless stated otherwise, every route accepts `Content-Type: application/json` and returns plain text (the modified puml). Routes returning JSON are noted.
 
 ## General
 

@@ -8,6 +8,7 @@
 │   ├── __about__.py        # Version info
 │   ├── app.py              # Flask app, routes, main orchestration
 │   ├── shared/             # Shared infrastructure (used by all diagram types)
+│   │   ├── routes.py       # Shared routes (/, /render, /renderPNG, /encode, /decode)
 │   │   ├── render.py       # PlantUML JAR invocation for PNG/SVG
 │   │   └── puml_encoder.py # URL encoding/decoding for diagram sharing
 │   ├── templates/          # Jinja2 templates
@@ -55,7 +56,7 @@ Each diagram element type has its own Python module:
 
 ## Architectural Patterns
 
-- **Single Flask Blueprint**: All routes in `app.py`
+- **Flask Blueprints**: Routes split across `shared/routes.py` (shared_bp) and the main `plantuml` Blueprint in `app.py`
 - **SVG manipulation**: Backend parses PlantUML-generated SVG to extract clickable regions
 - **Stateless server**: Diagram state encoded in URL, no server-side storage
 - **Bidirectional sync**: Frontend maintains mapping between SVG elements and PlantUML line numbers

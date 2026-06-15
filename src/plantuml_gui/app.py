@@ -22,14 +22,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import hashlib
-import io
-import os
-
-from flask import Blueprint, Flask, jsonify, render_template, request, send_file
+from flask import Blueprint, Flask, jsonify, request
 from plantuml_gui.classes import Ellipse, PolyElement, RectElement
 
-from .__about__ import __version__
 from .activity import (
     add_arrow_label,
     add_note_activity,
@@ -94,8 +89,7 @@ from .participant import (
     edit_participant_name,
     get_participant_name,
 )
-from .shared.puml_encoder import plantuml_decode, plantuml_encode
-from .shared.render import _create_png_from_uml, _create_svg_from_uml
+from .shared.routes import shared_bp
 from .title import (
     add_title,
     delete_title,
@@ -118,54 +112,6 @@ plantuml = Blueprint(
     template_folder="templates",
     static_folder="static",
 )
-
-
-def generate_file_hash(file_path):
-    with open(file_path, "rb") as file:
-        file_content = file.read()
-        return hashlib.sha256(file_content).hexdigest()[:8]
-
-
-SCRIPT_PATH = os.path.join(plantuml.static_folder, "script.js")
-
-
-@plantuml.route("/")
-def home():
-    # generate hash for script.js
-    file_hash = generate_file_hash(SCRIPT_PATH)
-    # pass hash to the template
-    return render_template(
-        "index.html", script_hash=file_hash, version=__version__
-    )  # pragma: no cover
-
-
-@plantuml.route("/render", methods=["POST"])
-def render():
-    data = request.get_json()
-    puml = data["plantuml"]
-    return _create_svg_from_uml(puml)
-
-
-@plantuml.route("/renderPNG", methods=["POST"])
-def renderpng():
-    data = request.get_json()
-    puml = data["plantuml"]
-
-    # Create the PNG image from the PlantUML code
-    image_bytes = _create_png_from_uml(
-        puml
-    )  # This function should return a byte stream of the image
-
-    # Use io.BytesIO to handle the byte stream
-    image_stream = io.BytesIO(image_bytes)
-
-    # Set the correct content type and disposition
-    return send_file(
-        image_stream,
-        mimetype="image/png",
-        as_attachment=True,
-        download_name="generated-image.png",  # Filename when downloaded
-    )
 
 
 @plantuml.route("/addParticipant", methods=["POST"])
@@ -976,26 +922,6 @@ def getarrowline():
     return jsonify({"result": result})  # int is not accepted by flask
 
 
-################################# ENCODE DECODE #################################
-################################# ENCODE DECODE #################################
-################################# ENCODE DECODE #################################
-################################# ENCODE DECODE #################################
-################################# ENCODE DECODE #################################
-
-
-@plantuml.route("/encode", methods=["POST"])
-def encode():
-    data = request.get_json()
-    puml = data["plantuml"]
-    return plantuml_encode(puml)
-
-
-@plantuml.route("/decode", methods=["POST"])
-def decode():
-    data = request.get_json()
-    hash = data["hash"]
-    return plantuml_decode(hash)
-
-
 app = Flask(__name__)
 app.register_blueprint(plantuml)
+app.register_blueprint(shared_bp)
