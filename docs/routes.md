@@ -1,6 +1,6 @@
 # Routes
 
-All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) for general/render/encode routes, `sequence_bp` (in `sequence/routes.py`) for sequence diagram routes, and `plantuml` (in `app.py`) for activity diagram routes. All are mounted at `/`. Unless stated otherwise, every route accepts `Content-Type: application/json` and returns plain text (the modified puml). Routes returning JSON are noted.
+All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) for general/render/encode routes, `sequence_bp` (in `sequence/routes.py`) for sequence diagram routes, and `activity_bp` (in `activity/routes.py`) for activity diagram routes. All are mounted at `/`. Unless stated otherwise, every route accepts `Content-Type: application/json` and returns plain text (the modified puml). Routes returning JSON are noted.
 
 ## General
 

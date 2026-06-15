@@ -6,7 +6,7 @@
 ├── src/plantuml_gui/       # Main application package
 │   ├── __main__.py         # Entry point (python -m plantuml_gui)
 │   ├── __about__.py        # Version info
-│   ├── app.py              # Flask app, routes, main orchestration
+│   ├── app.py              # Flask app factory, blueprint registration only
 │   ├── shared/             # Shared infrastructure (used by all diagram types)
 │   │   ├── routes.py       # Shared routes (/, /render, /renderPNG, /encode, /decode)
 │   │   ├── render.py       # PlantUML JAR invocation for PNG/SVG
@@ -60,7 +60,7 @@ Each diagram element type has its own Python module:
 
 ## Architectural Patterns
 
-- **Flask Blueprints**: Routes split across `shared/routes.py` (shared_bp) and the main `plantuml` Blueprint in `app.py`
+- **Flask Blueprints**: Routes split across `shared/routes.py` (shared_bp), `activity/routes.py` (activity_bp), and `sequence/routes.py` (sequence_bp). `app.py` only registers blueprints.
 - **SVG manipulation**: Backend parses PlantUML-generated SVG to extract clickable regions
 - **Stateless server**: Diagram state encoded in URL, no server-side storage
 - **Bidirectional sync**: Frontend maintains mapping between SVG elements and PlantUML line numbers
