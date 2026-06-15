@@ -16,7 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Updated project URLs to point to official repository (#93)
 - Updated author and contact emails (#93)
 - Added comments for AbortError handling (#83)
-- Made generated PNG copiable (#77)
+- Made generated PNG copyable (#77)
 
 ## [0.28] - 2025-08-18
 
