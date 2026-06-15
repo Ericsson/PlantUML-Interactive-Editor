@@ -15,6 +15,22 @@
 │   │   ├── routes.py       # Sequence routes (/addParticipant, /addMessage, etc.)
 │   │   ├── classes.py      # Diagram, Participant data classes
 │   │   └── participant.py  # Participant logic
+│   ├── activity/           # Activity diagram package
+│   │   ├── routes.py       # All activity routes (~64 endpoints)
+│   │   ├── classes.py      # RectElement, PolyElement, Ellipse, SvgChunk, TextElement
+│   │   ├── activity.py     # Activity box logic
+│   │   ├── if_statements.py # Conditionals (if/else, switch)
+│   │   ├── fork.py         # Parallel processing (fork/join)
+│   │   ├── whilepoly.py    # While loops
+│   │   ├── note.py         # Note annotations
+│   │   ├── title.py        # Diagram titles
+│   │   ├── group.py        # Groups and partitions
+│   │   ├── arrow.py        # Arrow/connection handling
+│   │   ├── connector.py    # Connector elements
+│   │   ├── ellipse.py      # Start/stop/end markers
+│   │   ├── merge.py        # Merge points
+│   │   ├── add.py          # Element creation logic
+│   │   └── util.py         # Utility functions
 │   ├── templates/          # Jinja2 templates
 │   │   └── index.html      # Single-page app template
 │   └── static/             # Frontend assets
