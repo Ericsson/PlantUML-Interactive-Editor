@@ -94,8 +94,8 @@ from .participant import (
     edit_participant_name,
     get_participant_name,
 )
-from .puml_encoder import plantuml_decode, plantuml_encode
-from .render import _create_png_from_uml, _create_svg_from_uml
+from .shared.puml_encoder import plantuml_decode, plantuml_encode
+from .shared.render import _create_png_from_uml, _create_svg_from_uml
 from .title import (
     add_title,
     delete_title,

@@ -33,7 +33,7 @@ from plantuml_gui.if_statements import (
     findelsebounds,
     findifbounds,
 )
-from plantuml_gui.render import _create_svg_from_uml
+from plantuml_gui.shared.render import _create_svg_from_uml
 
 
 # Extract <g> element from rendered svg

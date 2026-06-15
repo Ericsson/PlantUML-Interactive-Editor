@@ -7,7 +7,9 @@
 │   ├── __main__.py         # Entry point (python -m plantuml_gui)
 │   ├── __about__.py        # Version info
 │   ├── app.py              # Flask app, routes, main orchestration
-│   ├── render.py           # PlantUML JAR invocation for PNG/SVG
+│   ├── shared/             # Shared infrastructure (used by all diagram types)
+│   │   ├── render.py       # PlantUML JAR invocation for PNG/SVG
+│   │   └── puml_encoder.py # URL encoding/decoding for diagram sharing
 │   ├── templates/          # Jinja2 templates
 │   │   └── index.html      # Single-page app template
 │   └── static/             # Frontend assets
@@ -42,7 +44,6 @@ Each diagram element type has its own Python module:
 - `add.py` - Element creation logic
 - `classes.py` - Shared data classes (Ellipse, PolyElement, RectElement)
 - `util.py` - Utility functions
-- `puml_encoder.py` - URL encoding/decoding for diagram sharing
 
 ## Naming Conventions
 
