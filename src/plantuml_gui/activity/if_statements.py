@@ -111,6 +111,9 @@ def polychunktotext(
     left_texts = []
     right_texts = []
 
+    assert min_x is not None and max_x is not None
+    assert min_y is not None and max_y is not None
+
     for chunk in svgchunklist:
         if chunk.object == clickedelement:
             # Dictionary to group texts by their y value
@@ -119,6 +122,8 @@ def polychunktotext(
             for text_element in chunk.text_elements:
                 curr_x = text_element.x
                 curr_y = text_element.y
+                if curr_x is None or curr_y is None:
+                    continue
 
                 # Check the position of the text_element
                 if min_x <= curr_x < max_x and min_y < curr_y < max_y:
