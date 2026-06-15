@@ -24,7 +24,7 @@
 
 from typing import List
 
-from .sequence_classes import Diagram, Participant
+from .classes import Diagram, Participant
 
 
 def add_participant(puml: str, svg: str, clicked_x: int) -> str:
@@ -50,11 +50,11 @@ def add_participant(puml: str, svg: str, clicked_x: int) -> str:
 def find_closest_participant(
     participants: List[Participant], target_cx: int
 ) -> Participant:
-    """Find the index of the participant with the closest cx value to the target_cx, and return their cx."""
+    """Find the participant with the closest cx value to the target_cx."""
     min_distance = float("inf")
-    closest_participant = None
+    closest_participant = participants[0]
 
-    for index, participant in enumerate(participants):
+    for participant in participants:
         distance = abs(participant.cx - target_cx)
         if distance < min_distance:
             min_distance = distance

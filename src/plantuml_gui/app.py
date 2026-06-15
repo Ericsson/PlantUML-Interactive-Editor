@@ -82,7 +82,7 @@ from .if_statements import (
 )
 from .merge import get_index_merge
 from .note import delete_note, edit_note, get_note_line, get_note_text, note_toggle
-from .participant import (
+from .sequence.participant import (
     add_message,
     add_participant,
     check_if_inside_participant,

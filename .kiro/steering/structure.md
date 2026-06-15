@@ -11,6 +11,9 @@
 │   │   ├── routes.py       # Shared routes (/, /render, /renderPNG, /encode, /decode)
 │   │   ├── render.py       # PlantUML JAR invocation for PNG/SVG
 │   │   └── puml_encoder.py # URL encoding/decoding for diagram sharing
+│   ├── sequence/           # Sequence diagram package
+│   │   ├── classes.py      # Diagram, Participant data classes
+│   │   └── participant.py  # Participant logic
 │   ├── templates/          # Jinja2 templates
 │   │   └── index.html      # Single-page app template
 │   └── static/             # Frontend assets
