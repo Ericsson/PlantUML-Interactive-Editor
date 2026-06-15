@@ -23,8 +23,8 @@
 # SOFTWARE.
 
 import pytest
-from plantuml_gui.classes import PolyElement
-from plantuml_gui.if_statements import get_line_for_adding_into_if
+from plantuml_gui.activity.classes import PolyElement
+from plantuml_gui.activity.if_statements import get_line_for_adding_into_if
 
 
 def test_get_if_index_raises_exception_if_invalid_combination_of_arguments():

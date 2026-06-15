@@ -24,14 +24,15 @@
 import re
 
 from flask import json
-from plantuml_gui.activity import activity_indices
-from plantuml_gui.app import polychunktotext, svgtochunklistpolygon
-from plantuml_gui.classes import PolyElement
-from plantuml_gui.if_statements import (
+from plantuml_gui.activity.activity import activity_indices
+from plantuml_gui.activity.classes import PolyElement
+from plantuml_gui.activity.if_statements import (
     build_tree,
     find_start,
     findelsebounds,
     findifbounds,
+    polychunktotext,
+    svgtochunklistpolygon,
 )
 from plantuml_gui.shared.render import _create_svg_from_uml
 

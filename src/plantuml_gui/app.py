@@ -23,9 +23,8 @@
 # SOFTWARE.
 
 from flask import Blueprint, Flask, jsonify, request
-from plantuml_gui.classes import Ellipse, PolyElement, RectElement
 
-from .activity import (
+from .activity.activity import (
     add_arrow_label,
     add_note_activity,
     break_activity,
@@ -39,8 +38,8 @@ from .activity import (
     svgchunktotext,
     svgtochunklist,
 )
-from .add import add
-from .arrow import (
+from .activity.add import add
+from .activity.arrow import (
     check_for_duplicate_arrow,
     delete_arrow,
     edit_arrow,
@@ -48,7 +47,8 @@ from .arrow import (
     get_arrow_type,
     svgtoarrowtext,
 )
-from .connector import (
+from .activity.classes import Ellipse, PolyElement, RectElement
+from .activity.connector import (
     delete_connector,
     detach_connector,
     edit_connector_char,
@@ -57,8 +57,12 @@ from .connector import (
     get_index_connector,
     svgtochunklistconnector,
 )
-from .ellipse import delete_ellipse_element, get_index_ellipse, svgtochunklistellipse
-from .fork import (
+from .activity.ellipse import (
+    delete_ellipse_element,
+    get_index_ellipse,
+    svgtochunklistellipse,
+)
+from .activity.fork import (
     delete_fork2,
     deletefork,
     fork_again,
@@ -66,8 +70,8 @@ from .fork import (
     fork_toggle2,
     svgtochunklistfork,
 )
-from .group import delete_group, edit_group, get_group_line, get_group_text
-from .if_statements import (
+from .activity.group import delete_group, edit_group, get_group_line, get_group_text
+from .activity.if_statements import (
     add_backwards,
     check_if_repeat_has_backward,
     check_what_poly,
@@ -80,18 +84,22 @@ from .if_statements import (
     svgtochunklistpolygon,
     switch_again,
 )
-from .merge import get_index_merge
-from .note import delete_note, edit_note, get_note_line, get_note_text, note_toggle
-from .sequence.routes import sequence_bp
-from .shared.routes import shared_bp
-from .title import (
+from .activity.merge import get_index_merge
+from .activity.note import (
+    delete_note,
+    edit_note,
+    get_note_line,
+    get_note_text,
+    note_toggle,
+)
+from .activity.title import (
     add_title,
     delete_title,
     edit_title_text,
     find_title_bounds,
     get_title_text,
 )
-from .whilepoly import (
+from .activity.whilepoly import (
     delete_while,
     editwhile,
     find_index_break,
@@ -99,6 +107,8 @@ from .whilepoly import (
     get_while_line,
     whiletotext,
 )
+from .sequence.routes import sequence_bp
+from .shared.routes import shared_bp
 
 plantuml = Blueprint(
     "plantuml_gui",

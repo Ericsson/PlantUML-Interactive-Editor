@@ -25,7 +25,6 @@
 import re
 from typing import Literal
 
-from plantuml_gui.util import checkifwhile  # pragma: no cover
 from pyquery import PyQuery as Pq
 
 from .classes import (
@@ -37,6 +36,7 @@ from .classes import (
     find_end,
     findelsebounds,
 )
+from .util import checkifwhile  # pragma: no cover
 
 
 def svgtochunklistpolygon(svg: str) -> list[SvgChunk]:

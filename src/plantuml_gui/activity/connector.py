@@ -24,10 +24,10 @@
 
 import re
 
-from plantuml_gui.util import index_of_clicked_element  # pragma: no cover
 from pyquery import PyQuery as Pq
 
 from .classes import Ellipse, SvgChunk
+from .util import index_of_clicked_element  # pragma: no cover
 
 
 def svgtochunklistconnector(svg):
