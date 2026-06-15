@@ -22,6 +22,21 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Activity diagram data classes and control-flow helpers.
+
+Provides Python representations of SVG shapes produced by PlantUML
+(rectangles, polygons, ellipses) and a tree structure for mapping
+the visual SVG order to puml source line numbers.
+
+How the classes work together:
+1. SVG is parsed into SvgChunk objects (shape + text labels).
+2. Puml source is parsed into PumlChunk objects (line text + parsed type).
+3. TreeNode hierarchy maps SVG visual order to puml line numbers,
+   handling nested control flow correctly.
+4. When a user clicks an SVG element, its position identifies the SvgChunk,
+   which maps to a puml line for source manipulation.
+"""
+
 from dataclasses import dataclass
 
 from pyquery import PyQuery as Pq  # pragma: no cover
@@ -29,11 +44,15 @@ from pyquery import PyQuery as Pq  # pragma: no cover
 
 @dataclass
 class Activity:
+    """A parsed activity's label text."""
+
     label: str
 
 
 @dataclass
 class If:
+    """A parsed if-statement with its condition and branch labels."""
+
     statement: str
     branch1: str
     branch2: str
@@ -41,12 +60,19 @@ class If:
 
 @dataclass
 class PumlChunk:
+    """Associates a raw PlantUML text line with its parsed object."""
+
     text: str
     object: Activity | If | None
 
 
 @dataclass
 class Ellipse:
+    """SVG ellipse — corresponds to start, stop, end markers, or connectors.
+
+    Identified by center coordinates (cx, cy).
+    """
+
     cx: float
     cy: float
 
@@ -57,6 +83,7 @@ class Ellipse:
 
     @classmethod
     def from_svg(cls, svgtext: str):
+        """Parse an SVG snippet containing an <ellipse> tag."""
         svg = Pq(svgtext)
         ellipse = svg("ellipse")
         return cls(float(ellipse.attr("cx")), float(ellipse.attr("cy")))  # type: ignore
@@ -64,6 +91,11 @@ class Ellipse:
 
 @dataclass
 class PolyElement:
+    """SVG polygon — corresponds to an if/else diamond or switch statement.
+
+    Identified by its points string (comma-separated coordinate pairs).
+    """
+
     points: str
 
     def __eq__(self, other):
@@ -71,11 +103,13 @@ class PolyElement:
 
     @classmethod
     def from_svg(cls, svgtext: str):
+        """Parse an SVG snippet containing a <polygon> tag."""
         svg = Pq(svgtext)
         poly = svg("polygon")
         return cls(str(poly.attr("points")))
 
     def get_points(self):
+        """Return unique (x, y) coordinate pairs from the points string."""
         elements = self.points.split(",")
         pairs = [(elements[i], elements[i + 1]) for i in range(0, len(elements) - 1, 2)]
 
@@ -90,9 +124,12 @@ class PolyElement:
 
         return unique_pairs
 
-    def is_merge(
-        self,
-    ):  # We need to check if its not a merge polygon. Merge polygons after switch statements have equal points to statement polys.
+    def is_merge(self):
+        """Check if this is a merge polygon rather than a statement diamond.
+
+        A real if/switch diamond has exactly 6 unique vertices; merge polygons
+        (which appear after switch statements) have fewer because points overlap.
+        """
         elements = self.points.split(",")
         pairs = [(elements[i], elements[i + 1]) for i in range(0, len(elements) - 1, 2)]
 
@@ -110,17 +147,30 @@ class PolyElement:
 
 @dataclass(kw_only=True)
 class TreeNode:
-    index: int
+    """Base class for building a tree of nested puml control-flow structures.
+
+    Maps the order in which elements appear in the SVG to the correct
+    line numbers in the puml source, accounting for nesting.
+    """
+
+    index: int  # puml line number
 
     def add_node(self, node: "TreeNode"):
+        """Add a child node (overridden by subclasses)."""
         pass  # pragma: no cover
 
     def add_indices(self, indices: list[int], lines: list[str]):
+        """Recursively collect line indices in SVG visual order."""
         pass  # pragma: no cover
 
 
 @dataclass(kw_only=True)
 class IfElseNode(TreeNode):
+    """Represents an if/else block with two branches of child nodes.
+
+    Tracks which branch is currently being built via inside_ifbranch.
+    """
+
     ifbranch: list["TreeNode"]
     elsebranch: list["TreeNode"]
     inside_ifbranch: bool = True
@@ -132,6 +182,7 @@ class IfElseNode(TreeNode):
             self.elsebranch.append(node)
 
     def add_indices(self, indices: list[int], lines: list[str]):
+        """Collect indices; position of self.index depends on check_branch."""
         if not check_branch(lines, self.index):
             indices.append(self.index)
         for node in self.ifbranch:
@@ -144,6 +195,12 @@ class IfElseNode(TreeNode):
 
 @dataclass(kw_only=True)
 class RepeatSwitchNode(TreeNode):
+    """Represents a repeat-while loop or switch statement.
+
+    For repeat loops, the index comes after the body (diamond at bottom in SVG).
+    For switch statements, the index comes before the body.
+    """
+
     branch: list["TreeNode"]
 
     def add_node(self, node: TreeNode):
@@ -160,6 +217,11 @@ class RepeatSwitchNode(TreeNode):
 
 @dataclass
 class RectElement:
+    """SVG rectangle — corresponds to an activity box.
+
+    Identified by its top-left corner position (x, y).
+    """
+
     x: float
     y: float
 
@@ -170,6 +232,7 @@ class RectElement:
 
     @classmethod
     def from_svg(cls, svgtext: str):
+        """Parse an SVG snippet containing a <rect> tag."""
         svg = Pq(svgtext)
         rect = svg("rect")
         return cls(float(rect.attr("x")), float(rect.attr("y")))  # type: ignore
@@ -177,12 +240,15 @@ class RectElement:
 
 @dataclass
 class TextElement:
+    """SVG text element — a label associated with a shape."""
+
     label: str
     x: float | None = None
     y: float | None = None
 
     @classmethod
     def from_svg(cls, svgtext: str | Pq):
+        """Parse an SVG snippet containing a <text> tag."""
         svg = Pq(svgtext)
         text = svg("text")
         return cls(text.text(), float(text.attr("x")), float(text.attr("y")))  # type: ignore
@@ -190,13 +256,25 @@ class TextElement:
 
 @dataclass
 class SvgChunk:
+    """Pairs a shape with its associated text labels.
+
+    This is the fundamental unit that element modules iterate over
+    to count and locate clicked elements.
+    """
+
     object: RectElement | PolyElement | Ellipse
     text_elements: list[TextElement]
 
 
-def check_branch(
-    lines, index
-):  # checks if we need to increment nesting due to if branch
+def check_branch(lines, index):
+    """Determine if an if-statement's index goes before or after its children.
+
+    Returns True (index goes after children) when:
+    - There is no else branch
+    - The else branch is empty
+    - The if branch is empty
+    - Either branch contains only a connector (...) or stop
+    """
     else_start, else_end = findelsebounds(lines, index)
     end = find_end(lines, index)
     if (
@@ -221,6 +299,11 @@ def check_branch(
 
 
 def findelsebounds(lines, if_start):
+    """Find the start and end line indices of the else block for a given if.
+
+    Handles nested if-statements by tracking depth levels.
+    Returns (start_else, end_else) — both are -1 if no else branch exists.
+    """
     start_else = -1
     end_else = -1
     index = if_start
@@ -256,6 +339,11 @@ def findelsebounds(lines, if_start):
 
 
 def find_end(lines, start_if):
+    """Find the closing line for a control-flow statement.
+
+    Supports if (endif), repeat (repeat while/repeatwhile), and switch (endswitch).
+    Handles nesting by tracking depth levels.
+    """
     end_if = -1
     index = start_if
     level = 0
