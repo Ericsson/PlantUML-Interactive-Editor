@@ -41,7 +41,9 @@ Modules:
 
 ## Layer 5: Frontend
 
-- `templates/index.html` — Single-page app template. Loads Bootstrap, jQuery, Popper.js, Ace Editor, panzoom, and jsdiff from CDNs. Includes the app's own JS and CSS. Contains modal dialogs for editing element text.
+- `templates/index.html` — Single-page app template. Loads Bootstrap, jQuery, Popper.js, Ace Editor, panzoom, and jsdiff from CDNs. Includes the app's own JS and CSS. Uses `{% include %}` to pull in diagram-specific partials.
+- `templates/partials/activity_menus.html` — All activity diagram context menus and modal dialogs.
+- `templates/partials/sequence_menus.html` — Sequence diagram context menus and modal dialogs.
 - `static/script.js` — Core logic: editor initialization (Ace with PlantUML syntax mode), rendering (calls `/render` and `/encode`), URL hash management, undo/redo history, diagram type detection, indentation, panning/zooming, and utility functions.
 - `static/activity.js` — Event listeners and fetch calls for all activity diagram interactions (edit, delete, add, detach, context menus for activities, if-statements, ellipses, forks, notes, groups, merges, whiles, connectors, arrows).
 - `static/sequence.js` — Event listeners for sequence diagram interactions (add/edit/delete participants, add messages with two-click coordinate capture).

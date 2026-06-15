@@ -32,7 +32,10 @@
 │   │   ├── add.py          # Element creation logic
 │   │   └── util.py         # Utility functions
 │   ├── templates/          # Jinja2 templates
-│   │   └── index.html      # Single-page app template
+│   │   ├── index.html      # Single-page app template (shared layout)
+│   │   └── partials/       # Included template fragments
+│   │       ├── activity_menus.html  # Activity context menus and modals
+│   │       └── sequence_menus.html  # Sequence context menus and modals
 │   └── static/             # Frontend assets
 │       ├── script.js       # Main activity diagram JS
 │       ├── activity.js     # Activity-specific interactions
