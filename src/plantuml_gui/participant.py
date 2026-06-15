@@ -48,7 +48,7 @@ def add_participant(puml: str, svg: str, clicked_x: int) -> str:
 
 
 def find_closest_participant(
-    participants: List[Participant], target_cx: int
+    participants: List[Participant], target_cx: float
 ) -> Participant:
     """Find the index of the participant with the closest cx value to the target_cx, and return their cx."""
     min_distance = float("inf")
