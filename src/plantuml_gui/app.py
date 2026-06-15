@@ -82,13 +82,7 @@ from .if_statements import (
 )
 from .merge import get_index_merge
 from .note import delete_note, edit_note, get_note_line, get_note_text, note_toggle
-from .sequence.participant import (
-    add_message,
-    add_participant,
-    check_if_inside_participant,
-    edit_participant_name,
-    get_participant_name,
-)
+from .sequence.routes import sequence_bp
 from .shared.routes import shared_bp
 from .title import (
     add_title,
@@ -112,55 +106,6 @@ plantuml = Blueprint(
     template_folder="templates",
     static_folder="static",
 )
-
-
-@plantuml.route("/addParticipant", methods=["POST"])
-def addparticipant():
-    data = request.get_json()
-    puml = data["plantuml"]
-    svg = data["svg"]
-    cx = data["cx"]
-    return add_participant(puml, svg, cx)
-
-
-@plantuml.route("/addMessage", methods=["POST"])
-def addmessage():
-    data = request.get_json()
-    puml = data["plantuml"]
-    svg = data["svg"]
-    message = data["message"]
-    firstcoordinates = data["firstcoordinates"]
-    secondcoordinates = data["secondcoordinates"]
-    return add_message(puml, svg, message, firstcoordinates, secondcoordinates)
-
-
-@plantuml.route("/checkIfInsideParticipant", methods=["POST"])
-def checkifinsideparticipant():
-    data = request.get_json()
-    puml = data["plantuml"]
-    svg = data["svg"]
-    coordinates = data["coordinates"]
-    is_inside = check_if_inside_participant(puml, svg, coordinates)
-    return jsonify({"isValid": is_inside})
-
-
-@plantuml.route("/getParticipantName", methods=["POST"])
-def getparticipantname():
-    data = request.get_json()
-    puml = data["plantuml"]
-    svg = data["svg"]
-    cx = data["cx"]
-    return get_participant_name(puml, svg, cx)
-
-
-@plantuml.route("/editParticipantName", methods=["POST"])
-def editparticipantname():
-    data = request.get_json()
-    puml = data["plantuml"]
-    svg = data["svg"]
-    name = data["name"]
-    cx = data["cx"]
-    return edit_participant_name(puml, svg, name, cx)
 
 
 @plantuml.route("/editText", methods=["POST"])
@@ -925,3 +870,4 @@ def getarrowline():
 app = Flask(__name__)
 app.register_blueprint(plantuml)
 app.register_blueprint(shared_bp)
+app.register_blueprint(sequence_bp)

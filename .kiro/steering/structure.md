@@ -12,6 +12,7 @@
 │   │   ├── render.py       # PlantUML JAR invocation for PNG/SVG
 │   │   └── puml_encoder.py # URL encoding/decoding for diagram sharing
 │   ├── sequence/           # Sequence diagram package
+│   │   ├── routes.py       # Sequence routes (/addParticipant, /addMessage, etc.)
 │   │   ├── classes.py      # Diagram, Participant data classes
 │   │   └── participant.py  # Participant logic
 │   ├── templates/          # Jinja2 templates
