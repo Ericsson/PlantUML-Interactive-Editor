@@ -31,7 +31,7 @@ from subprocess import PIPE, run
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parent.parent.parent / ".env", override=True)
+load_dotenv(Path(__file__).parent.parent.parent.parent / ".env", override=True)
 
 
 def _create_svg_from_uml(uml):

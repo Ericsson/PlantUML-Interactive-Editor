@@ -24,9 +24,8 @@
 
 import re
 
-from plantuml_gui.util import checkifwhile
-
 from .classes import PolyElement, SvgChunk
+from .util import checkifwhile
 
 
 def whiletotext(svgchunklist: list[SvgChunk], clickedelement: PolyElement) -> list[str]:

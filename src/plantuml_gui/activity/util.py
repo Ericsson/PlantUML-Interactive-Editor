@@ -22,7 +22,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from plantuml_gui.classes import PolyElement, SvgChunk
+from .classes import PolyElement, SvgChunk
 
 
 def index_of_clicked_element(svgchunklist: list[SvgChunk], clickedelement) -> int:

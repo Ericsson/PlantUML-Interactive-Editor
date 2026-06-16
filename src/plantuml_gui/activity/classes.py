@@ -243,8 +243,8 @@ class TextElement:
     """SVG text element — a label associated with a shape."""
 
     label: str
-    x: float | None = None
-    y: float | None = None
+    x: float
+    y: float
 
     @classmethod
     def from_svg(cls, svgtext: str | Pq):

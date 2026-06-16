@@ -24,20 +24,19 @@
 
 from typing import List
 
-from .sequence_classes import Diagram, Participant
+from .classes import Diagram, Participant
 
 
 def add_participant(puml: str, svg: str, clicked_x: int) -> str:
     """Add a participant at the correct position in the puml code."""
     diagram = Diagram.from_svg(svg, puml)
-    closest_participant = find_closest_participant(diagram.participants, clicked_x)
-
     lines = puml.splitlines()
 
-    if not closest_participant:
+    if not diagram.participants:
         lines.insert(1, "participant participant1")
         return "\n".join(lines)
 
+    closest_participant = find_closest_participant(diagram.participants, clicked_x)
     index = (
         closest_participant.index
         if clicked_x < closest_participant.cx
@@ -50,11 +49,11 @@ def add_participant(puml: str, svg: str, clicked_x: int) -> str:
 def find_closest_participant(
     participants: List[Participant], target_cx: int
 ) -> Participant:
-    """Find the index of the participant with the closest cx value to the target_cx, and return their cx."""
+    """Find the participant with the closest cx value to the target_cx."""
     min_distance = float("inf")
-    closest_participant = None
+    closest_participant = participants[0]
 
-    for index, participant in enumerate(participants):
+    for participant in participants:
         distance = abs(participant.cx - target_cx)
         if distance < min_distance:
             min_distance = distance
