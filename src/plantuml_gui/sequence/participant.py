@@ -30,14 +30,13 @@ from .classes import Diagram, Participant
 def add_participant(puml: str, svg: str, clicked_x: int) -> str:
     """Add a participant at the correct position in the puml code."""
     diagram = Diagram.from_svg(svg, puml)
-    closest_participant = find_closest_participant(diagram.participants, clicked_x)
-
     lines = puml.splitlines()
 
-    if not closest_participant:
+    if not diagram.participants:
         lines.insert(1, "participant participant1")
         return "\n".join(lines)
 
+    closest_participant = find_closest_participant(diagram.participants, clicked_x)
     index = (
         closest_participant.index
         if clicked_x < closest_participant.cx
@@ -49,11 +48,8 @@ def add_participant(puml: str, svg: str, clicked_x: int) -> str:
 
 def find_closest_participant(
     participants: List[Participant], target_cx: int
-) -> Participant | None:
+) -> Participant:
     """Find the participant with the closest cx value to the target_cx."""
-    if not participants:
-        return None
-
     min_distance = float("inf")
     closest_participant = participants[0]
 
@@ -90,8 +86,6 @@ def add_message(
     diagram = Diagram.from_svg(svg, puml)
     sender = find_closest_participant(diagram.participants, first_x)
     reciever = find_closest_participant(diagram.participants, second_x)
-    assert sender is not None
-    assert reciever is not None
 
     lines = puml.splitlines()
     lines.insert(-1, f"{sender.name} -> {reciever.name}: {message}")
@@ -101,7 +95,6 @@ def add_message(
 def get_participant_name(puml: str, svg: str, clicked_x: int):
     diagram = Diagram.from_svg(svg, puml)
     participant = find_closest_participant(diagram.participants, clicked_x)
-    assert participant is not None
 
     return participant.name
 
@@ -109,6 +102,5 @@ def get_participant_name(puml: str, svg: str, clicked_x: int):
 def edit_participant_name(puml: str, svg: str, newname: str, clicked_x: int):
     diagram = Diagram.from_svg(svg, puml)
     participant = find_closest_participant(diagram.participants, clicked_x)
-    assert participant is not None
 
     return puml.replace(participant.name, newname)
