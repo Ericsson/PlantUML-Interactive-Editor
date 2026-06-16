@@ -33,7 +33,7 @@
 ## Testing
 
 - **pytest**: Python unit tests with pytest-cov for coverage
-- **Jasmine**: JavaScript tests (run via browser at `tests/js/SpecRunner.html`)
+- **pytest-playwright**: End-to-end browser tests for JavaScript logic and UI interactions
 
 ## Commands
 

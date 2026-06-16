@@ -34,7 +34,7 @@ def parse_changelog(
     Returns a list of dicts with keys: version, date, entries.
     """
     if path is None:
-        path = Path(__file__).parent.parent.parent / "CHANGELOG.md"
+        path = Path(__file__).parent.parent.parent.parent / "CHANGELOG.md"
 
     content = path.read_text(encoding="utf-8")
     versions: list[dict[str, str | list[str]]] = []

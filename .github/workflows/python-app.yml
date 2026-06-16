@@ -44,6 +44,10 @@ jobs:
       run: |
         python -m pip install uv==0.4.9
 
+    - name: Install Playwright browsers
+      run: |
+        uv run playwright install chromium --with-deps
+
     - name: Test with pytest
       run: |
         uv run pytest

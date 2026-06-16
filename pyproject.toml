@@ -42,6 +42,7 @@ dev-dependencies = [
   "pre-commit==4.0.1",
   "mypy==1.13.0",
   "pytest-cov==6.0.0",
+  "pytest-playwright==0.7.0",
 ]
 
 [tool.hatch.version]
