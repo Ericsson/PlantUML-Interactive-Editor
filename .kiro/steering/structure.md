@@ -19,9 +19,10 @@
 ├── tests/
 │   ├── test_app.py         # Main Python test suite
 │   ├── conftest.py         # pytest fixtures
-│   └── js/                 # Jasmine JavaScript tests
-│       ├── SpecRunner.html
-│       └── ScriptTests.js
+│   └── e2e/                # Playwright end-to-end tests
+│       ├── conftest.py     # Live server fixture
+│       ├── test_app_loads.py  # App loads correctly
+│       └── test_js_logic.py   # JS function logic tests
 └── .kiro/steering/         # Kiro steering files
 ```
 
@@ -65,4 +66,4 @@ Each diagram element type has its own Python module:
 2. Add SVG parsing logic to extract element bounds
 3. Add route handlers in `app.py`
 4. Add frontend interaction handlers in `activity.js` or `script.js`
-5. Write tests in `tests/test_app.py` and `tests/js/ScriptTests.js`
+5. Write tests in `tests/test_app.py` and `tests/e2e/`

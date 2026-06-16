@@ -73,5 +73,6 @@ uv run python -m pytest --cov --cov-report=html
 
 #### Javascript
 
-1. Run `uv run python -m http.server` and open the server in a browser
-2. In the browser, open tests/js/SpecRunner.html
+```
+uv run pytest tests/e2e/
+```
