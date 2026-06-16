@@ -10,7 +10,8 @@
 │   ├── shared/             # Shared infrastructure (used by all diagram types)
 │   │   ├── routes.py       # Shared routes (/, /render, /renderPNG, /encode, /decode)
 │   │   ├── render.py       # PlantUML JAR invocation for PNG/SVG
-│   │   └── puml_encoder.py # URL encoding/decoding for diagram sharing
+│   │   ├── puml_encoder.py # URL encoding/decoding for diagram sharing
+│   │   └── parse_changelog.py # CHANGELOG.md parser for version history
 │   ├── sequence/           # Sequence diagram package
 │   │   ├── routes.py       # Sequence routes (/addParticipant, /addMessage, etc.)
 │   │   ├── classes.py      # Diagram, Participant data classes

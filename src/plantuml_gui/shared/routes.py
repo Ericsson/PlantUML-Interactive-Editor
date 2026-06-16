@@ -26,9 +26,10 @@ import hashlib
 import io
 import os
 
-from flask import Blueprint, render_template, request, send_file
+from flask import Blueprint, jsonify, render_template, request, send_file
 
 from ..__about__ import __version__
+from .parse_changelog import parse_changelog
 from .puml_encoder import plantuml_decode, plantuml_encode
 from .render import _create_png_from_uml, _create_svg_from_uml
 
@@ -98,3 +99,8 @@ def decode():
     data = request.get_json()
     hash = data["hash"]
     return plantuml_decode(hash)
+
+
+@shared_bp.route("/changelog")
+def changelog():
+    return jsonify(parse_changelog())

@@ -850,3 +850,21 @@ function checkDiagramType(puml) {
 
     return "unknown";
 }
+
+async function showChangelog() {
+    const body = document.getElementById('changelog-body');
+    try {
+        const response = await fetch('/changelog');
+        const data = await response.json();
+        body.innerHTML = data
+            .filter(v => v.version !== 'Unreleased')
+            .map(v => {
+                const items = v.entries.map(e => `<li>${e}</li>`).join('');
+                const date = v.date ? `<small class="text-muted">${v.date}</small>` : '';
+                return `<h4>v${v.version}</h4>${date}<ul>${items}</ul>`;
+            }).join('<hr>');
+    } catch (error) {
+        body.innerHTML = '<p>Failed to load changelog.</p>';
+    }
+    $('#changelog-modal').modal('show');
+}

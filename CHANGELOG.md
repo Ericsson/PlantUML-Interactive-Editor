@@ -6,62 +6,60 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Fixed
+### External
 
-- Fixed undo crash when undoing to first history entry (#84)
+- Fixed undo crash when undoing to first history entry
 - Fixed Save button to save content to file
+- Made generated PNG copyable
+- Added Version History modal showing release notes
 
-### Changed
+### Internal
 
 - Updated project URLs to point to official repository (#93)
 - Updated author and contact emails (#93)
 - Added comments for AbortError handling (#83)
-- Made generated PNG copyable (#77)
 
 ## [0.28] - 2025-08-18
 
-### Added
+### External
 
-- Load and Save buttons
-- Resizable panes with realigning button groups
-- Sequence diagram support: add participants, add messages, edit participant names
-- Diagram type detection function with configurable skip blocks
+- Added Load and Save buttons
+- Added resizable panes with realigning button groups
+- Added sequence diagram support with participants and messages
 
-### Fixed
+### Internal
 
+- Added diagram type detection function with configurable skip blocks
 - Fixed issue where sequence diagram was wrongly identified
 
 ## [0.27] - 2025-04-08
 
-### Added
+### External
 
-- PlantUML syntax highlighter update
-- Mailto hyperlink in usage tab
+- Updated PlantUML syntax highlighter
+- Added mailto hyperlink in usage tab
+- Fixed error where indentation level went negative
+
+### Internal
+
 - Identifier in plantuml.js (#45)
-
-### Fixed
-
-- Fixed error where indentation level went negative (#52)
-
-### Changed
-
 - Updated scorecard workflow trigger
 - Updated upload-action to v4
 
 ## [0.26] - 2025-02-04
 
-### Added
+### External
 
-- Hashed cache busting for static assets
+- Added hashed cache busting for static assets
 
-### Fixed
+### Internal
 
 - Resolved #31
 - Resolved #33
 
 ## [0.25] - 2024-12-04
 
-### Added
+### External
 
 - Initial versioned release
 - Interactive PlantUML activity diagram editing
@@ -71,3 +69,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Double-click to edit text
 - Pan and zoom support
 - Line highlighting on hover/click
+
+### Internal
