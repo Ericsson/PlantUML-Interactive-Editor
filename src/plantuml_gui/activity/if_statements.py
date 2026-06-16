@@ -83,25 +83,19 @@ def svgtochunklistpolygon(svg: str) -> list[SvgChunk]:
 def polychunktotext(
     puml: str, svgchunklist: list[SvgChunk], clickedelement: PolyElement
 ) -> list[str]:
-    max_x, min_x = None, None
-    max_y, min_y = None, None
+    max_x = float("-inf")
+    min_x = float("inf")
+    max_y = float("-inf")
+    min_y = float("inf")
     pairs = clickedelement.get_points()
     for pair in pairs:
-        # Convert string values to integers
         x = float(pair[0])
         y = float(pair[1])
 
-        # Update max_x and min_x
-        if max_x is None or x > max_x:
-            max_x = x
-        if min_x is None or x < min_x:
-            min_x = x
-
-        # Update max_y and min_y
-        if max_y is None or y > max_y:
-            max_y = y
-        if min_y is None or y < min_y:
-            min_y = y
+        max_x = max(max_x, x)
+        min_x = min(min_x, x)
+        max_y = max(max_y, y)
+        min_y = min(min_y, y)
 
     lines = puml.splitlines()
     texts = []
@@ -110,9 +104,6 @@ def polychunktotext(
     inside_texts = []
     left_texts = []
     right_texts = []
-
-    assert min_x is not None and max_x is not None
-    assert min_y is not None and max_y is not None
 
     for chunk in svgchunklist:
         if chunk.object == clickedelement:

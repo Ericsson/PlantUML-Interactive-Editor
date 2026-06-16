@@ -42,8 +42,8 @@ def checkifwhile(svgchunk: SvgChunk):
     x_values = []
     text_y_value = svgchunk.text_elements[0].y
     text_x_value = svgchunk.text_elements[2].x
-    assert text_y_value is not None
-    assert text_x_value is not None
+    if text_y_value is None or text_x_value is None:
+        return False
 
     for i in range(1, len(points), 2):
         y_values.append(float(points[i]))
