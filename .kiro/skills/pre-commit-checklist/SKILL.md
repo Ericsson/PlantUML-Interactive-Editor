@@ -14,6 +14,7 @@ Review and update any documentation affected by your changes:
 - **`docs/`** — Update the relevant doc if you changed architecture, routes, data models, the frontend-backend contract, element patterns, or setup steps.
 - **`README.md`** — Update if you changed usage instructions, pre-requisites, or setup steps.
 - **`FEATURES.md`** — Update if you added, removed, or changed a user-facing feature.
+- **`CHANGELOG.md`** — Add new features and bug fixes to the `## [Unreleased]` section. User-facing changes go under `### External`; technical/internal changes go under `### Internal`.
 - **`.kiro/steering/structure.md`** — Update if you added new files, modules, or changed the directory layout.
 - **`.kiro/steering/product.md`** — Update if you changed supported diagram elements or key features.
 - **`.kiro/steering/tech.md`** — Update if you added dependencies, changed tooling, or modified commands.

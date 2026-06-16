@@ -87,6 +87,7 @@ from .if_statements import (
 )
 from .merge import get_index_merge
 from .note import delete_note, edit_note, get_note_line, get_note_text, note_toggle
+from .parse_changelog import parse_changelog
 from .participant import (
     add_message,
     add_participant,
@@ -976,10 +977,14 @@ def getarrowline():
     return jsonify({"result": result})  # int is not accepted by flask
 
 
-################################# ENCODE DECODE #################################
-################################# ENCODE DECODE #################################
-################################# ENCODE DECODE #################################
-################################# ENCODE DECODE #################################
+################################# CHANGELOG #################################
+
+
+@plantuml.route("/changelog")
+def changelog():
+    return jsonify(parse_changelog())
+
+
 ################################# ENCODE DECODE #################################
 
 
