@@ -63,7 +63,7 @@ SOFTWARE.
   <div id=popup>Error message</div>
   <div id="left-side">
     <div id="header" class="d-flex flex-column">
-        <h2>PlantUML Interactive Editor <span id="version">v{{version}}</span></h2>
+        <h2>PlantUML Interactive Editor <span id="version" onclick="showChangelog()" style="cursor:pointer" title="Version History">v{{version}}</span></h2>
         <div class="button-groups btn-toolbar">
             <div class="btn-group" id="btn-group-1" role="group" aria-label="Basic example">
               <div class="btn-group" role="group">
@@ -93,7 +93,6 @@ SOFTWARE.
             </div>
             <div class="btn-group" id="btn-group-4" role="group" aria-label="Basic example">
                 <button type="button" class="btn btn-info" data-toggle="modal" data-target="#usageModal">Help</button>
-                <button type="button" class="btn btn-info" id="changelog-btn" onclick="showChangelog()">Version History</button>
           </div>
         </div>
     </div>
