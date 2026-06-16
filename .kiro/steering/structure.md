@@ -43,8 +43,26 @@
 │       ├── mode-plantuml.js # Ace editor PlantUML mode
 │       └── styles.css      # Stylesheet
 ├── tests/
-│   ├── test_app.py         # Main Python test suite
-│   ├── conftest.py         # pytest fixtures
+│   ├── conftest.py         # pytest fixtures (client fixture)
+│   ├── activity/           # Activity diagram route & logic tests
+│   │   ├── test_activity.py
+│   │   ├── test_arrow.py
+│   │   ├── test_connector.py
+│   │   ├── test_ellipse.py
+│   │   ├── test_fork.py
+│   │   ├── test_group.py
+│   │   ├── test_if.py
+│   │   ├── test_if_statements.py
+│   │   ├── test_merge.py
+│   │   ├── test_note.py
+│   │   ├── test_repeat_while.py
+│   │   ├── test_switch.py
+│   │   ├── test_title.py
+│   │   └── test_while.py
+│   ├── shared/             # Shared route tests (render, encode/decode)
+│   │   └── test_render.py
+│   ├── sequence/           # Sequence diagram tests
+│   │   └── test_participant.py
 │   └── js/                 # Jasmine JavaScript tests
 │       ├── SpecRunner.html
 │       └── ScriptTests.js
@@ -90,4 +108,4 @@ Each diagram element type has its own Python module:
 2. Add SVG parsing logic to extract element bounds
 3. Add route handlers in `app.py`
 4. Add frontend interaction handlers in `activity.js` or `script.js`
-5. Write tests in `tests/test_app.py` and `tests/js/ScriptTests.js`
+5. Write tests in the appropriate `tests/<module>/` directory and `tests/js/ScriptTests.js`
