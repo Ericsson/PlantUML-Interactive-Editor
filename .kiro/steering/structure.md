@@ -43,6 +43,7 @@ Each diagram element type has its own Python module:
 - `classes.py` - Shared data classes (Ellipse, PolyElement, RectElement)
 - `util.py` - Utility functions
 - `puml_encoder.py` - URL encoding/decoding for diagram sharing
+- `parse_changelog.py` - CHANGELOG.md parser for version history endpoint
 
 ## Naming Conventions
 

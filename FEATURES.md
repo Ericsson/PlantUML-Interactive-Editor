@@ -12,6 +12,7 @@ PlantUML Activity Diagram documentation: [Activity Diagram (New Syntax) on plant
 - Copy / Paste buttons to replace from or copy to clipboard
 - Undo / Redo using buttons or CTRL + X / CTRL + Y
 - Syntax and server error popups
+- Version History modal showing external changelog
 
 
 

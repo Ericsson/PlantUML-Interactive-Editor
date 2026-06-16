@@ -5,6 +5,7 @@ All routes are defined in `app.py` on the `plantuml` Blueprint (mounted at `/`).
 ## General
 
 - **GET /** — Serves `index.html`. No input. Returns HTML.
+- **GET /changelog** — No input. Returns: JSON array of version objects with `version`, `date`, and `entries` (list of strings). Only includes External changelog entries.
 
 ## Render
 
