@@ -1,10 +1,11 @@
 # Routes
 
-All routes are defined in `app.py` on the `plantuml` Blueprint (mounted at `/`). Unless stated otherwise, every route accepts `Content-Type: application/json` and returns plain text (the modified puml). Routes returning JSON are noted.
+All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) for general/render/encode routes, `sequence_bp` (in `sequence/routes.py`) for sequence diagram routes, and `activity_bp` (in `activity/routes.py`) for activity diagram routes. All are mounted at `/`. Unless stated otherwise, every route accepts `Content-Type: application/json` and returns plain text (the modified puml). Routes returning JSON are noted.
 
 ## General
 
 - **GET /** — Serves `index.html`. No input. Returns HTML.
+- **GET /changelog** — No input. Returns: JSON array of version objects with `version`, `date`, and `entries` (list of strings). Only includes External changelog entries.
 
 ## Render
 

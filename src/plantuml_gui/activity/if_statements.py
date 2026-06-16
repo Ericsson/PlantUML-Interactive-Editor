@@ -25,7 +25,6 @@
 import re
 from typing import Literal
 
-from plantuml_gui.util import checkifwhile  # pragma: no cover
 from pyquery import PyQuery as Pq
 
 from .classes import (
@@ -37,6 +36,7 @@ from .classes import (
     find_end,
     findelsebounds,
 )
+from .util import checkifwhile  # pragma: no cover
 
 
 def svgtochunklistpolygon(svg: str) -> list[SvgChunk]:
@@ -67,9 +67,11 @@ def svgtochunklistpolygon(svg: str) -> list[SvgChunk]:
                 link_text = next_elem[0].find("text").text
 
                 # Create a temporary TextElement for the <a> tag, excluding the link text itself from the label
-                element = TextElement(label=f"[[{link_href} {link_text}]]")
-                element.x = float(next_elem[0].find("text").get("x"))
-                element.y = float(next_elem[0].find("text").get("y"))
+                element = TextElement(
+                    label=f"[[{link_href} {link_text}]]",
+                    x=float(next_elem[0].find("text").get("x")),
+                    y=float(next_elem[0].find("text").get("y")),
+                )
                 next_elem = next_elem.next()
 
             # Append to the text elements list
@@ -83,25 +85,19 @@ def svgtochunklistpolygon(svg: str) -> list[SvgChunk]:
 def polychunktotext(
     puml: str, svgchunklist: list[SvgChunk], clickedelement: PolyElement
 ) -> list[str]:
-    max_x, min_x = None, None
-    max_y, min_y = None, None
+    max_x = float("-inf")
+    min_x = float("inf")
+    max_y = float("-inf")
+    min_y = float("inf")
     pairs = clickedelement.get_points()
     for pair in pairs:
-        # Convert string values to integers
         x = float(pair[0])
         y = float(pair[1])
 
-        # Update max_x and min_x
-        if max_x is None or x > max_x:
-            max_x = x
-        if min_x is None or x < min_x:
-            min_x = x
-
-        # Update max_y and min_y
-        if max_y is None or y > max_y:
-            max_y = y
-        if min_y is None or y < min_y:
-            min_y = y
+        max_x = max(max_x, x)
+        min_x = min(min_x, x)
+        max_y = max(max_y, y)
+        min_y = min(min_y, y)
 
     lines = puml.splitlines()
     texts = []

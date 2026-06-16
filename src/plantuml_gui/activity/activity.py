@@ -260,9 +260,11 @@ def svgtochunklist(svg: str) -> list[SvgChunk]:
                     link_text = next_elem[0].find("text").text
 
                     # Create a temporary TextElement for the <a> tag, excluding the link text itself from the label
-                    element = TextElement(label=f"[[{link_href} {link_text}]]")
-                    element.x = float(next_elem[0].find("text").get("x"))
-                    element.y = float(next_elem[0].find("text").get("y"))
+                    element = TextElement(
+                        label=f"[[{link_href} {link_text}]]",
+                        x=float(next_elem[0].find("text").get("x")),
+                        y=float(next_elem[0].find("text").get("y")),
+                    )
                     next_elem = next_elem.next()
 
                 # Append to the text elements list

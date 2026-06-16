@@ -97,3 +97,23 @@ For JSON responses (line numbers), the frontend uses them to highlight the corre
 const data = await response.json();
 getmarker(data.result);
 ```
+
+## Changelog
+
+The Version History modal fetches release notes via a simple GET:
+
+```javascript
+const response = await fetch('/changelog');
+const data = await response.json();
+```
+
+Response is a JSON array:
+
+```json
+[
+  {"version": "0.28", "date": "2025-08-18", "entries": ["Added Load and Save buttons", ...]},
+  ...
+]
+```
+
+No request body. Only External changelog entries are included.
