@@ -67,9 +67,11 @@ def svgtochunklistpolygon(svg: str) -> list[SvgChunk]:
                 link_text = next_elem[0].find("text").text
 
                 # Create a temporary TextElement for the <a> tag, excluding the link text itself from the label
-                element = TextElement(label=f"[[{link_href} {link_text}]]")
-                element.x = float(next_elem[0].find("text").get("x"))
-                element.y = float(next_elem[0].find("text").get("y"))
+                element = TextElement(
+                    label=f"[[{link_href} {link_text}]]",
+                    x=float(next_elem[0].find("text").get("x")),
+                    y=float(next_elem[0].find("text").get("y")),
+                )
                 next_elem = next_elem.next()
 
             # Append to the text elements list
@@ -113,8 +115,6 @@ def polychunktotext(
             for text_element in chunk.text_elements:
                 curr_x = text_element.x
                 curr_y = text_element.y
-                if curr_x is None or curr_y is None:
-                    continue
 
                 # Check the position of the text_element
                 if min_x <= curr_x < max_x and min_y < curr_y < max_y:
