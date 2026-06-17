@@ -2,3 +2,37 @@
 SPDX-License-Identifier: MIT
 Copyright (c) 2024 Ericsson
 */
+
+:root {
+    --bg-shell: #e8e9ec;
+    --bg-global-bar: #f5f5f7;
+    --bg-toolbar: #f0f0f2;
+    --bg-editor: #12141c;
+    --bg-canvas: #f8f8f8;
+
+    --text-primary: #1a1b1e;
+    --text-secondary: #5a5c6a;
+    --text-muted: #9a9caa;
+
+    --border-color: rgba(0, 0, 0, 0.08);
+    --border-hover: rgba(0, 0, 0, 0.13);
+
+    --accent-text: #3b5bdb;
+    --accent-bg: rgba(59, 91, 219, 0.08);
+    --accent-border: rgba(59, 91, 219, 0.28);
+    --accent-hover-bg: rgba(59, 91, 219, 0.15);
+
+    --btn-hover-bg: rgba(0, 0, 0, 0.05);
+    --btn-active-bg: rgba(0, 0, 0, 0.09);
+
+    --radius-btn: 4px;
+    --radius-panel: 8px;
+
+    --panel-bg: #ffffff;
+    --panel-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+
+    --global-bar-height: 40px;
+    --toolbar-height: 30px;
+    --divider-width: 4px;
+    --min-pane-width: 200px;
+}

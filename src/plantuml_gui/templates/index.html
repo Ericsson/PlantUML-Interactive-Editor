@@ -32,10 +32,9 @@ SOFTWARE.
     <title>PlantUML Interactive Editor</title>
     <link rel="icon" type="image/x-icon" href="static/favicon-32x32.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Bootstrap CSS -->
+    <!-- Bootstrap CSS (legacy: modals and context menus only) -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css"
         integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
-    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
     <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
         integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
         crossorigin="anonymous"></script>
@@ -50,64 +49,97 @@ SOFTWARE.
         referrerpolicy="no-referrer"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.9.6/ace.js" integrity="sha512-czfWedq9cnMibaqVP2Sw5Aw1PTTabHxMuTOkYkL15cbCYiatPIbxdV0zwhfBZKNODg0zFqmbz8f7rKmd6tfR/Q==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script src='https://unpkg.com/panzoom@9.4.0/dist/panzoom.min.js'></script>
-    <!-- Dynamically Generated Script with Cache Busting -->
     <script src="static/script.js?v={{ script_hash }}"></script>
     <script src="static/sequence.js?v={{ script_hash }}"></script>
     <script src="static/activity.js?v={{ script_hash }}"></script>
     <link rel="stylesheet" href="static/styles.css">
-
-
 </head>
 
 <body>
-  <div id=popup>Error message</div>
-  <div id="left-side">
-    <div id="header" class="d-flex flex-column">
-        <h2>PlantUML Interactive Editor <span id="version" onclick="showChangelog()" style="cursor:pointer" title="Version History">v{{version}}</span></h2>
-        <div class="button-groups btn-toolbar">
-            <div class="btn-group" id="btn-group-1" role="group" aria-label="Basic example">
-              <div class="btn-group" role="group">
-                <button type="button" class="btn btn-success dropdown-toggle"  data-toggle="dropdown" aria-expanded="false">
-                  New
-                </button>
-                <ul class="dropdown-menu">
-                  <li><a class="dropdown-item" id="clear" href="#">Empty Diagram</a></li>
-                  <li><a class="dropdown-item" id="demo" href="#">Demo</a></li>
-                  <li><a class="dropdown-item" id="sequence" href="#">Sequence</a></li>
-                </ul>
-              </div>
-              <button type="button" id="load" class="btn btn-success">Load</button>
-              <!-- Hidden file input -->
-              <input type="file" id="file-input" style="display: none;">
-              <button type="button" id="save" class="btn btn-success">Save</button>
-              <button type="button" id="addTitleButton" class="btn btn-success">Add Title</button>
-            </div>
-            <div class="btn-group" id="btn-group-2" role="group" aria-label="Basic example">
-              <button type="button" id="undo" class="btn btn-primary">Undo</button>
-              <button type="button" id="restore" class="btn btn-primary">Redo</button>
-            </div>
-            <div class="btn-group" id="btn-group-3" role="group" aria-label="Basic example">
-                <button type="button" id="copybutton" class="btn btn-dark">Copy</button>
-                <button type="button" id="pastebutton" class="btn btn-dark">Paste</button>
-                <button type="button" id="png" class="btn btn-dark">PNG</button>
-            </div>
-            <div class="btn-group" id="btn-group-4" role="group" aria-label="Basic example">
-                <button type="button" class="btn btn-info" data-toggle="modal" data-target="#usageModal">Help</button>
-          </div>
-        </div>
-    </div>
-    <div id="editor" ></div>
-  </div>
-<div id="colb-container">
-  <div id="colb">
-    <div id="init-text">
-      <h1>PlantUML is Loading</h1>
-      <img src="static/Circles-menu-3.gif"></img>
-    </div>
-  </div>
-  <div id="loading-overlay"></div>
-</div>
+  <div id="popup">Error message</div>
 
+  <div class="app-shell">
+    <!-- Global Bar -->
+    <div class="global-bar">
+      <span class="app-name">PlantUML Interactive Editor</span>
+      <span class="toolbar-sep"></span>
+      <div class="btn-group" role="group">
+        <button type="button" class="btn btn-success dropdown-toggle" data-toggle="dropdown" aria-expanded="false">
+          New
+        </button>
+        <ul class="dropdown-menu">
+          <li><a class="dropdown-item" id="clear" href="#">Empty Diagram</a></li>
+          <li><a class="dropdown-item" id="demo" href="#">Demo</a></li>
+          <li><a class="dropdown-item" id="sequence" href="#">Sequence</a></li>
+        </ul>
+      </div>
+      <span class="toolbar-sep"></span>
+      <span class="toolbar-sep"></span>
+      <button type="button" id="undo" class="toolbar-btn" title="Undo (Ctrl+Z)">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h7a4 4 0 0 1 0 8H8"/><path d="M6 4L3 7l3 3"/></svg>
+      </button>
+      <button type="button" id="restore" class="toolbar-btn" title="Redo (Ctrl+Y)">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 7H6a4 4 0 0 0 0 8h2"/><path d="M10 4l3 3-3 3"/></svg>
+      </button>
+      <span class="toolbar-sep"></span>
+      <button type="button" id="addTitleButton" class="toolbar-btn" title="Insert title block">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4h10M5 4v9M11 4v9"/></svg>
+        Add title
+      </button>
+      <span class="toolbar-sep"></span>
+      <span class="toolbar-spacer"></span>
+      <span class="version-badge" id="version" onclick="showChangelog()" title="Version History">v{{version}}</span>
+      <button type="button" class="toolbar-btn" data-toggle="modal" data-target="#usageModal" title="Help">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M6 6.5a2 2 0 0 1 3.9.5c0 1-1.4 1.5-1.9 2" stroke-linecap="round"/><circle cx="8" cy="12" r="0.5" fill="currentColor" stroke="none"/></svg>
+      </button>
+    </div>
+
+    <!-- Split Container -->
+    <div class="split-container">
+      <!-- Left Pane: Code -->
+      <div class="left-pane">
+        <div class="code-toolbar">
+          <button type="button" id="copybutton" class="toolbar-btn" title="Copy PlantUML source">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="8" height="9" rx="1"/><path d="M3 11V3a1 1 0 0 1 1-1h6"/></svg>
+          </button>
+          <button type="button" id="pastebutton" class="toolbar-btn" title="Paste PlantUML source">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="10" height="11" rx="1"/><path d="M6 2h4a1 1 0 0 1 1 1v1H5V3a1 1 0 0 1 1-1z"/></svg>
+          </button>
+          <span class="toolbar-sep"></span>
+          <span class="toolbar-spacer"></span>
+          <button type="button" id="save" class="toolbar-btn toolbar-btn--accent" title="Download .puml">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2v9M5 8l3 3 3-3"/><path d="M3 12v2h10v-2"/></svg>
+          </button>
+        </div>
+        <div id="editor"></div>
+        <button type="button" id="load" hidden></button>
+        <input type="file" id="file-input" style="display: none;">
+      </div>
+
+      <!-- Resizable Divider -->
+      <div class="divider" id="pane-divider"></div>
+
+      <!-- Right Pane: Diagram -->
+      <div class="right-pane">
+        <div class="diagram-toolbar">
+          <span class="toolbar-spacer"></span>
+          <button type="button" id="png" class="toolbar-btn toolbar-btn--accent" title="Download diagram as PNG">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2v9M5 8l3 3 3-3"/><path d="M3 12v2h10v-2"/></svg>
+            PNG
+          </button>
+        </div>
+        <div id="colb-container">
+          <div id="colb">
+            <div id="init-text">
+              <h1>PlantUML is Loading</h1>
+              <img src="static/Circles-menu-3.gif" alt="Loading">
+            </div>
+          </div>
+          <div id="loading-overlay"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
 {% include "partials/activity_menus.html" %}
 
@@ -133,22 +165,20 @@ SOFTWARE.
 
 <script>
     (async function() {
-      await initeditor(); // Wait for initeditor() to complete
-      initialize(); // Then run initialize()
+      await initeditor();
+      initialize();
     })();
     var element = document.getElementById('colb');
 
-  // Initialize Panzoom
-  const panzoomInstance = panzoom(element, {
-    maxZoom: 3,
-    minZoom: 0.25,
-    bounds: true,
-  });
+    const panzoomInstance = panzoom(element, {
+      maxZoom: 3,
+      minZoom: 0.25,
+      bounds: true,
+    });
 
-  // Unbind the default double-click zoom
-  element.addEventListener('dblclick', (event) => {
-    event.stopImmediatePropagation();
-  });
+    element.addEventListener('dblclick', (event) => {
+      event.stopImmediatePropagation();
+    });
 </script>
 
 </body>

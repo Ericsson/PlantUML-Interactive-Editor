@@ -3,6 +3,24 @@ SPDX-License-Identifier: MIT
 Copyright (c) 2024 Ericsson
 */
 
+.dropdown-panel {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: var(--panel-bg);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--panel-shadow);
+    border: 1px solid var(--border-color);
+    z-index: 1000;
+    display: none;
+    min-width: 160px;
+}
+
+.dropdown-panel.open {
+    display: block;
+}
+
+/* Legacy Bootstrap dropdown compat for existing context menus */
 .dropdown-menu li {
     position: relative;
 }

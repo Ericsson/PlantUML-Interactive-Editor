@@ -42,7 +42,14 @@
 │       ├── activity.js     # Activity-specific interactions
 │       ├── sequence.js     # Sequence diagram support (WIP)
 │       ├── mode-plantuml.js # Ace editor PlantUML mode
-│       └── styles.css      # Stylesheet
+│       ├── styles.css      # Main stylesheet (imports css/ modules)
+│       └── css/            # Modular CSS files
+│           ├── tokens.css  # Design tokens (CSS custom properties)
+│           ├── layout.css  # App shell, split panes, divider
+│           ├── toolbars.css # Global bar, pane toolbars, button styles
+│           ├── panels.css  # Dropdown panels, legacy dropdown compat
+│           ├── editor.css  # Ace editor, diagram canvas, loading
+│           └── legacy.css  # Error popup, hover overlay
 ├── tests/
 │   ├── conftest.py         # pytest fixtures (client fixture)
 │   ├── activity/           # Activity diagram route & logic tests

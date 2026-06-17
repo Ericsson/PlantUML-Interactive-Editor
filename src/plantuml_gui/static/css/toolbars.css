@@ -3,36 +3,103 @@ SPDX-License-Identifier: MIT
 Copyright (c) 2024 Ericsson
 */
 
-#header {
-    background-color: #dcdcdc;
-    padding: 10px;
-    box-sizing: border-box;
-    border: 2px solid black;
-    border-right: none;
+/* ===== Global Bar ===== */
+.global-bar {
+    height: var(--global-bar-height);
+    min-height: var(--global-bar-height);
+    background: var(--bg-global-bar);
+    border-bottom: 1px solid var(--border-color);
     display: flex;
-    flex-direction: column;
-    position: relative;
+    align-items: center;
+    padding: 0 12px;
+    gap: 0;
 }
 
-#version {
-    font-size: 14px;
-}
-
-#issue {
-    position: relative;
-    align-self: flex-end;
-    margin-top: auto;
-    font-size: 18px;
-    bottom: 5px;
-    right: 5px;
-}
-
-.button-groups {
+/* ===== Pane Toolbars ===== */
+.code-toolbar,
+.diagram-toolbar {
+    height: var(--toolbar-height);
+    min-height: var(--toolbar-height);
+    background: var(--bg-toolbar);
+    border-bottom: 1px solid var(--border-color);
     display: flex;
-    flex-direction: row;
-    gap: 10px;
+    align-items: center;
+    padding: 0 8px;
+    gap: 2px;
 }
 
-.btn-group {
-    width: auto;
+/* ===== App Name ===== */
+.app-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+/* ===== Version Badge ===== */
+.version-badge {
+    font-size: 10px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0 6px;
+}
+
+/* ===== Toolbar Separator ===== */
+.toolbar-sep {
+    width: 1px;
+    height: 18px;
+    background: var(--border-color);
+    margin: 0 6px;
+    flex-shrink: 0;
+}
+
+/* ===== Toolbar Spacer ===== */
+.toolbar-spacer {
+    flex: 1;
+}
+
+/* ===== Shared Button Styles ===== */
+.toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 26px;
+    padding: 0 8px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-btn);
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    gap: 4px;
+    white-space: nowrap;
+    transition: background 0.1s, border-color 0.1s;
+}
+
+.toolbar-btn:hover {
+    background: var(--btn-hover-bg);
+    border-color: var(--border-hover);
+}
+
+.toolbar-btn:active {
+    background: var(--btn-active-bg);
+    transform: scale(0.97);
+}
+
+.toolbar-btn svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+/* Accent button variant */
+.toolbar-btn--accent {
+    color: var(--accent-text);
+    background: var(--accent-bg);
+    border-color: var(--accent-border);
+}
+
+.toolbar-btn--accent:hover {
+    background: var(--accent-hover-bg);
 }
