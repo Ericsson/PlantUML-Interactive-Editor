@@ -8,6 +8,31 @@ def test_global_bar_visible(app_url, page):
     assert bar.is_visible()
 
 
+def test_global_bar_app_name(app_url, page):
+    """The app name is displayed in the global bar."""
+    name = page.locator(".app-name")
+    assert name.is_visible()
+    assert name.inner_text() == "PlantUML Interactive Editor"
+
+
+def test_global_bar_undo_redo(app_url, page):
+    """Undo and redo buttons exist in the global bar."""
+    assert page.locator("#undo").is_visible()
+    assert page.locator("#restore").is_visible()
+
+
+def test_global_bar_add_title(app_url, page):
+    """Add title button exists in the global bar."""
+    assert page.locator("#addTitleButton").is_visible()
+
+
+def test_global_bar_version_badge(app_url, page):
+    """Version badge is displayed."""
+    badge = page.locator("#version")
+    assert badge.is_visible()
+    assert badge.inner_text().startswith("v")
+
+
 def test_left_pane_visible(app_url, page):
     """The left pane (code) exists and is visible."""
     pane = page.locator(".left-pane")
