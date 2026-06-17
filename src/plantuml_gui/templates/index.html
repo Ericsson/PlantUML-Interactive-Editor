@@ -203,6 +203,42 @@ SOFTWARE.
       panzoomInstance.moveTo(0, 0);
       panzoomInstance.zoomAbs(0, 0, 1);
     });
+
+    // Resizable divider
+    (function() {
+      const divider = document.getElementById('pane-divider');
+      const left = document.querySelector('.left-pane');
+      const right = document.querySelector('.right-pane');
+      const container = document.querySelector('.split-container');
+      let dragging = false;
+
+      divider.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        dragging = true;
+        divider.classList.add('dragging');
+        document.body.style.cursor = 'col-resize';
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        const rect = container.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const min = 200;
+        const max = rect.width - 200 - 4;
+        const clamped = Math.min(Math.max(x, min), max);
+        left.style.flex = 'none';
+        left.style.width = clamped + 'px';
+        right.style.flex = '1';
+        editor.resize();
+      });
+
+      document.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        divider.classList.remove('dragging');
+        document.body.style.cursor = '';
+      });
+    })();
 </script>
 
 </body>
