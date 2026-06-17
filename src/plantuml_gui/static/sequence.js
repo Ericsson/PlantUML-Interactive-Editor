@@ -43,7 +43,6 @@ function sequenceEventListeners() {
         const svg = element.querySelector('g');
 
         var newname = $('#participant-name-text').val()
-        participant_cx = parseFloat(lastclickedsvgelement.getAttribute('x'))
         try {
             const plantuml = trimlines(editor.session.getValue());
             const response = await fetch("editParticipantName", {
@@ -55,7 +54,7 @@ function sequenceEventListeners() {
                     'plantuml': plantuml,
                     'svg': svg.innerHTML,
                     'name': newname,
-                    'cx': participant_cx
+                    'svgelement': lastclickedsvgelement.outerHTML
                 }),
             });
             const pumlcontentcode = await response.text();
@@ -213,7 +212,6 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
             if (checkIfParticipant(svgelements, index)) {
                 svgelement.addEventListener('dblclick', async () => {
                     lastclickedsvgelement = svgelement
-                    participant_cx = parseFloat(lastclickedsvgelement.getAttribute('x'))
                     try {
                         const plantuml = trimlines(editor.session.getValue());
                         const response = await fetch("getParticipantName", {
@@ -224,7 +222,7 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
                             body: JSON.stringify({
                                 'plantuml': plantuml,
                                 'svg': svg.innerHTML,
-                                'cx': participant_cx
+                                'svgelement': svgelement.outerHTML
                             })
                         });
                         $('#participant-name-text').val(await response.text());

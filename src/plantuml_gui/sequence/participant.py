@@ -24,7 +24,37 @@
 
 from typing import List
 
+from pyquery import PyQuery as Pq
+
 from .classes import Diagram, Participant
+
+
+def index_of_clicked_participant(svg: str, svgelement: str) -> int:
+    """Find the 1-based index of the clicked participant in the SVG.
+
+    Follows the same element-matching pattern as activity diagrams:
+    the frontend sends the outerHTML of the clicked SVG element, and the
+    backend iterates all elements of that type in the full SVG, counting
+    until it finds the exact match. This gives a positional index that maps
+    to the corresponding line in the puml source.
+
+    Participants are deduplicated by center-x because PlantUML renders two
+    rects per participant (top and bottom header boxes) with the same cx.
+    """
+    clicked_rect = Pq(svgelement)
+    clicked_cx = float(clicked_rect.attr("x")) + float(clicked_rect.attr("width")) / 2
+
+    d = Pq(svg)
+    seen_cx: set[float] = set()
+    count = 0
+    for rect in d("rect").items():
+        cx = float(rect.attr("x")) + float(rect.attr("width")) / 2
+        if cx not in seen_cx:
+            seen_cx.add(cx)
+            count += 1
+            if cx == clicked_cx:
+                return count
+    return count
 
 
 def add_participant(puml: str, svg: str, clicked_x: int) -> str:
@@ -92,15 +122,16 @@ def add_message(
     return "\n".join(lines)
 
 
-def get_participant_name(puml: str, svg: str, clicked_x: int):
+def get_participant_name(puml: str, svg: str, svgelement: str) -> str:
+    """Get participant name by matching the clicked SVG element."""
     diagram = Diagram.from_svg(svg, puml)
-    participant = find_closest_participant(diagram.participants, clicked_x)
+    count = index_of_clicked_participant(svg, svgelement)
+    return diagram.participants[count - 1].name
 
-    return participant.name
 
-
-def edit_participant_name(puml: str, svg: str, newname: str, clicked_x: int):
+def edit_participant_name(puml: str, svg: str, newname: str, svgelement: str) -> str:
+    """Edit participant name by matching the clicked SVG element."""
     diagram = Diagram.from_svg(svg, puml)
-    participant = find_closest_participant(diagram.participants, clicked_x)
-
+    count = index_of_clicked_participant(svg, svgelement)
+    participant = diagram.participants[count - 1]
     return puml.replace(participant.name, newname)
