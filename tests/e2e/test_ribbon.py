@@ -176,3 +176,33 @@ def test_divider_respects_min_width(app_url, page):
     page.wait_for_timeout(100)
     width = page.evaluate("() => document.querySelector('.left-pane').offsetWidth")
     assert width >= 200
+
+
+def test_version_panel_opens(app_url, page):
+    """Clicking version badge opens the version history panel."""
+    page.wait_for_timeout(2000)
+    page.locator("#version").click()
+    panel = page.locator("#version-panel")
+    panel.wait_for(state="visible", timeout=3000)
+    assert panel.is_visible()
+    # Should have changelog content
+    assert "0.28" in panel.inner_text() or "0.27" in panel.inner_text()
+
+
+def test_version_panel_closes_on_outside_click(app_url, page):
+    """Clicking outside closes the version panel."""
+    page.wait_for_timeout(2000)
+    page.locator("#version").click()
+    page.locator("#version-panel").wait_for(state="visible", timeout=3000)
+    page.locator(".app-name").click()
+    page.wait_for_timeout(300)
+    assert not page.locator("#version-panel").is_visible()
+
+
+def test_help_button_opens_modal(app_url, page):
+    """Help button opens the usage modal."""
+    page.wait_for_timeout(2000)
+    page.locator(".global-bar [title='Help']").click()
+    modal = page.locator("#usageModal")
+    modal.wait_for(state="visible", timeout=2000)
+    assert modal.is_visible()
