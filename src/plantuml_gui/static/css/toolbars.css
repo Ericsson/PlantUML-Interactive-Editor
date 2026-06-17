@@ -42,6 +42,13 @@ Copyright (c) 2024 Ericsson
     color: var(--text-muted);
     cursor: pointer;
     padding: 0 8px;
+    border-radius: var(--radius-btn);
+    transition: background 0.1s, color 0.1s;
+}
+
+.version-badge:hover {
+    background: var(--btn-hover-bg);
+    color: var(--text-primary);
 }
 
 /* ===== Toolbar Separator ===== */
