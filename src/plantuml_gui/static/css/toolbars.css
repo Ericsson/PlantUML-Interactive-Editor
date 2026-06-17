@@ -5,8 +5,8 @@ Copyright (c) 2024 Ericsson
 
 /* ===== Global Bar ===== */
 .global-bar {
-    height: var(--global-bar-height);
-    min-height: var(--global-bar-height);
+    height: 48px;
+    min-height: 48px;
     background: var(--bg-global-bar);
     border-bottom: 1px solid var(--border-color);
     display: flex;
@@ -30,7 +30,7 @@ Copyright (c) 2024 Ericsson
 
 /* ===== App Name ===== */
 .app-name {
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 600;
     color: var(--text-primary);
     white-space: nowrap;
