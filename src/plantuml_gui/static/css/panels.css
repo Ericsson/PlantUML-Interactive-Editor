@@ -40,3 +40,15 @@ Copyright (c) 2024 Ericsson
 .dropdown-menu > li:hover > .dropdown-submenu {
     display: block;
 }
+
+.version-panel {
+    right: 0;
+    left: auto;
+    top: calc(100% + 4px);
+    width: 320px;
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+}

@@ -851,20 +851,32 @@ function checkDiagramType(puml) {
     return "unknown";
 }
 
-async function showChangelog() {
-    const body = document.getElementById('changelog-body');
+async function toggleVersionPanel() {
+    const panel = document.getElementById('version-panel');
+    if (panel.classList.contains('open')) {
+        panel.classList.remove('open');
+        return;
+    }
     try {
         const response = await fetch('/changelog');
         const data = await response.json();
-        body.innerHTML = data
+        panel.innerHTML = data
             .filter(v => v.version !== 'Unreleased')
             .map(v => {
                 const items = v.entries.map(e => `<li>${e}</li>`).join('');
-                const date = v.date ? `<small class="text-muted">${v.date}</small>` : '';
-                return `<h4>v${v.version}</h4>${date}<ul>${items}</ul>`;
-            }).join('<hr>');
+                const date = v.date ? `<small style="color:var(--text-muted)">${v.date}</small>` : '';
+                return `<h4 style="margin:8px 0 4px;font-size:14px">v${v.version}</h4>${date}<ul style="padding-left:18px;margin:4px 0">${items}</ul>`;
+            }).join('<hr style="margin:8px 0">');
     } catch (error) {
-        body.innerHTML = '<p>Failed to load changelog.</p>';
+        panel.innerHTML = '<p>Failed to load changelog.</p>';
     }
-    $('#changelog-modal').modal('show');
+    panel.classList.add('open');
 }
+
+document.addEventListener('click', function(e) {
+    const panel = document.getElementById('version-panel');
+    const badge = document.getElementById('version');
+    if (panel.classList.contains('open') && !panel.contains(e.target) && e.target !== badge) {
+        panel.classList.remove('open');
+    }
+});
