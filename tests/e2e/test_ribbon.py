@@ -143,3 +143,36 @@ def test_zoom_fit_resets_scale(app_url, page):
     page.wait_for_timeout(300)
     scale = page.evaluate("() => panzoomInstance.getTransform().scale")
     assert abs(scale - 1.0) < 0.01
+
+
+def test_divider_drag_resizes_panes(app_url, page):
+    """Dragging the divider changes the left pane width."""
+    page.wait_for_timeout(2000)
+    divider = page.locator("#pane-divider")
+    box = divider.bounding_box()
+    initial_width = page.evaluate(
+        "() => document.querySelector('.left-pane').offsetWidth"
+    )
+    # Drag divider 100px to the right
+    page.mouse.move(box["x"] + 2, box["y"] + box["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(box["x"] + 102, box["y"] + box["height"] / 2)
+    page.mouse.up()
+    page.wait_for_timeout(100)
+    new_width = page.evaluate("() => document.querySelector('.left-pane').offsetWidth")
+    assert new_width > initial_width
+
+
+def test_divider_respects_min_width(app_url, page):
+    """Divider cannot shrink a pane below 200px."""
+    page.wait_for_timeout(2000)
+    divider = page.locator("#pane-divider")
+    box = divider.bounding_box()
+    # Drag divider all the way to the left
+    page.mouse.move(box["x"] + 2, box["y"] + box["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(0, box["y"] + box["height"] / 2)
+    page.mouse.up()
+    page.wait_for_timeout(100)
+    width = page.evaluate("() => document.querySelector('.left-pane').offsetWidth")
+    assert width >= 200
