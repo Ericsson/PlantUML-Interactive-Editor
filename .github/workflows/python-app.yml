@@ -2,7 +2,6 @@ name: Python application
 
 on:
   push:
-    branches: [ "summer" ]
   pull_request:
 
 permissions:
