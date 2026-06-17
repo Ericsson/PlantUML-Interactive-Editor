@@ -1,0 +1,38 @@
+/*
+SPDX-License-Identifier: MIT
+Copyright (c) 2024 Ericsson
+*/
+
+#header {
+    background-color: #dcdcdc;
+    padding: 10px;
+    box-sizing: border-box;
+    border: 2px solid black;
+    border-right: none;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+#version {
+    font-size: 14px;
+}
+
+#issue {
+    position: relative;
+    align-self: flex-end;
+    margin-top: auto;
+    font-size: 18px;
+    bottom: 5px;
+    right: 5px;
+}
+
+.button-groups {
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+}
+
+.btn-group {
+    width: auto;
+}
