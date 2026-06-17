@@ -111,30 +111,15 @@ Copyright (c) 2024 Ericsson
     background: var(--accent-hover-bg);
 }
 
-/* ===== Custom Tooltips ===== */
-[data-tooltip] {
-    position: relative;
-}
-
-[data-tooltip]::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    bottom: -32px;
-    left: 50%;
-    transform: translateX(-50%);
+/* ===== Tippy Tooltip Theme ===== */
+.tippy-box[data-theme~='dark-custom'] {
     background: #3a3a3c;
     color: #fff;
-    font-size: 11px;
-    font-weight: 400;
-    padding: 4px 8px;
+    font-size: 12px;
     border-radius: 6px;
-    white-space: nowrap;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.15s;
-    z-index: 1000;
+    padding: 2px 4px;
 }
 
-[data-tooltip]:hover::after {
-    opacity: 1;
+.tippy-box[data-theme~='dark-custom'] .tippy-arrow {
+    color: #3a3a3c;
 }

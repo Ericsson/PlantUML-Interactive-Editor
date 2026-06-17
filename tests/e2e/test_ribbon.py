@@ -202,7 +202,7 @@ def test_version_panel_closes_on_outside_click(app_url, page):
 def test_help_button_opens_modal(app_url, page):
     """Help button opens the usage modal."""
     page.wait_for_timeout(2000)
-    page.locator(".global-bar [data-tooltip='Help']").click()
+    page.locator(".global-bar [data-tippy-content='Help']").click()
     modal = page.locator("#usageModal")
     modal.wait_for(state="visible", timeout=2000)
     assert modal.is_visible()
