@@ -113,3 +113,33 @@ def test_code_toolbar_download_button(app_url, page):
     btn = page.locator(".code-toolbar #save")
     assert btn.is_visible()
     assert "toolbar-btn--accent" in btn.get_attribute("class")
+
+
+def test_zoom_in_increases_scale(app_url, page):
+    """Clicking zoom in increases the panzoom scale."""
+    page.wait_for_timeout(2000)
+    page.locator("#zoom-in").click()
+    page.wait_for_timeout(300)
+    scale = page.evaluate("() => panzoomInstance.getTransform().scale")
+    assert scale > 1.0
+
+
+def test_zoom_out_decreases_scale(app_url, page):
+    """Clicking zoom out decreases the panzoom scale."""
+    page.wait_for_timeout(2000)
+    page.locator("#zoom-out").click()
+    page.wait_for_timeout(300)
+    scale = page.evaluate("() => panzoomInstance.getTransform().scale")
+    assert scale < 1.0
+
+
+def test_zoom_fit_resets_scale(app_url, page):
+    """Clicking fit resets zoom to 100%."""
+    page.wait_for_timeout(2000)
+    page.locator("#zoom-in").click()
+    page.locator("#zoom-in").click()
+    page.wait_for_timeout(300)
+    page.locator("#zoom-fit").click()
+    page.wait_for_timeout(300)
+    scale = page.evaluate("() => panzoomInstance.getTransform().scale")
+    assert abs(scale - 1.0) < 0.01
