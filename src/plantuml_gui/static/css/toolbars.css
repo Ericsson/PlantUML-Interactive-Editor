@@ -30,7 +30,7 @@ Copyright (c) 2024 Ericsson
 
 /* ===== App Name ===== */
 .app-name {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--text-primary);
     white-space: nowrap;
@@ -38,18 +38,18 @@ Copyright (c) 2024 Ericsson
 
 /* ===== Version Badge ===== */
 .version-badge {
-    font-size: 10px;
+    font-size: 14px;
     color: var(--text-muted);
     cursor: pointer;
-    padding: 0 6px;
+    padding: 0 8px;
 }
 
 /* ===== Toolbar Separator ===== */
 .toolbar-sep {
     width: 1px;
-    height: 18px;
+    height: 24px;
     background: var(--border-color);
-    margin: 0 6px;
+    margin: 0 10px;
     flex-shrink: 0;
 }
 
@@ -63,16 +63,16 @@ Copyright (c) 2024 Ericsson
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    height: 26px;
-    padding: 0 8px;
+    height: 34px;
+    padding: 0 12px;
     border: 1px solid transparent;
     border-radius: var(--radius-btn);
     background: transparent;
     color: var(--text-primary);
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    gap: 4px;
+    gap: 5px;
     white-space: nowrap;
     transition: background 0.1s, border-color 0.1s;
 }
@@ -88,8 +88,8 @@ Copyright (c) 2024 Ericsson
 }
 
 .toolbar-btn svg {
-    width: 14px;
-    height: 14px;
+    width: 18px;
+    height: 18px;
     flex-shrink: 0;
 }
 
