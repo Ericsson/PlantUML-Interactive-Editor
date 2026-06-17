@@ -86,3 +86,30 @@ def test_new_dropdown_demo_loads(app_url, page):
     page.wait_for_timeout(500)
     content = page.evaluate("() => editor.session.getValue()")
     assert "Right-click" in content
+
+
+def test_code_toolbar_copy_button(app_url, page, context):
+    """Copy button copies editor content to clipboard."""
+    context.grant_permissions(["clipboard-read", "clipboard-write"])
+    page.evaluate("() => editor.session.setValue('test clipboard content')")
+    page.locator(".code-toolbar #copybutton").click()
+    page.wait_for_timeout(300)
+    clip = page.evaluate("() => navigator.clipboard.readText()")
+    assert clip == "test clipboard content"
+
+
+def test_code_toolbar_paste_button(app_url, page, context):
+    """Paste button pastes clipboard content into editor."""
+    context.grant_permissions(["clipboard-read", "clipboard-write"])
+    page.evaluate("() => navigator.clipboard.writeText('pasted content')")
+    page.locator(".code-toolbar #pastebutton").click()
+    page.wait_for_timeout(500)
+    content = page.evaluate("() => editor.session.getValue()")
+    assert content == "pasted content"
+
+
+def test_code_toolbar_download_button(app_url, page):
+    """Download button exists with accent styling."""
+    btn = page.locator(".code-toolbar #save")
+    assert btn.is_visible()
+    assert "toolbar-btn--accent" in btn.get_attribute("class")
