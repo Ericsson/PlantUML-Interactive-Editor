@@ -59,3 +59,30 @@ def test_split_container_visible(app_url, page):
     container = page.locator(".split-container")
     container.wait_for(state="visible", timeout=5000)
     assert container.is_visible()
+
+
+def test_new_dropdown_opens(app_url, page):
+    """Clicking New button opens the dropdown menu."""
+    page.locator(".global-bar .dropdown-toggle").click()
+    menu = page.locator(".global-bar .dropdown-menu")
+    menu.wait_for(state="visible", timeout=2000)
+    assert menu.is_visible()
+
+
+def test_new_dropdown_items(app_url, page):
+    """Dropdown has the correct items."""
+    page.locator(".global-bar .dropdown-toggle").click()
+    items = page.locator(".global-bar .dropdown-menu .dropdown-item")
+    assert items.count() == 3
+    assert items.nth(0).inner_text() == "Empty"
+    assert items.nth(1).inner_text() == "Activity Demo"
+    assert items.nth(2).inner_text() == "Sequence Demo"
+
+
+def test_new_dropdown_demo_loads(app_url, page):
+    """Clicking Activity Demo loads demo content in editor."""
+    page.locator(".global-bar .dropdown-toggle").click()
+    page.locator("#demo").click()
+    page.wait_for_timeout(500)
+    content = page.evaluate("() => editor.session.getValue()")
+    assert "Right-click" in content
