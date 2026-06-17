@@ -13,6 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Made generated PNG copyable
 - Added Version History modal showing release notes
 - Added zoom in/out/reset controls to diagram toolbar
+- Added resizable divider between code and diagram panes
+- Replaced Version History modal with dropdown panel
 
 ### Internal
 
