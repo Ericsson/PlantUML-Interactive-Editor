@@ -74,24 +74,24 @@ SOFTWARE.
         </ul>
       </div>
       <span class="toolbar-sep"></span>
-      <button type="button" id="addTitleButton" class="toolbar-btn" title="Insert title block">
+      <button type="button" id="addTitleButton" class="toolbar-btn" data-tooltip="Insert title block">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
         Add title
       </button>
       <span class="toolbar-sep"></span>
-      <button type="button" id="undo" class="toolbar-btn" title="Undo (Ctrl+Z)">
+      <button type="button" id="undo" class="toolbar-btn" data-tooltip="Undo (Ctrl+Z)">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h7a4 4 0 0 1 0 8H8"/><path d="M6 4L3 7l3 3"/></svg>
       </button>
-      <button type="button" id="restore" class="toolbar-btn" title="Redo (Ctrl+Y)">
+      <button type="button" id="restore" class="toolbar-btn" data-tooltip="Redo (Ctrl+Y)">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 7H6a4 4 0 0 0 0 8h2"/><path d="M10 4l3 3-3 3"/></svg>
       </button>
       <span class="toolbar-sep"></span>
       <span class="toolbar-spacer"></span>
       <div class="dropdown-wrapper" style="position:relative">
-        <span class="version-badge" id="version" onclick="toggleVersionPanel()" title="Version History">v{{version}}</span>
+        <span class="version-badge" id="version" onclick="toggleVersionPanel()" data-tooltip="Version History">v{{version}}</span>
         <div class="dropdown-panel version-panel" id="version-panel"></div>
       </div>
-      <button type="button" class="toolbar-btn" data-toggle="modal" data-target="#usageModal" title="Help">
+      <button type="button" class="toolbar-btn" data-toggle="modal" data-target="#usageModal" data-tooltip="Help">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M6 6.5a2 2 0 0 1 3.9.5c0 1-1.4 1.5-1.9 2" stroke-linecap="round"/><circle cx="8" cy="12" r="0.5" fill="currentColor" stroke="none"/></svg>
       </button>
     </div>
@@ -101,15 +101,15 @@ SOFTWARE.
       <!-- Left Pane: Code -->
       <div class="left-pane">
         <div class="code-toolbar">
-          <button type="button" id="copybutton" class="toolbar-btn" title="Copy PlantUML source">
+          <button type="button" id="copybutton" class="toolbar-btn" data-tooltip="Copy PlantUML source">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="8" height="9" rx="1"/><path d="M3 11V3a1 1 0 0 1 1-1h6"/></svg>
           </button>
-          <button type="button" id="pastebutton" class="toolbar-btn" title="Paste PlantUML source">
+          <button type="button" id="pastebutton" class="toolbar-btn" data-tooltip="Paste PlantUML source">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="10" height="11" rx="1"/><path d="M6 2h4a1 1 0 0 1 1 1v1H5V3a1 1 0 0 1 1-1z"/></svg>
           </button>
           <span class="toolbar-sep"></span>
           <span class="toolbar-spacer"></span>
-          <button type="button" id="save" class="toolbar-btn toolbar-btn--accent" title="Download .puml">
+          <button type="button" id="save" class="toolbar-btn toolbar-btn--accent" data-tooltip="Download .puml">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2v9M5 8l3 3 3-3"/><path d="M3 12v2h10v-2"/></svg>
           </button>
         </div>
@@ -124,17 +124,17 @@ SOFTWARE.
       <!-- Right Pane: Diagram -->
       <div class="right-pane">
         <div class="diagram-toolbar">
-          <button type="button" id="zoom-out" class="toolbar-btn" title="Zoom out">
+          <button type="button" id="zoom-out" class="toolbar-btn" data-tooltip="Zoom out">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5" stroke-linecap="round"/><path d="M5 7h4"/></svg>
           </button>
-          <button type="button" id="zoom-in" class="toolbar-btn" title="Zoom in">
+          <button type="button" id="zoom-in" class="toolbar-btn" data-tooltip="Zoom in">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5" stroke-linecap="round"/><path d="M5 7h4M7 5v4"/></svg>
           </button>
-          <button type="button" id="zoom-fit" class="toolbar-btn" title="Reset zoom">
+          <button type="button" id="zoom-fit" class="toolbar-btn" data-tooltip="Reset zoom">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 5V2h3M11 2h3v3M14 11v3h-3M5 14H2v-3"/></svg>
           </button>
           <span class="toolbar-spacer"></span>
-          <button type="button" id="png" class="toolbar-btn toolbar-btn--accent" title="Download diagram as PNG">
+          <button type="button" id="png" class="toolbar-btn toolbar-btn--accent" data-tooltip="Download diagram as PNG">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2v9M5 8l3 3 3-3"/><path d="M3 12v2h10v-2"/></svg>
             PNG
           </button>
