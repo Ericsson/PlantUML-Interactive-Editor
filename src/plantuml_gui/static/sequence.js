@@ -66,9 +66,13 @@ function sequenceEventListeners() {
 
 
     const sequenceList = [{
-        id: 'addParticipant',
+        id: 'addParticipantLeft',
         endpoint: 'addParticipant',
-        arguments: {}
+        arguments: {direction: 'left'}
+    }, {
+        id: 'addParticipantRight',
+        endpoint: 'addParticipant',
+        arguments: {direction: 'right'}
     }, {
         id: 'deleteParticipant',
         endpoint: 'deleteParticipant',
@@ -85,9 +89,6 @@ function sequenceEventListeners() {
                     'plantuml': plantuml,
                     'svg': svg.innerHTML,
                     'svgelement': lastclickedsvgelement.outerHTML,
-                }
-                if (firstClickCoordinates) {
-                    toBeStringified['cx'] = firstClickCoordinates[0];
                 }
                 if (item.arguments) {
                     for (let [key, value] of Object.entries(item.arguments)) {
@@ -150,7 +151,7 @@ async function backgroundContextMenu(e, svgelement) {
 
     const isInValidArea = await checkIfInsideParticipant(firstClickCoordinates);
 
-    // If click is inside a participant, display addMessage option
+    // If click is inside a participant area, display addMessage option
     const addMessageItem = document.getElementById("addMessage");
     addMessageItem.style.display = isInValidArea ? "block" : "none";
 

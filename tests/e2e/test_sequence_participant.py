@@ -64,3 +64,29 @@ class TestCheckIfParticipant:
             return checkIfParticipant(elements, 0);
         }""")
         assert result is False
+
+
+class TestSequenceListArguments:
+    def test_add_participant_left_has_direction(self, app_url, page):
+        """addParticipantLeft entry sends direction 'left' argument."""
+        result = page.evaluate("""() => {
+            const list = [{
+                id: 'addParticipantLeft',
+                endpoint: 'addParticipant',
+                arguments: {direction: 'left'}
+            }];
+            return list[0].arguments.direction;
+        }""")
+        assert result == "left"
+
+    def test_add_participant_right_has_direction(self, app_url, page):
+        """addParticipantRight entry sends direction 'right' argument."""
+        result = page.evaluate("""() => {
+            const list = [{
+                id: 'addParticipantRight',
+                endpoint: 'addParticipant',
+                arguments: {direction: 'right'}
+            }];
+            return list[0].arguments.direction;
+        }""")
+        assert result == "right"

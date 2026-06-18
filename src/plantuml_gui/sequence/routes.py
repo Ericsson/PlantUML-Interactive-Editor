@@ -41,8 +41,9 @@ def addparticipant():
     data = request.get_json()
     puml = data["plantuml"]
     svg = data["svg"]
-    cx = data["cx"]
-    return add_participant(puml, svg, cx)
+    svgelement = data["svgelement"]
+    direction = data["direction"]
+    return add_participant(puml, svg, svgelement, direction)
 
 
 @sequence_bp.route("/addMessage", methods=["POST"])
