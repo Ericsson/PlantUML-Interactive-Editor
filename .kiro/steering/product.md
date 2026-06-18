@@ -31,7 +31,7 @@ Enterprise developers and technical teams (primarily at Ericsson and similar com
 - Groups and partitions (partial support)
 
 ### Sequence Diagrams
-- Participants
+- Participants (add left/right, rename, delete with cascade)
 - Add messages between participants
 
 ## Business Objectives

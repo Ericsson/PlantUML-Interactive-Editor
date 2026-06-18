@@ -90,3 +90,37 @@ class TestSequenceListArguments:
             return list[0].arguments.direction;
         }""")
         assert result == "right"
+
+
+class TestRenameParticipant:
+    def test_rename_modal_exists(self, app_url, page):
+        """The participant name modal form exists in the DOM."""
+        result = page.evaluate("""() => {
+            const modal = document.getElementById('participant-name-modalForm');
+            return modal !== null;
+        }""")
+        assert result is True
+
+    def test_rename_menu_item_exists(self, app_url, page):
+        """The renameParticipant menu item exists in the DOM."""
+        result = page.evaluate("""() => {
+            const item = document.getElementById('renameParticipant');
+            return item !== null;
+        }""")
+        assert result is True
+
+    def test_rename_modal_title_updates(self, app_url, page):
+        """Setting the modal title dynamically works."""
+        result = page.evaluate("""() => {
+            $('#participant-name-modalForm .modal-title').text('Rename Alice');
+            return $('#participant-name-modalForm .modal-title').text();
+        }""")
+        assert result == "Rename Alice"
+
+    def test_rename_input_prefills(self, app_url, page):
+        """Pre-filling the rename input field works."""
+        result = page.evaluate("""() => {
+            $('#participant-name-text').val('Alice');
+            return $('#participant-name-text').val();
+        }""")
+        assert result == "Alice"

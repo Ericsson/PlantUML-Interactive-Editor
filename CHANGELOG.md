@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - New toolbar interface with zoom in/out/reset controls and resizable divider between code and diagram panes
 - Added delete participant for sequence diagrams (right-click on participant, cascade deletes messages)
 - Added directional add participant (left/right) from participant context menu
+- Added rename participant from participant context menu
 - Added divider between add and delete commands in participant context menu
 - Fixed undo crash when undoing to first history entry
 - Fixed Save button to save content to file
