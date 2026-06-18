@@ -1,0 +1,56 @@
+/*
+SPDX-License-Identifier: MIT
+Copyright (c) 2024 Ericsson
+*/
+
+html, body {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg-shell);
+    color: var(--text-primary);
+}
+
+.app-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+}
+
+.split-container {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
+.left-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 40%;
+    min-width: var(--min-pane-width);
+    overflow: hidden;
+}
+
+.right-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: var(--min-pane-width);
+    overflow: hidden;
+}
+
+.divider {
+    width: var(--divider-width);
+    background: var(--border-color);
+    cursor: col-resize;
+    flex-shrink: 0;
+    transition: background 0.15s;
+}
+
+.divider:hover,
+.divider.dragging {
+    background: var(--accent-text);
+}
