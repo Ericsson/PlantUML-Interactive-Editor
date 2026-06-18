@@ -1,0 +1,125 @@
+/*
+SPDX-License-Identifier: MIT
+Copyright (c) 2024 Ericsson
+*/
+
+/* ===== Global Bar ===== */
+.global-bar {
+    height: 48px;
+    min-height: 48px;
+    background: var(--bg-global-bar);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 0;
+}
+
+/* ===== Pane Toolbars ===== */
+.code-toolbar,
+.diagram-toolbar {
+    height: 40px;
+    min-height: 40px;
+    background: var(--bg-toolbar);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    gap: 2px;
+}
+
+/* ===== App Name ===== */
+.app-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+/* ===== Version Badge ===== */
+.version-badge {
+    font-size: 14px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0 8px;
+    border-radius: var(--radius-btn);
+    transition: background 0.1s, color 0.1s;
+}
+
+.version-badge:hover {
+    background: var(--btn-hover-bg);
+    color: var(--text-primary);
+}
+
+/* ===== Toolbar Separator ===== */
+.toolbar-sep {
+    width: 1px;
+    height: 24px;
+    background: rgba(0, 0, 0, 0.15);
+    margin: 0 10px;
+    flex-shrink: 0;
+}
+
+/* ===== Toolbar Spacer ===== */
+.toolbar-spacer {
+    flex: 1;
+}
+
+/* ===== Shared Button Styles ===== */
+.toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 34px;
+    padding: 0 12px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-btn);
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    gap: 5px;
+    white-space: nowrap;
+    transition: background 0.1s, border-color 0.1s;
+}
+
+.toolbar-btn:hover {
+    background: var(--btn-hover-bg);
+    border-color: var(--border-hover);
+}
+
+.toolbar-btn:active {
+    background: var(--btn-active-bg);
+    transform: scale(0.97);
+}
+
+.toolbar-btn svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+/* Accent button variant */
+.toolbar-btn--accent {
+    color: var(--accent-text);
+    background: var(--accent-bg);
+    border-color: var(--accent-border);
+}
+
+.toolbar-btn--accent:hover {
+    background: var(--accent-hover-bg);
+}
+
+/* ===== Tippy Tooltip Theme ===== */
+.tippy-box[data-theme~='dark-custom'] {
+    background: #3a3a3c;
+    color: #fff;
+    font-size: 12px;
+    border-radius: 6px;
+    padding: 2px 4px;
+}
+
+.tippy-box[data-theme~='dark-custom'] .tippy-arrow {
+    color: #3a3a3c;
+}

@@ -12,9 +12,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Fixed Save button to save content to file
 - Made generated PNG copyable
 - Added Version History modal showing release notes
+- Added zoom in/out/reset controls to diagram toolbar
+- Added resizable divider between code and diagram panes
+- Replaced Version History modal with dropdown panel
 
 ### Internal
 
+- Restructured HTML layout to ribbon UI shell (global bar + split panes)
+- Split styles.css into modular CSS files under static/css/
+- Added CSS design tokens for ribbon UI theming
 - Updated project URLs to point to official repository (#93)
 - Updated author and contact emails (#93)
 - Added comments for AbortError handling (#83)
