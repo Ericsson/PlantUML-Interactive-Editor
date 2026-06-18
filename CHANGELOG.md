@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### External
 
+- Added delete participant for sequence diagrams (right-click on participant, cascade deletes messages)
 - Fixed undo crash when undoing to first history entry
 - Fixed Save button to save content to file
 - Made generated PNG copyable

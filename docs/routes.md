@@ -118,4 +118,4 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /checkIfInsideParticipant** — Input: `plantuml`, `svg`, `coordinates` ([x,y]). Returns: JSON `{"isValid": bool}`.
 - **POST /getParticipantName** — Input: `plantuml`, `svg`, `svgelement`. Returns: participant name string.
 - **POST /editParticipantName** — Input: `plantuml`, `svg`, `name`, `svgelement`. Returns: modified puml.
-- **POST /deleteParticipant** — Input: `plantuml`, `svg`, `cx` (float). Returns: modified puml.
+- **POST /deleteParticipant** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.

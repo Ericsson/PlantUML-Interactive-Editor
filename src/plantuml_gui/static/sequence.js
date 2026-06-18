@@ -69,6 +69,10 @@ function sequenceEventListeners() {
         id: 'addParticipant',
         endpoint: 'addParticipant',
         arguments: {}
+    }, {
+        id: 'deleteParticipant',
+        endpoint: 'deleteParticipant',
+        arguments: {}
     }];
 
     sequenceList.forEach(item => {
@@ -81,7 +85,9 @@ function sequenceEventListeners() {
                     'plantuml': plantuml,
                     'svg': svg.innerHTML,
                     'svgelement': lastclickedsvgelement.outerHTML,
-                    'cx' : firstClickCoordinates[0]
+                }
+                if (firstClickCoordinates) {
+                    toBeStringified['cx'] = firstClickCoordinates[0];
                 }
                 if (item.arguments) {
                     for (let [key, value] of Object.entries(item.arguments)) {
@@ -248,6 +254,16 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
 
                 svgelement.addEventListener('mouseout', function() {
                     svgelement.setAttribute('fill', rectcolor)
+                });
+
+                svgelement.addEventListener('contextmenu', function(e) {
+                    lastclickedsvgelement = svgelement;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    var contextMenu = document.getElementById('participant-menu');
+                    contextMenu.style.display = 'block';
+                    contextMenu.style.left = e.pageX + 'px';
+                    contextMenu.style.top = e.pageY + 'px';
                 });
             }
             index++
