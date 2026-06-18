@@ -6,15 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.29] - 2026-06-18
+
 ### External
 
-- Fixed undo crash when undoing to first history entry
+- New toolbar interface with zoom in/out/reset controls and resizable divider between code and diagram panes
 - Fixed Save button to save content to file
 - Made generated PNG copyable
 - Added Version History modal showing release notes
-- Added zoom in/out/reset controls to diagram toolbar
-- Added resizable divider between code and diagram panes
-- Replaced Version History modal with dropdown panel
 
 ### Internal
 
