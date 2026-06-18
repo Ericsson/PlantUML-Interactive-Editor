@@ -27,6 +27,7 @@
 import re
 
 from flask import json
+from plantuml_gui.sequence.participant import _next_participant_number
 from plantuml_gui.shared.render import _create_svg_from_uml
 from pyquery import PyQuery as Pq
 
@@ -51,6 +52,24 @@ def extract_participant_rect(svg_string, index=0):
                 return str(rect)
             count += 1
     return None
+
+
+class TestNextParticipantNumber:
+    def test_basic(self):
+        puml = "@startuml\nparticipant participant1\n@enduml"
+        assert _next_participant_number(puml) == 2
+
+    def test_ignores_participant_name_in_message(self):
+        puml = "@startuml\nparticipant participant1\nparticipant1 -> bob: tell participant participant99\n@enduml"
+        assert _next_participant_number(puml) == 2
+
+    def test_ignores_participant_name_in_inline_comment(self):
+        puml = "@startuml\nparticipant participant1\n/' participant participant99 '/\n@enduml"
+        assert _next_participant_number(puml) == 2
+
+    def test_ignores_participant_name_in_note(self):
+        puml = "@startuml\nparticipant participant1\nnote over participant1: participant participant99 is fast\n@enduml"
+        assert _next_participant_number(puml) == 2
 
 
 class TestAppRoutesParticipant:
