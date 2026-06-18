@@ -57,21 +57,14 @@ def index_of_clicked_participant(svg: str, svgelement: str) -> int:
     return count
 
 
-def add_participant(puml: str, svg: str, clicked_x: int) -> str:
-    """Add a participant at the correct position in the puml code."""
+def add_participant(puml: str, svg: str, svgelement: str, direction: str) -> str:
+    """Add a participant to the left or right of the clicked participant."""
     diagram = Diagram.from_svg(svg, puml)
     lines = puml.splitlines()
 
-    if not diagram.participants:
-        lines.insert(1, "participant participant1")
-        return "\n".join(lines)
-
-    closest_participant = find_closest_participant(diagram.participants, clicked_x)
-    index = (
-        closest_participant.index
-        if clicked_x < closest_participant.cx
-        else closest_participant.index + 1
-    )
+    count = index_of_clicked_participant(svg, svgelement)
+    participant = diagram.participants[count - 1]
+    index = participant.index if direction == "left" else participant.index + 1
     lines.insert(index, f"participant participant{len(diagram.participants) + 1}")
     return "\n".join(lines)
 
