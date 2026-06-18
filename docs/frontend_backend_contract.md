@@ -58,8 +58,8 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 
 - **addParticipant:** `{plantuml, svg, cx}` — cx is the x-coordinate of the click
 - **deleteParticipant:** `{plantuml, svg, cx}`
-- **getParticipantName:** `{plantuml, svg, cx}`
-- **editParticipantName:** `{plantuml, svg, name, cx}`
+- **getParticipantName:** `{plantuml, svg, svgelement}`
+- **editParticipantName:** `{plantuml, svg, name, svgelement}`
 - **addMessage:** `{plantuml, svg, message, svgelement, firstcoordinates, secondcoordinates}` — coordinates are `[x, y]` arrays from two clicks
 - **checkIfInsideParticipant:** `{plantuml, svg, coordinates}` — coordinates is `[x, y]`
 
