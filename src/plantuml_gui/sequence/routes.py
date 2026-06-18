@@ -28,6 +28,7 @@ from .participant import (
     add_message,
     add_participant,
     check_if_inside_participant,
+    delete_participant,
     edit_participant_name,
     get_participant_name,
 )
@@ -70,8 +71,8 @@ def getparticipantname():
     data = request.get_json()
     puml = data["plantuml"]
     svg = data["svg"]
-    cx = data["cx"]
-    return get_participant_name(puml, svg, cx)
+    svgelement = data["svgelement"]
+    return get_participant_name(puml, svg, svgelement)
 
 
 @sequence_bp.route("/editParticipantName", methods=["POST"])
@@ -80,5 +81,14 @@ def editparticipantname():
     puml = data["plantuml"]
     svg = data["svg"]
     name = data["name"]
-    cx = data["cx"]
-    return edit_participant_name(puml, svg, name, cx)
+    svgelement = data["svgelement"]
+    return edit_participant_name(puml, svg, name, svgelement)
+
+
+@sequence_bp.route("/deleteParticipant", methods=["POST"])
+def deleteparticipant():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    return delete_participant(puml, svg, svgelement)
