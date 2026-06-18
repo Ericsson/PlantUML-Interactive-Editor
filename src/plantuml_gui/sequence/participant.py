@@ -135,3 +135,19 @@ def edit_participant_name(puml: str, svg: str, newname: str, svgelement: str) ->
     count = index_of_clicked_participant(svg, svgelement)
     participant = diagram.participants[count - 1]
     return puml.replace(participant.name, newname)
+
+
+def delete_participant(puml: str, svg: str, svgelement: str) -> str:
+    """Delete a participant and all messages referencing it (cascade)."""
+    diagram = Diagram.from_svg(svg, puml)
+    count = index_of_clicked_participant(svg, svgelement)
+    participant = diagram.participants[count - 1]
+    lines = puml.splitlines()
+
+    lines_to_remove = {participant.index}
+    for msg in diagram.messages:
+        if msg.from_participant == participant or msg.to_participant == participant:
+            lines_to_remove.add(msg.index)
+
+    lines = [line for i, line in enumerate(lines) if i not in lines_to_remove]
+    return "\n".join(lines)

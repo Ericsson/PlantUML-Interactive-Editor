@@ -281,3 +281,93 @@ Bob <--> Alice: Hello
                 content_type="application/json",
             )
             assert response.data.decode("utf-8") == "Alice"
+
+    def test_delete_participant_no_messages(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant Alice
+participant Bob
+@enduml""",
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        test_data["svgelement"] = extract_participant_rect(test_data["svg"], 0)
+        with client:
+            response = client.post(
+                "/deleteParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant Bob
+@enduml"""
+            assert response.data.decode("utf-8") == expected_puml
+
+    def test_delete_participant_with_messages(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hello
+Bob -> Alice: Hi
+@enduml""",
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        test_data["svgelement"] = extract_participant_rect(test_data["svg"], 0)
+        with client:
+            response = client.post(
+                "/deleteParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant Bob
+@enduml"""
+            assert response.data.decode("utf-8") == expected_puml
+
+    def test_delete_participant_self_message(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant Alice
+participant Bob
+Alice -> Alice: Think
+Alice -> Bob: Done
+@enduml""",
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        test_data["svgelement"] = extract_participant_rect(test_data["svg"], 0)
+        with client:
+            response = client.post(
+                "/deleteParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant Bob
+@enduml"""
+            assert response.data.decode("utf-8") == expected_puml
+
+    def test_delete_last_participant(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant Alice
+@enduml""",
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        test_data["svgelement"] = extract_participant_rect(test_data["svg"], 0)
+        with client:
+            response = client.post(
+                "/deleteParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+@enduml"""
+            assert response.data.decode("utf-8") == expected_puml
