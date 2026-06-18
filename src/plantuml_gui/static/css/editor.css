@@ -1,0 +1,53 @@
+/*
+SPDX-License-Identifier: MIT
+Copyright (c) 2024 Ericsson
+*/
+
+#editor {
+    flex: 1;
+    font-size: 16px;
+    min-height: 0;
+}
+
+#colb-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    overflow: hidden;
+    position: relative;
+    background: var(--bg-canvas);
+}
+
+#colb {
+    width: 100%;
+    height: auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: visible;
+    position: relative;
+}
+
+#colb svg {
+    width: 100%;
+    height: auto;
+    display: block;
+    max-width: none;
+    overflow: visible;
+}
+
+#init-text {
+    text-align: center;
+}
+
+#loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.7);
+    z-index: 10;
+    display: none;
+}
