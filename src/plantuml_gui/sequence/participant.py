@@ -22,6 +22,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import re
 from typing import List
 
 from pyquery import PyQuery as Pq
@@ -57,6 +58,14 @@ def index_of_clicked_participant(svg: str, svgelement: str) -> int:
     return count
 
 
+def _next_participant_number(puml: str) -> int:
+    """Find the next available participant number by checking existing names."""
+    numbers = [
+        int(m.group(1)) for m in re.finditer(r"participant participant(\d+)", puml)
+    ]
+    return max(numbers, default=0) + 1
+
+
 def add_participant(puml: str, svg: str, svgelement: str, direction: str) -> str:
     """Add a participant to the left or right of the clicked participant."""
     diagram = Diagram.from_svg(svg, puml)
@@ -65,7 +74,8 @@ def add_participant(puml: str, svg: str, svgelement: str, direction: str) -> str
     count = index_of_clicked_participant(svg, svgelement)
     participant = diagram.participants[count - 1]
     index = participant.index if direction == "left" else participant.index + 1
-    lines.insert(index, f"participant participant{len(diagram.participants) + 1}")
+    next_number = _next_participant_number(puml)
+    lines.insert(index, f"participant participant{next_number}")
     return "\n".join(lines)
 
 

@@ -73,7 +73,7 @@ participant bob
             )
             expected_puml = """@startuml
 participant bob
-participant participant2
+participant participant1
 @enduml"""
             assert response.data.decode("utf-8") == expected_puml
 
@@ -95,7 +95,7 @@ participant bob
                 content_type="application/json",
             )
             expected_puml = """@startuml
-participant participant2
+participant participant1
 participant bob
 @enduml"""
             assert response.data.decode("utf-8") == expected_puml
@@ -124,12 +124,38 @@ fred -> bob: Bye
             )
             expected_puml = """@startuml
 participant bob
-participant participant3
+participant participant1
 participant fred
 
 bob -> fred: Hello
 fred -> bob: Bye
 
+@enduml"""
+            assert response.data.decode("utf-8") == expected_puml
+
+    def test_add_participant_number_after_deletion(self, client):
+        """Adding a participant after deleting one should increment past the highest existing number."""
+        test_data = {
+            "plantuml": """@startuml
+participant participant1
+participant participant3
+@enduml""",
+            "direction": "right",
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        test_data["svgelement"] = extract_participant_rect(test_data["svg"], 0)
+        with client:
+            response = client.post(
+                "/addParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant participant1
+participant participant4
+participant participant3
 @enduml"""
             assert response.data.decode("utf-8") == expected_puml
 
