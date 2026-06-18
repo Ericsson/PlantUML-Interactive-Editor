@@ -6,19 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.29] - 2026-06-18
+
 ### External
 
+- New toolbar interface with zoom in/out/reset controls and resizable divider between code and diagram panes
 - Added delete participant for sequence diagrams (right-click on participant, cascade deletes messages)
 - Fixed undo crash when undoing to first history entry
 - Fixed Save button to save content to file
 - Made generated PNG copyable
 - Added Version History modal showing release notes
-- Added zoom in/out/reset controls to diagram toolbar
-- Added resizable divider between code and diagram panes
-- Replaced Version History modal with dropdown panel
 
 ### Internal
 
+- Updated README screenshot
 - Refactored sequence diagram participant identification to use SVG element matching (same pattern as activity diagrams) instead of coordinate proximity
 - Restructured HTML layout to ribbon UI shell (global bar + split panes)
 - Split styles.css into modular CSS files under static/css/
