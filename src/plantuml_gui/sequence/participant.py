@@ -61,7 +61,8 @@ def index_of_clicked_participant(svg: str, svgelement: str) -> int:
 def _next_participant_number(puml: str) -> int:
     """Find the next available participant number by checking existing names."""
     numbers = [
-        int(m.group(1)) for m in re.finditer(r"participant participant(\d+)", puml)
+        int(m.group(1))
+        for m in re.finditer(r"^participant participant(\d+)", puml, re.MULTILINE)
     ]
     return max(numbers, default=0) + 1
 
