@@ -42,7 +42,14 @@
 │       ├── activity.js     # Activity-specific interactions
 │       ├── sequence.js     # Sequence diagram support (WIP)
 │       ├── mode-plantuml.js # Ace editor PlantUML mode
-│       └── styles.css      # Stylesheet
+│       ├── styles.css      # Main stylesheet (imports css/ modules)
+│       └── css/            # Modular CSS files
+│           ├── tokens.css  # Design tokens (CSS custom properties)
+│           ├── layout.css  # App shell, split panes, divider
+│           ├── toolbars.css # Global bar, pane toolbars, button styles
+│           ├── panels.css  # Dropdown panels, legacy dropdown compat
+│           ├── editor.css  # Ace editor, diagram canvas, loading
+│           └── legacy.css  # Error popup, hover overlay
 ├── tests/
 │   ├── conftest.py         # pytest fixtures (client fixture)
 │   ├── activity/           # Activity diagram route & logic tests
@@ -64,9 +71,10 @@
 │   │   └── test_render.py
 │   ├── sequence/           # Sequence diagram tests
 │   │   └── test_participant.py
-│   └── js/                 # Jasmine JavaScript tests
-│       ├── SpecRunner.html
-│       └── ScriptTests.js
+│   └── e2e/                # Playwright end-to-end tests
+│       ├── conftest.py     # Live server fixture
+│       ├── test_app_loads.py  # App loads correctly
+│       └── test_js_logic.py   # JS function logic tests
 └── .kiro/steering/         # Kiro steering files
 ```
 
@@ -109,4 +117,4 @@ Each diagram element type has its own Python module:
 2. Add SVG parsing logic to extract element bounds
 3. Add route handlers in `app.py`
 4. Add frontend interaction handlers in `activity.js` or `script.js`
-5. Write tests in the appropriate `tests/<module>/` directory and `tests/js/ScriptTests.js`
+5. Write tests in the appropriate `tests/<module>/` directory and `tests/e2e/`

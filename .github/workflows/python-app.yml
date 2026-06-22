@@ -2,9 +2,9 @@ name: Python application
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main, summer]
   pull_request:
-    branches: [ "main" ]
+    branches: [main, summer]
 
 permissions:
   contents: read
@@ -43,6 +43,10 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install uv==0.4.9
+
+    - name: Install Playwright browsers
+      run: |
+        uv run playwright install chromium --with-deps
 
     - name: Test with pytest
       run: |

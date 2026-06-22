@@ -28,6 +28,7 @@ from .participant import (
     add_message,
     add_participant,
     check_if_inside_participant,
+    delete_participant,
     edit_participant_name,
     get_participant_name,
 )
@@ -40,8 +41,9 @@ def addparticipant():
     data = request.get_json()
     puml = data["plantuml"]
     svg = data["svg"]
-    cx = data["cx"]
-    return add_participant(puml, svg, cx)
+    svgelement = data["svgelement"]
+    direction = data["direction"]
+    return jsonify({"plantuml": add_participant(puml, svg, svgelement, direction)})
 
 
 @sequence_bp.route("/addMessage", methods=["POST"])
@@ -52,7 +54,13 @@ def addmessage():
     message = data["message"]
     firstcoordinates = data["firstcoordinates"]
     secondcoordinates = data["secondcoordinates"]
-    return add_message(puml, svg, message, firstcoordinates, secondcoordinates)
+    return jsonify(
+        {
+            "plantuml": add_message(
+                puml, svg, message, firstcoordinates, secondcoordinates
+            )
+        }
+    )
 
 
 @sequence_bp.route("/checkIfInsideParticipant", methods=["POST"])
@@ -70,8 +78,8 @@ def getparticipantname():
     data = request.get_json()
     puml = data["plantuml"]
     svg = data["svg"]
-    cx = data["cx"]
-    return get_participant_name(puml, svg, cx)
+    svgelement = data["svgelement"]
+    return jsonify({"name": get_participant_name(puml, svg, svgelement)})
 
 
 @sequence_bp.route("/editParticipantName", methods=["POST"])
@@ -80,5 +88,14 @@ def editparticipantname():
     puml = data["plantuml"]
     svg = data["svg"]
     name = data["name"]
-    cx = data["cx"]
-    return edit_participant_name(puml, svg, name, cx)
+    svgelement = data["svgelement"]
+    return jsonify({"plantuml": edit_participant_name(puml, svg, name, svgelement)})
+
+
+@sequence_bp.route("/deleteParticipant", methods=["POST"])
+def deleteparticipant():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    return jsonify({"plantuml": delete_participant(puml, svg, svgelement)})

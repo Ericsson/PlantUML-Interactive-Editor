@@ -31,8 +31,8 @@ function sequenceEventListeners() {
                     'secondcoordinates': secondClickCoordinates,
                 }),
             });
-            const pumlcontentcode = await response.text()
-            setPuml(pumlcontentcode)
+            const data = await response.json();
+            setPuml(data.plantuml)
         } catch (error) {
             displayErrorMessage(`Error with fetch API: ${error.message}`, error);
         }
@@ -43,7 +43,6 @@ function sequenceEventListeners() {
         const svg = element.querySelector('g');
 
         var newname = $('#participant-name-text').val()
-        participant_cx = parseFloat(lastclickedsvgelement.getAttribute('x'))
         try {
             const plantuml = trimlines(editor.session.getValue());
             const response = await fetch("editParticipantName", {
@@ -55,20 +54,56 @@ function sequenceEventListeners() {
                     'plantuml': plantuml,
                     'svg': svg.innerHTML,
                     'name': newname,
-                    'cx': participant_cx
+                    'svgelement': lastclickedsvgelement.outerHTML
                 }),
             });
-            const pumlcontentcode = await response.text();
-            setPuml(pumlcontentcode);
+            const data = await response.json();
+            setPuml(data.plantuml);
         } catch (error) {
             displayErrorMessage(`Error with fetch API: ${error.message}`, error);
         }
     });
 
 
+    document.getElementById('renameParticipant').addEventListener('click', async () => {
+        const element = document.getElementById('colb');
+        const svg = element.querySelector('g');
+        try {
+            const plantuml = trimlines(editor.session.getValue());
+            const response = await fetch("getParticipantName", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    'plantuml': plantuml,
+                    'svg': svg.innerHTML,
+                    'svgelement': lastclickedsvgelement.outerHTML
+                })
+            });
+            const name = await response.text();
+            $('#participant-name-modalForm .modal-title').text('Rename ' + name);
+            $('#participant-name-text').val(name);
+            $('#participant-name-modalForm').modal('show');
+            $('#participant-name-modalForm').on('shown.bs.modal', function() {
+                $('#participant-name-text').trigger('focus');
+            });
+        } catch (error) {
+            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+        }
+    });
+
     const sequenceList = [{
-        id: 'addParticipant',
+        id: 'addParticipantLeft',
         endpoint: 'addParticipant',
+        arguments: {direction: 'left'}
+    }, {
+        id: 'addParticipantRight',
+        endpoint: 'addParticipant',
+        arguments: {direction: 'right'}
+    }, {
+        id: 'deleteParticipant',
+        endpoint: 'deleteParticipant',
         arguments: {}
     }];
 
@@ -82,7 +117,6 @@ function sequenceEventListeners() {
                     'plantuml': plantuml,
                     'svg': svg.innerHTML,
                     'svgelement': lastclickedsvgelement.outerHTML,
-                    'cx' : firstClickCoordinates[0]
                 }
                 if (item.arguments) {
                     for (let [key, value] of Object.entries(item.arguments)) {
@@ -96,8 +130,8 @@ function sequenceEventListeners() {
                     },
                     body: JSON.stringify(toBeStringified)
                 });
-                const pumlcontentcode = await response.text();
-                setPuml(pumlcontentcode);
+                const data = await response.json();
+                setPuml(data.plantuml);
             } catch (error) {
                 displayErrorMessage(`Error with fetch API: ${error.message}`, error);
             }
@@ -145,7 +179,7 @@ async function backgroundContextMenu(e, svgelement) {
 
     const isInValidArea = await checkIfInsideParticipant(firstClickCoordinates);
 
-    // If click is inside a participant, display addMessage option
+    // If click is inside a participant area, display addMessage option
     const addMessageItem = document.getElementById("addMessage");
     addMessageItem.style.display = isInValidArea ? "block" : "none";
 
@@ -213,7 +247,6 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
             if (checkIfParticipant(svgelements, index)) {
                 svgelement.addEventListener('dblclick', async () => {
                     lastclickedsvgelement = svgelement
-                    participant_cx = parseFloat(lastclickedsvgelement.getAttribute('x'))
                     try {
                         const plantuml = trimlines(editor.session.getValue());
                         const response = await fetch("getParticipantName", {
@@ -224,10 +257,10 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
                             body: JSON.stringify({
                                 'plantuml': plantuml,
                                 'svg': svg.innerHTML,
-                                'cx': participant_cx
+                                'svgelement': svgelement.outerHTML
                             })
                         });
-                        $('#participant-name-text').val(await response.text());
+                        $('#participant-name-text').val((await response.json()).name);
                         $('#participant-name-modalForm').modal('show');
                         $('#participant-name-modalForm').on('shown.bs.modal', function () {
                             $('#participant-name-text').trigger('focus');
@@ -250,6 +283,16 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
 
                 svgelement.addEventListener('mouseout', function() {
                     svgelement.setAttribute('fill', rectcolor)
+                });
+
+                svgelement.addEventListener('contextmenu', function(e) {
+                    lastclickedsvgelement = svgelement;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    var contextMenu = document.getElementById('participant-menu');
+                    contextMenu.style.display = 'block';
+                    contextMenu.style.left = e.pageX + 'px';
+                    contextMenu.style.top = e.pageY + 'px';
                 });
             }
             index++

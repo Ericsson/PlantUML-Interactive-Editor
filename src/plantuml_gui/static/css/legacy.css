@@ -1,0 +1,21 @@
+/*
+SPDX-License-Identifier: MIT
+Copyright (c) 2024 Ericsson
+*/
+
+#popup {
+    background-color: #eb604b;
+    padding: 10px;
+    position: fixed;
+    top: 0;
+    right: 0;
+    color: black;
+    border: 2px solid black;
+    visibility: hidden;
+    z-index: 9999;
+}
+
+.hover {
+    position: absolute;
+    background-color: #56596a;
+}

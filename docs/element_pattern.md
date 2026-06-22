@@ -94,3 +94,4 @@ The same pattern applies to:
 - `fork.py` — Counts `<rect>` elements that represent fork/join bars (height <= 6)
 - `whilepoly.py` — Reuses the polygon chunk list, distinguishes while polygons via the `checkifwhile()` utility
 - `note.py`, `group.py`, `arrow.py` — Use different SVG element matching but follow the same locate-then-manipulate pattern
+- `participant.py` (sequence) — Counts `<rect>` elements deduplicated by center-x (each participant has top and bottom rects with the same cx)

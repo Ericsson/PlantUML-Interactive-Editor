@@ -51,3 +51,15 @@ but adding them to the PlantUML code should still work.
 - Swimlanes
 - SDL (Specification and Description Language)
 - Lines without arrows
+
+
+# Sequence diagram features
+
+## Supported Features
+
+- Participants
+  - Add participant (left or right of existing)
+  - Rename participant
+  - Delete participant (cascades to messages)
+- Messages
+  - Add message between participants

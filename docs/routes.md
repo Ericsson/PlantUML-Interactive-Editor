@@ -113,9 +113,9 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 
 ## Sequence Diagram (Participants)
 
-- **POST /addParticipant** — Input: `plantuml`, `svg`, `cx` (float). Returns: modified puml.
+- **POST /addParticipant** — Input: `plantuml`, `svg`, `svgelement`, `direction` ('left'/'right'). Returns: modified puml.
 - **POST /addMessage** — Input: `plantuml`, `svg`, `message`, `firstcoordinates` ([x,y]), `secondcoordinates` ([x,y]). Returns: modified puml.
 - **POST /checkIfInsideParticipant** — Input: `plantuml`, `svg`, `coordinates` ([x,y]). Returns: JSON `{"isValid": bool}`.
-- **POST /getParticipantName** — Input: `plantuml`, `svg`, `cx` (float). Returns: participant name string.
-- **POST /editParticipantName** — Input: `plantuml`, `svg`, `name`, `cx` (float). Returns: modified puml.
-- **POST /deleteParticipant** — Input: `plantuml`, `svg`, `cx` (float). Returns: modified puml.
+- **POST /getParticipantName** — Input: `plantuml`, `svg`, `svgelement`. Returns: participant name string.
+- **POST /editParticipantName** — Input: `plantuml`, `svg`, `name`, `svgelement`. Returns: modified puml.
+- **POST /deleteParticipant** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
