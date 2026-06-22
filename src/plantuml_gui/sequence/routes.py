@@ -43,7 +43,7 @@ def addparticipant():
     svg = data["svg"]
     svgelement = data["svgelement"]
     direction = data["direction"]
-    return add_participant(puml, svg, svgelement, direction)
+    return jsonify({"plantuml": add_participant(puml, svg, svgelement, direction)})
 
 
 @sequence_bp.route("/addMessage", methods=["POST"])
@@ -54,7 +54,13 @@ def addmessage():
     message = data["message"]
     firstcoordinates = data["firstcoordinates"]
     secondcoordinates = data["secondcoordinates"]
-    return add_message(puml, svg, message, firstcoordinates, secondcoordinates)
+    return jsonify(
+        {
+            "plantuml": add_message(
+                puml, svg, message, firstcoordinates, secondcoordinates
+            )
+        }
+    )
 
 
 @sequence_bp.route("/checkIfInsideParticipant", methods=["POST"])
@@ -73,7 +79,7 @@ def getparticipantname():
     puml = data["plantuml"]
     svg = data["svg"]
     svgelement = data["svgelement"]
-    return get_participant_name(puml, svg, svgelement)
+    return jsonify({"name": get_participant_name(puml, svg, svgelement)})
 
 
 @sequence_bp.route("/editParticipantName", methods=["POST"])
@@ -83,7 +89,7 @@ def editparticipantname():
     svg = data["svg"]
     name = data["name"]
     svgelement = data["svgelement"]
-    return edit_participant_name(puml, svg, name, svgelement)
+    return jsonify({"plantuml": edit_participant_name(puml, svg, name, svgelement)})
 
 
 @sequence_bp.route("/deleteParticipant", methods=["POST"])
@@ -92,4 +98,4 @@ def deleteparticipant():
     puml = data["plantuml"]
     svg = data["svg"]
     svgelement = data["svgelement"]
-    return delete_participant(puml, svg, svgelement)
+    return jsonify({"plantuml": delete_participant(puml, svg, svgelement)})

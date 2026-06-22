@@ -94,7 +94,7 @@ participant bob
 participant bob
 participant participant1
 @enduml"""
-            assert response.data.decode("utf-8") == expected_puml
+            assert response.get_json()["plantuml"] == expected_puml
 
     def test_add_participant_left(self, client):
         test_data = {
@@ -117,7 +117,7 @@ participant bob
 participant participant1
 participant bob
 @enduml"""
-            assert response.data.decode("utf-8") == expected_puml
+            assert response.get_json()["plantuml"] == expected_puml
 
     def test_add_participant_right_with_messages(self, client):
         test_data = {
@@ -150,7 +150,7 @@ bob -> fred: Hello
 fred -> bob: Bye
 
 @enduml"""
-            assert response.data.decode("utf-8") == expected_puml
+            assert response.get_json()["plantuml"] == expected_puml
 
     def test_add_participant_number_after_deletion(self, client):
         """Adding a participant after deleting one should increment past the highest existing number."""
@@ -176,7 +176,7 @@ participant participant1
 participant participant4
 participant participant3
 @enduml"""
-            assert response.data.decode("utf-8") == expected_puml
+            assert response.get_json()["plantuml"] == expected_puml
 
     def test_add_message(self, client):
         test_data = {
@@ -200,7 +200,7 @@ participant bob
 participant fred
 bob -> fred: hello fred
 @enduml"""
-            assert response.data.decode("utf-8") == expected_puml
+            assert response.get_json()["plantuml"] == expected_puml
 
     def test_edit_participant_name(self, client):
         test_data = {
@@ -226,7 +226,7 @@ participant fred
 bobby -> fred: test
 fred -> bobby: test2
 @enduml"""
-            assert response.data.decode("utf-8") == expected_puml
+            assert response.get_json()["plantuml"] == expected_puml
 
     def test_edit_participant_name_selfmessage(self, client):
         test_data = {
@@ -252,7 +252,7 @@ participant bob
 participant fred
 bob -> bob: hello
 @enduml"""
-            assert response.data.decode("utf-8") == expected_puml
+            assert response.get_json()["plantuml"] == expected_puml
 
     def test_checkifinsideparticipant(self, client):
         test_data = {
@@ -310,7 +310,7 @@ Bob <--> Alice: Hello
                 data=json.dumps(test_data),
                 content_type="application/json",
             )
-            assert response.data.decode("utf-8") == "Alice"
+            assert response.get_json()["name"] == "Alice"
 
     def test_delete_participant_no_messages(self, client):
         test_data = {
@@ -332,7 +332,7 @@ participant Bob
             expected_puml = """@startuml
 participant Bob
 @enduml"""
-            assert response.data.decode("utf-8") == expected_puml
+            assert response.get_json()["plantuml"] == expected_puml
 
     def test_delete_participant_with_messages(self, client):
         test_data = {
@@ -356,7 +356,7 @@ Bob -> Alice: Hi
             expected_puml = """@startuml
 participant Bob
 @enduml"""
-            assert response.data.decode("utf-8") == expected_puml
+            assert response.get_json()["plantuml"] == expected_puml
 
     def test_delete_participant_self_message(self, client):
         test_data = {
@@ -380,7 +380,7 @@ Alice -> Bob: Done
             expected_puml = """@startuml
 participant Bob
 @enduml"""
-            assert response.data.decode("utf-8") == expected_puml
+            assert response.get_json()["plantuml"] == expected_puml
 
     def test_delete_last_participant(self, client):
         test_data = {
@@ -400,7 +400,7 @@ participant Alice
             )
             expected_puml = """@startuml
 @enduml"""
-            assert response.data.decode("utf-8") == expected_puml
+            assert response.get_json()["plantuml"] == expected_puml
 
 
 class TestAddMessageYBasedInsertion:
@@ -437,7 +437,7 @@ Alice -> Bob: Hello
 Alice -> Bob: Middle
 Bob -> Alice: Bye
 @enduml"""
-            assert response.data.decode("utf-8") == expected
+            assert response.get_json()["plantuml"] == expected
 
     def test_insert_before_all_messages(self, client):
         """New message inserted before all existing messages when y is above them."""
@@ -470,7 +470,7 @@ Alice -> Bob: First
 Alice -> Bob: Hello
 Bob -> Alice: Bye
 @enduml"""
-            assert response.data.decode("utf-8") == expected
+            assert response.get_json()["plantuml"] == expected
 
     def test_insert_after_all_messages(self, client):
         """New message inserted after all existing messages when y is below them."""
@@ -503,7 +503,7 @@ Alice -> Bob: Hello
 Bob -> Alice: Bye
 Alice -> Bob: Last
 @enduml"""
-            assert response.data.decode("utf-8") == expected
+            assert response.get_json()["plantuml"] == expected
 
     def test_insert_no_existing_messages(self, client):
         """New message inserted before @enduml when no messages exist."""
@@ -531,4 +531,4 @@ participant Alice
 participant Bob
 Alice -> Bob: Hi
 @enduml"""
-            assert response.data.decode("utf-8") == expected
+            assert response.get_json()["plantuml"] == expected

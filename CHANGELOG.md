@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Add message now uses y-based insertion to place new messages between existing ones based on click position
 - Extracted participant lifeline positions client-side, eliminating the checkIfInsideParticipant backend call for the add-message flow
+- Fixed reflected XSS in sequence routes by returning `jsonify` instead of raw strings
+- Fixed stored XSS in `edit_participant_name` by escaping user input with `html.escape` before writing to puml
 
 ## [0.29] - 2026-06-18
 
