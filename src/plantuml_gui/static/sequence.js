@@ -187,15 +187,14 @@ function findNearestLifeline(x, y, excludeCx) {
 
 function showIndicatorBox(svgElement, cx, y) {
     if (!indicatorBox) {
-        indicatorBox = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        indicatorBox.setAttribute('width', '10');
-        indicatorBox.setAttribute('height', '10');
+        indicatorBox = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        indicatorBox.setAttribute('r', '5');
         indicatorBox.setAttribute('fill', '#5b9bd5');
         indicatorBox.setAttribute('opacity', '0.7');
         indicatorBox.setAttribute('pointer-events', 'none');
     }
-    indicatorBox.setAttribute('x', cx - 5);
-    indicatorBox.setAttribute('y', y - 5);
+    indicatorBox.setAttribute('cx', cx);
+    indicatorBox.setAttribute('cy', y);
     const g = svgElement.querySelector('g');
     if (g && !indicatorBox.parentNode) {
         g.appendChild(indicatorBox);
