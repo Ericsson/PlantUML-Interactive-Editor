@@ -6,9 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### External
+
+- Visual hover-based "Add Message" interaction for sequence diagrams: hover near a participant lifeline to see an indicator box, right-click for "Add Message" context menu, then use ghost arrow preview to select destination
+
 ### Internal
 
 - Add message now uses y-based insertion to place new messages between existing ones based on click position
+- Extracted participant lifeline positions client-side, eliminating the checkIfInsideParticipant backend call for the add-message flow
 
 ## [0.29] - 2026-06-18
 

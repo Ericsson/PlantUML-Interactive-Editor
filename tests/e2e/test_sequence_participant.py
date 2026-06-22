@@ -117,6 +117,77 @@ class TestRenameParticipant:
         }""")
         assert result == "Rename Alice"
 
+
+class TestLifelineExtraction:
+    def test_extract_lifeline_positions(self, app_url, page):
+        """extractLifelinePositions populates participantLifelines from dashed lines."""
+        result = page.evaluate("""() => {
+            const container = document.createElement('div');
+            container.innerHTML = `<svg><g>
+                <line style="stroke:#181818;stroke-width:0.5;stroke-dasharray:5.0,5.0;" x1="28" x2="28" y1="36" y2="100"></line>
+                <line style="stroke:#181818;stroke-width:0.5;stroke-dasharray:5.0,5.0;" x1="84" x2="84" y1="36" y2="100"></line>
+            </g></svg>`;
+            const g = container.querySelector('g');
+            extractLifelinePositions(g);
+            return participantLifelines;
+        }""")
+        assert len(result) == 2
+        assert result[0]["cx"] == 28
+        assert result[1]["cx"] == 84
+
+    def test_find_nearest_lifeline_within_tolerance(self, app_url, page):
+        """findNearestLifeline returns lifeline when within 15px."""
+        result = page.evaluate("""() => {
+            participantLifelines = [{cx: 50, yTop: 30, yBottom: 100}];
+            return findNearestLifeline(60, 50);
+        }""")
+        assert result is not None
+        assert result["cx"] == 50
+
+    def test_find_nearest_lifeline_outside_tolerance(self, app_url, page):
+        """findNearestLifeline returns null when outside 15px."""
+        result = page.evaluate("""() => {
+            participantLifelines = [{cx: 50, yTop: 30, yBottom: 100}];
+            return findNearestLifeline(70, 50);
+        }""")
+        assert result is None
+
+    def test_find_nearest_lifeline_excludes_origin(self, app_url, page):
+        """findNearestLifeline skips the excluded cx."""
+        result = page.evaluate("""() => {
+            participantLifelines = [
+                {cx: 50, yTop: 30, yBottom: 100},
+                {cx: 80, yTop: 30, yBottom: 100}
+            ];
+            return findNearestLifeline(55, 50, 50);
+        }""")
+        assert result is None
+
+
+class TestMessageAddMode:
+    def test_cancel_message_add_mode(self, app_url, page):
+        """cancelMessageAddMode resets state."""
+        result = page.evaluate("""() => {
+            isAddMessageActive = true;
+            messageOrigin = {cx: 50, y: 60};
+            cancelMessageAddMode();
+            return {active: isAddMessageActive, origin: messageOrigin};
+        }""")
+        assert result["active"] is False
+        assert result["origin"] is None
+
+    def test_escape_cancels_mode(self, app_url, page):
+        """Pressing Escape cancels message-add mode."""
+        result = page.evaluate("""() => {
+            // Ensure the keydown listener is registered
+            sequenceEventListeners();
+            isAddMessageActive = true;
+            messageOrigin = {cx: 50, y: 60};
+            document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
+            return isAddMessageActive;
+        }""")
+        assert result is False
+
     def test_rename_input_prefills(self, app_url, page):
         """Pre-filling the rename input field works."""
         result = page.evaluate("""() => {

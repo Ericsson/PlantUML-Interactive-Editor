@@ -60,8 +60,8 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 - **getParticipantName:** `{plantuml, svg, svgelement}`
 - **editParticipantName:** `{plantuml, svg, name, svgelement}`
 - **deleteParticipant:** `{plantuml, svg, svgelement}`
-- **addMessage:** `{plantuml, svg, message, svgelement, firstcoordinates, secondcoordinates}` — coordinates are `[x, y]` arrays from two clicks
-- **checkIfInsideParticipant:** `{plantuml, svg, coordinates}` — coordinates is `[x, y]`
+- **addMessage:** `{plantuml, svg, message, svgelement, firstcoordinates, secondcoordinates}` — coordinates are `[x, y]` arrays; y-coordinate determines insertion position between existing messages
+- **checkIfInsideParticipant:** `{plantuml, svg, coordinates}` — coordinates is `[x, y]` (legacy; add-message flow now uses client-side lifeline detection)
 
 ## script.js Requests
 
@@ -77,7 +77,7 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 
 For activity diagrams, the frontend captures `lastclickedsvgelement` on right-click (the actual SVG DOM element). Its `outerHTML` is sent as `svgelement`. The backend reconstructs the element's geometric identity (x/y for rects, points for polygons, cx/cy for ellipses) to match it against the parsed SVG.
 
-For sequence diagrams, the frontend computes `cx` from the clicked rect's x + width/2. For messages, it captures raw `[x, y]` coordinates from two sequential clicks on the SVG.
+For sequence diagrams, the frontend computes `cx` from the clicked rect's x + width/2. For messages, it detects participant lifeline positions client-side (±15px tolerance from lifeline center x) and sends the lifeline cx and cursor y as `[x, y]` coordinates. The y-coordinate determines insertion position between existing messages.
 
 ## Response Handling
 

@@ -1,12 +1,22 @@
 let currentContextMenuHandler = null;
 let firstClickCoordinates = null;
 let secondClickCoordinates = null;
-let isAddMessageActive = null;
+let isAddMessageActive = false;
+
+let participantLifelines = [];
+const LIFELINE_TOLERANCE = 15;
+
+// Ghost arrow and indicator overlay elements
+let indicatorBox = null;
+let ghostLine = null;
+let ghostArrow = null;
+let messageOrigin = null;
 
 function sequenceEventListeners() {
-    document.getElementById('addMessage').addEventListener('click', async () => {
+    document.getElementById('addMessage').addEventListener('click', () => {
         isAddMessageActive = true;
-        console.log("addMessage selected, waiting for second click")
+        hideIndicatorBox();
+        document.getElementById('sequence-menu').style.display = 'none';
     });
 
     $('#submit-participant-message').on('click', async () => {
@@ -15,7 +25,6 @@ function sequenceEventListeners() {
 
         var newmessage = $('#participant-message-text').val();
         try {
-
             const plantuml = trimlines(editor.session.getValue());
             const response = await fetch("addMessage", {
                 method: 'POST',
@@ -137,51 +146,141 @@ function sequenceEventListeners() {
             }
         });
     });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && isAddMessageActive) {
+            cancelMessageAddMode();
+        }
+    });
+}
+
+function extractLifelinePositions(svg) {
+    participantLifelines = [];
+    const lines = svg.querySelectorAll('line');
+    for (const line of lines) {
+        const style = line.getAttribute('style') || '';
+        if (style.includes('stroke-dasharray:5.0,5.0')) {
+            participantLifelines.push({
+                cx: parseFloat(line.getAttribute('x1')),
+                yTop: parseFloat(line.getAttribute('y1')),
+                yBottom: parseFloat(line.getAttribute('y2'))
+            });
+        }
+    }
+}
+
+function findNearestLifeline(x, y, excludeCx) {
+    for (const lifeline of participantLifelines) {
+        if (excludeCx !== undefined && lifeline.cx === excludeCx) continue;
+        if (Math.abs(x - lifeline.cx) <= LIFELINE_TOLERANCE &&
+            y >= lifeline.yTop && y <= lifeline.yBottom) {
+            return lifeline;
+        }
+    }
+    return null;
+}
+
+function showIndicatorBox(svgElement, cx, y) {
+    if (!indicatorBox) {
+        indicatorBox = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        indicatorBox.setAttribute('width', '10');
+        indicatorBox.setAttribute('height', '10');
+        indicatorBox.setAttribute('fill', '#5b9bd5');
+        indicatorBox.setAttribute('opacity', '0.7');
+        indicatorBox.setAttribute('pointer-events', 'none');
+    }
+    indicatorBox.setAttribute('x', cx - 5);
+    indicatorBox.setAttribute('y', y - 5);
+    const g = svgElement.querySelector('g');
+    if (g && !indicatorBox.parentNode) {
+        g.appendChild(indicatorBox);
+    }
+}
+
+function hideIndicatorBox() {
+    if (indicatorBox && indicatorBox.parentNode) {
+        indicatorBox.parentNode.removeChild(indicatorBox);
+    }
+}
+
+function showGhostArrow(svgElement, fromCx, toCx, y) {
+    const g = svgElement.querySelector('g');
+    if (!g) return;
+
+    if (!ghostLine) {
+        ghostLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        ghostLine.setAttribute('stroke', '#888');
+        ghostLine.setAttribute('stroke-width', '1.5');
+        ghostLine.setAttribute('stroke-dasharray', '4,4');
+        ghostLine.setAttribute('opacity', '0.7');
+        ghostLine.setAttribute('pointer-events', 'none');
+    }
+    ghostLine.setAttribute('x1', fromCx);
+    ghostLine.setAttribute('y1', y);
+    ghostLine.setAttribute('x2', toCx);
+    ghostLine.setAttribute('y2', y);
+    if (!ghostLine.parentNode) g.appendChild(ghostLine);
+
+    // Arrowhead polygon pointing at toCx
+    if (!ghostArrow) {
+        ghostArrow = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        ghostArrow.setAttribute('fill', '#888');
+        ghostArrow.setAttribute('opacity', '0.7');
+        ghostArrow.setAttribute('pointer-events', 'none');
+    }
+    const dir = toCx > fromCx ? 1 : -1;
+    const tipX = toCx;
+    const baseX = toCx - dir * 8;
+    ghostArrow.setAttribute('points',
+        `${tipX},${y} ${baseX},${y - 4} ${baseX},${y + 4}`);
+    if (!ghostArrow.parentNode) g.appendChild(ghostArrow);
+}
+
+function hideGhostArrow() {
+    if (ghostLine && ghostLine.parentNode) ghostLine.parentNode.removeChild(ghostLine);
+    if (ghostArrow && ghostArrow.parentNode) ghostArrow.parentNode.removeChild(ghostArrow);
+}
+
+function cancelMessageAddMode() {
+    isAddMessageActive = false;
+    messageOrigin = null;
+    hideGhostArrow();
 }
 
 function removeBackgroundMenuListener() {
     const background = document.getElementById('colb-container');
     if (currentContextMenuHandler) {
         background.removeEventListener('contextmenu', currentContextMenuHandler);
-        currentContextMenuHandler = null; // Reset the handler reference after removal
+        currentContextMenuHandler = null;
     }
 }
 
-async function backgroundContextMenu(e, svgelement) {
-    e.preventDefault();
-
-    // Get coordinates of click relative to the svg
-    let point = svgelement.createSVGPoint();
+function svgPointFromEvent(e, svgElement) {
+    let point = svgElement.createSVGPoint();
     point.x = e.clientX;
     point.y = e.clientY;
-    let transformedPoint = point.matrixTransform(svgelement.getScreenCTM().inverse());
-    cx = transformedPoint.x
-    cy = transformedPoint.y
+    return point.matrixTransform(svgElement.getScreenCTM().inverse());
+}
 
-    if (isAddMessageActive) {
-        secondClickCoordinates = [cx, cy];
-        console.log(secondClickCoordinates)
+function backgroundContextMenu(e, svgElement) {
+    e.preventDefault();
 
-        // Show the modal for message input
-        $('#participant-message-text').val("");
-        $('#participant-modalForm').modal('show');
-        $('#participant-modalForm').on('shown.bs.modal', function() {
-            $('#participant-message-text').trigger('focus');
-        });
+    const transformed = svgPointFromEvent(e, svgElement);
+    const cx = transformed.x;
+    const cy = transformed.y;
 
-        // Deactivate addMessage mode after the second click
-        isAddMessageActive = false;
-        return;
-    }
+    // If in message-add mode, ignore right-click on background
+    if (isAddMessageActive) return;
 
-    firstClickCoordinates = [cx, cy]
-    console.log(firstClickCoordinates)
-
-    const isInValidArea = await checkIfInsideParticipant(firstClickCoordinates);
-
-    // If click is inside a participant area, display addMessage option
+    const lifeline = findNearestLifeline(cx, cy);
     const addMessageItem = document.getElementById("addMessage");
-    addMessageItem.style.display = isInValidArea ? "block" : "none";
+    addMessageItem.style.display = lifeline ? "block" : "none";
+
+    if (lifeline) {
+        // Store origin for message-add mode
+        firstClickCoordinates = [lifeline.cx, cy];
+        messageOrigin = {cx: lifeline.cx, y: cy};
+    }
 
     var contextMenu = document.getElementById('sequence-menu');
     contextMenu.style.display = 'block';
@@ -189,42 +288,65 @@ async function backgroundContextMenu(e, svgelement) {
     contextMenu.style.top = e.pageY + 'px';
 }
 
-async function checkIfInsideParticipant(clickCoordinates) {
-    const svg = element.querySelector('g');
-    try {
-        const plantuml = trimlines(editor.session.getValue());
-        const toBeStringified = {
-            'plantuml': plantuml,
-            'svg': svg.innerHTML,
-            'coordinates': clickCoordinates
-        }
-
-        const response = await fetch('checkIfInsideParticipant', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(toBeStringified)
-        });
-
-        const data = await response.json();
-        return data.isValid;
-    } catch (error) {
-        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-    }
-}
-
-async function handleContextMenuBackground(svgelement) {
+function handleContextMenuBackground(svgElement) {
     const background = document.getElementById('colb-container');
-
-    // Remove any existing context menu handler before adding a new one
     removeBackgroundMenuListener();
-
-    // Create and store the new context menu handler
-    currentContextMenuHandler = (e) => backgroundContextMenu(e, svgelement);
-
-    // Attach the new context menu event listener
+    currentContextMenuHandler = (e) => backgroundContextMenu(e, svgElement);
     background.addEventListener('contextmenu', currentContextMenuHandler);
 }
 
+function setupLifelineInteraction(svgContainer) {
+    const container = document.getElementById('colb-container');
+
+    container.addEventListener('mousemove', (e) => {
+        if (!svgContainer || !svgContainer.getScreenCTM()) return;
+        const transformed = svgPointFromEvent(e, svgContainer);
+        const x = transformed.x;
+        const y = transformed.y;
+
+        if (isAddMessageActive) {
+            const dest = findNearestLifeline(x, y, messageOrigin.cx);
+            if (dest) {
+                showGhostArrow(svgContainer, messageOrigin.cx, dest.cx, y);
+            } else {
+                hideGhostArrow();
+            }
+            hideIndicatorBox();
+        } else {
+            hideGhostArrow();
+            const lifeline = findNearestLifeline(x, y);
+            if (lifeline) {
+                showIndicatorBox(svgContainer, lifeline.cx, y);
+            } else {
+                hideIndicatorBox();
+            }
+        }
+    });
+
+    container.addEventListener('click', (e) => {
+        if (!isAddMessageActive || !messageOrigin) return;
+        if (!svgContainer || !svgContainer.getScreenCTM()) return;
+
+        const transformed = svgPointFromEvent(e, svgContainer);
+        const x = transformed.x;
+        const y = transformed.y;
+
+        const dest = findNearestLifeline(x, y, messageOrigin.cx);
+        if (!dest) return;
+
+        // Store coordinates and show label dialog
+        secondClickCoordinates = [dest.cx, y];
+        firstClickCoordinates = [messageOrigin.cx, y];
+
+        cancelMessageAddMode();
+
+        $('#participant-message-text').val("");
+        $('#participant-modalForm').modal('show');
+        $('#participant-modalForm').on('shown.bs.modal', function() {
+            $('#participant-message-text').trigger('focus');
+        });
+    });
+}
 
 
 async function setHandlersForSequenceDiagram(pumlcontent, element) {
@@ -236,8 +358,14 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
             toggleLoadingOverlay();
             return
         }
+
+        extractLifelinePositions(svg);
+        cancelMessageAddMode();
+
         const svgelements = svg.querySelectorAll('*');
         handleContextMenuBackground(svgContainer);
+        setupLifelineInteraction(svgContainer);
+
         for (let index = 0; index < svgelements.length;) {
             let svgelement = svgelements[index]
             if (svgelement.tagName.toLowerCase() === 'text') {
