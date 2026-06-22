@@ -155,18 +155,22 @@ function sequenceEventListeners() {
     });
 }
 
-function extractLifelinePositions(svg) {
+async function extractLifelinePositions() {
     participantLifelines = [];
-    const lines = svg.querySelectorAll('line');
-    for (const line of lines) {
-        const style = line.getAttribute('style') || '';
-        if (style.includes('stroke-dasharray:5.0,5.0')) {
-            participantLifelines.push({
-                cx: parseFloat(line.getAttribute('x1')),
-                yTop: parseFloat(line.getAttribute('y1')),
-                yBottom: parseFloat(line.getAttribute('y2'))
-            });
-        }
+    const element = document.getElementById('colb');
+    const svg = element.querySelector('g');
+    if (!svg) return;
+    try {
+        const plantuml = trimlines(editor.session.getValue());
+        const response = await fetch("getParticipantPositions", {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({plantuml: plantuml, svg: svg.innerHTML})
+        });
+        const data = await response.json();
+        participantLifelines = data.positions;
+    } catch (error) {
+        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
     }
 }
 
@@ -322,7 +326,7 @@ function backgroundContextMenu(e, svgElement) {
     if (lifeline) {
         // Store origin for message-add mode
         firstClickCoordinates = [lifeline.cx, cy];
-        messageOrigin = {cx: lifeline.cx, y: cy};
+        messageOrigin = {cx: lifeline.cx, y: cy, name: lifeline.name};
     }
 
     var contextMenu = document.getElementById('sequence-menu');
@@ -380,9 +384,12 @@ function setupLifelineInteraction(svgContainer) {
         // Store coordinates and show label dialog
         secondClickCoordinates = [dest.cx, y];
         firstClickCoordinates = [messageOrigin.cx, y];
+        const originName = messageOrigin.name;
 
         cancelMessageAddMode();
 
+        $('#participant-modalForm .modal-title').text(
+            'Add message from ' + originName + ' to ' + dest.name);
         $('#participant-message-text').val("");
         $('#participant-modalForm').modal('show');
         $('#participant-modalForm').on('shown.bs.modal', function() {
@@ -402,7 +409,7 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
             return
         }
 
-        extractLifelinePositions(svg);
+        extractLifelinePositions();
         cancelMessageAddMode();
 
         const svgelements = svg.querySelectorAll('*');

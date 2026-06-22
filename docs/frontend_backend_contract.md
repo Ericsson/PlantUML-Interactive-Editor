@@ -62,7 +62,8 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 - **editParticipantName:** `{plantuml, svg, name, svgelement}`; returns `{"plantuml": updated_puml}`
 - **deleteParticipant:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}`
 - **addMessage:** `{plantuml, svg, message, svgelement, firstcoordinates, secondcoordinates}` — coordinates are `[x, y]` arrays; y-coordinate determines insertion position between existing messages; returns `{"plantuml": updated_puml}`
-- **checkIfInsideParticipant:** `{plantuml, svg, coordinates}` — coordinates is `[x, y]`; returns `{"isValid": bool}` (legacy; add-message flow now uses client-side lifeline detection)
+- **getParticipantPositions:** `{plantuml, svg}`; returns `{"positions": [{name, cx, yTop, yBottom}, ...]}` — called once per render to provide lifeline data for hover detection and ghost arrow
+- **checkIfInsideParticipant:** `{plantuml, svg, coordinates}` — coordinates is `[x, y]`; returns `{"isValid": bool}` (legacy; replaced by getParticipantPositions)
 
 ## script.js Requests
 
@@ -78,7 +79,7 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 
 For activity diagrams, the frontend captures `lastclickedsvgelement` on right-click (the actual SVG DOM element). Its `outerHTML` is sent as `svgelement`. The backend reconstructs the element's geometric identity (x/y for rects, points for polygons, cx/cy for ellipses) to match it against the parsed SVG.
 
-For sequence diagrams, the frontend computes `cx` from the clicked rect's x + width/2. For messages, it detects participant lifeline positions client-side (±15px tolerance from lifeline center x) and sends the lifeline cx and cursor y as `[x, y]` coordinates. The y-coordinate determines insertion position between existing messages.
+For sequence diagrams, the frontend computes `cx` from the clicked rect's x + width/2. For messages, the frontend fetches participant positions from `/getParticipantPositions` on each render and uses them for hover detection (±15px tolerance from lifeline cx). It sends the lifeline cx and cursor y as `[x, y]` coordinates. The y-coordinate determines insertion position between existing messages.
 
 ## Response Handling
 

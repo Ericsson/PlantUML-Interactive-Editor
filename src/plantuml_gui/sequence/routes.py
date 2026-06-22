@@ -31,6 +31,7 @@ from .participant import (
     delete_participant,
     edit_participant_name,
     get_participant_name,
+    get_participant_positions,
 )
 
 sequence_bp = Blueprint("sequence", __name__)
@@ -99,3 +100,11 @@ def deleteparticipant():
     svg = data["svg"]
     svgelement = data["svgelement"]
     return jsonify({"plantuml": delete_participant(puml, svg, svgelement)})
+
+
+@sequence_bp.route("/getParticipantPositions", methods=["POST"])
+def getparticipantpositions():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    return jsonify({"positions": get_participant_positions(puml, svg)})

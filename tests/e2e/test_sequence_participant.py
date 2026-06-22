@@ -120,20 +120,17 @@ class TestRenameParticipant:
 
 class TestLifelineExtraction:
     def test_extract_lifeline_positions(self, app_url, page):
-        """extractLifelinePositions populates participantLifelines from dashed lines."""
-        result = page.evaluate("""() => {
-            const container = document.createElement('div');
-            container.innerHTML = `<svg><g>
-                <line style="stroke:#181818;stroke-width:0.5;stroke-dasharray:5.0,5.0;" x1="28" x2="28" y1="36" y2="100"></line>
-                <line style="stroke:#181818;stroke-width:0.5;stroke-dasharray:5.0,5.0;" x1="84" x2="84" y1="36" y2="100"></line>
-            </g></svg>`;
-            const g = container.querySelector('g');
-            extractLifelinePositions(g);
-            return participantLifelines;
+        """extractLifelinePositions fetches positions from backend after render."""
+        page.evaluate("""() => {
+            editor.session.setValue("@startuml\\nparticipant Alice\\nparticipant Bob\\n@enduml");
         }""")
+        page.wait_for_timeout(3000)
+        result = page.evaluate("() => participantLifelines")
         assert len(result) == 2
-        assert result[0]["cx"] == 28
-        assert result[1]["cx"] == 84
+        assert result[0]["name"] == "Alice"
+        assert result[1]["name"] == "Bob"
+        assert result[0]["yTop"] > 0
+        assert result[0]["yBottom"] > result[0]["yTop"]
 
     def test_find_nearest_lifeline_within_tolerance(self, app_url, page):
         """findNearestLifeline returns lifeline when within 15px."""
@@ -174,6 +171,40 @@ class TestLifelineExtraction:
         }""")
         assert result is not None
         assert result["cx"] == 50
+
+    def test_modal_title_shows_participant_names(self, app_url, page):
+        """After full add-message flow, modal title shows 'Add message from X to Y'."""
+        # Load a sequence diagram
+        page.evaluate("""() => {
+            editor.session.setValue("@startuml\\nparticipant Alice\\nparticipant Bob\\n@enduml");
+        }""")
+        page.wait_for_timeout(3000)
+
+        # Verify lifelines have names
+        names = page.evaluate("() => participantLifelines.map(l => l.name)")
+        assert names == ["Alice", "Bob"]
+
+        # Simulate the full flow: right-click near Alice's lifeline, click Add Message,
+        # then left-click near Bob's lifeline
+        page.evaluate("""() => {
+            // Simulate right-click context menu setting origin
+            messageOrigin = {cx: participantLifelines[0].cx, y: 50, name: participantLifelines[0].name};
+            firstClickCoordinates = [participantLifelines[0].cx, 50];
+            isAddMessageActive = true;
+        }""")
+
+        # Simulate left-click on destination (Bob)
+        dest_name = page.evaluate("""() => {
+            const dest = participantLifelines[1];
+            secondClickCoordinates = [dest.cx, 50];
+            firstClickCoordinates = [messageOrigin.cx, 50];
+            const originName = messageOrigin.name;
+            cancelMessageAddMode();
+            $('#participant-modalForm .modal-title').text(
+                'Add message from ' + originName + ' to ' + dest.name);
+            return $('#participant-modalForm .modal-title').text();
+        }""")
+        assert dest_name == "Add message from Alice to Bob"
 
 
 class TestMessageAddMode:

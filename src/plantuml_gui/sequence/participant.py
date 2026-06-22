@@ -24,7 +24,7 @@
 
 import html
 import re
-from typing import List
+from typing import Dict, List
 
 from pyquery import PyQuery as Pq
 
@@ -175,3 +175,38 @@ def delete_participant(puml: str, svg: str, svgelement: str) -> str:
 
     lines = [line for i, line in enumerate(lines) if i not in lines_to_remove]
     return "\n".join(lines)
+
+
+def get_participant_positions(puml: str, svg: str) -> List[Dict[str, object]]:
+    """Return participant lifeline positions for frontend hover detection."""
+    diagram = Diagram.from_svg(svg, puml)
+    d = Pq(svg)
+
+    # Extract lifeline vertical bounds from dashed lines
+    lifeline_bounds: Dict[float, Dict[str, float]] = {}
+    for line in d("line").items():
+        style = line.attr("style") or ""
+        if "stroke-dasharray:5.0,5.0" in style:
+            x = float(line.attr("x1"))
+            lifeline_bounds[x] = {
+                "yTop": float(line.attr("y1")),
+                "yBottom": float(line.attr("y2")),
+            }
+
+    positions = []
+    for participant in diagram.participants:
+        # Find matching lifeline (cx may differ by ~0.5 due to stroke-width)
+        bounds = {"yTop": 0.0, "yBottom": 0.0}
+        for lx, lb in lifeline_bounds.items():
+            if abs(lx - participant.cx) <= 1:
+                bounds = lb
+                break
+        positions.append(
+            {
+                "name": participant.name,
+                "cx": participant.cx,
+                "yTop": bounds["yTop"],
+                "yBottom": bounds["yBottom"],
+            }
+        )
+    return positions
