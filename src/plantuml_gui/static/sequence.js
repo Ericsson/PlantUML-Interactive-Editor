@@ -31,8 +31,8 @@ function sequenceEventListeners() {
                     'secondcoordinates': secondClickCoordinates,
                 }),
             });
-            const pumlcontentcode = await response.text()
-            setPuml(pumlcontentcode)
+            const data = await response.json();
+            setPuml(data.plantuml)
         } catch (error) {
             displayErrorMessage(`Error with fetch API: ${error.message}`, error);
         }
@@ -57,8 +57,8 @@ function sequenceEventListeners() {
                     'svgelement': lastclickedsvgelement.outerHTML
                 }),
             });
-            const pumlcontentcode = await response.text();
-            setPuml(pumlcontentcode);
+            const data = await response.json();
+            setPuml(data.plantuml);
         } catch (error) {
             displayErrorMessage(`Error with fetch API: ${error.message}`, error);
         }
@@ -102,8 +102,8 @@ function sequenceEventListeners() {
                     },
                     body: JSON.stringify(toBeStringified)
                 });
-                const pumlcontentcode = await response.text();
-                setPuml(pumlcontentcode);
+                const data = await response.json();
+                setPuml(data.plantuml);
             } catch (error) {
                 displayErrorMessage(`Error with fetch API: ${error.message}`, error);
             }
@@ -232,7 +232,7 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
                                 'svgelement': svgelement.outerHTML
                             })
                         });
-                        $('#participant-name-text').val(await response.text());
+                        $('#participant-name-text').val((await response.json()).name);
                         $('#participant-name-modalForm').modal('show');
                         $('#participant-name-modalForm').on('shown.bs.modal', function () {
                             $('#participant-name-text').trigger('focus');
