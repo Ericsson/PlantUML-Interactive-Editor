@@ -14,7 +14,8 @@ These three fields together give the backend everything it needs to identify wha
 
 ## Common Response Format
 
-- **Modified puml** — The majority of routes return plain text (the full modified puml string). The frontend calls `setPuml(responseText)` which indents and sets the editor value, triggering a re-render.
+- **Modified puml (activity routes)** — Activity routes return plain text (the full modified puml string). The frontend calls `setPuml(responseText)` which indents and sets the editor value, triggering a re-render.
+- **Modified puml (sequence routes)** — Sequence routes return `jsonify({"plantuml": updated_puml})`. The frontend parses JSON and calls `setPuml(data.plantuml)`.
 - **JSON results** — Routes that return line numbers or boolean checks use `jsonify({"result": value})`. Some return additional fields like `{"result": bool, "type": str}`.
 
 ## activity.js Requests
@@ -56,12 +57,12 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 
 `sequence.js` handles sequence diagram interactions:
 
-- **addParticipant:** `{plantuml, svg, svgelement, direction}` — direction is 'left' or 'right'
-- **getParticipantName:** `{plantuml, svg, svgelement}`
-- **editParticipantName:** `{plantuml, svg, name, svgelement}`
-- **deleteParticipant:** `{plantuml, svg, svgelement}`
-- **addMessage:** `{plantuml, svg, message, svgelement, firstcoordinates, secondcoordinates}` — coordinates are `[x, y]` arrays from two clicks
-- **checkIfInsideParticipant:** `{plantuml, svg, coordinates}` — coordinates is `[x, y]`
+- **addParticipant:** `{plantuml, svg, svgelement, direction}` — direction is 'left' or 'right'; returns `{"plantuml": updated_puml}`
+- **getParticipantName:** `{plantuml, svg, svgelement}`; returns `{"name": participant_name}`
+- **editParticipantName:** `{plantuml, svg, name, svgelement}`; returns `{"plantuml": updated_puml}`
+- **deleteParticipant:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}`
+- **addMessage:** `{plantuml, svg, message, svgelement, firstcoordinates, secondcoordinates}` — coordinates are `[x, y]` arrays from two clicks; returns `{"plantuml": updated_puml}`
+- **checkIfInsideParticipant:** `{plantuml, svg, coordinates}` — coordinates is `[x, y]`; returns `{"isValid": bool}`
 
 ## script.js Requests
 
@@ -81,7 +82,7 @@ For sequence diagrams, the frontend computes `cx` from the clicked rect's x + wi
 
 ## Response Handling
 
-The frontend handles responses uniformly:
+Activity routes return plain text; the frontend reads it directly:
 
 ```javascript
 const response = await fetch(endpoint, { method: 'POST', headers: {...}, body: JSON.stringify(payload) });
@@ -89,14 +90,14 @@ const pumlcontentcode = await response.text();
 setPuml(pumlcontentcode);
 ```
 
-`setPuml()` processes fork/switch keywords, re-indents the puml, and sets the Ace editor value — which triggers the debounced `renderPlantUml()` to re-render the diagram.
-
-For JSON responses (line numbers), the frontend uses them to highlight the corresponding editor line:
+Sequence routes return JSON; the frontend parses and extracts the field:
 
 ```javascript
 const data = await response.json();
-getmarker(data.result);
+setPuml(data.plantuml); // or data.name for getParticipantName
 ```
+
+`setPuml()` processes fork/switch keywords, re-indents the puml, and sets the Ace editor value — which triggers the debounced `renderPlantUml()` to re-render the diagram.
 
 ## Changelog
 

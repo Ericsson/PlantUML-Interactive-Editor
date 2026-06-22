@@ -22,6 +22,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import html
 import re
 from typing import List
 
@@ -138,7 +139,8 @@ def edit_participant_name(puml: str, svg: str, newname: str, svgelement: str) ->
     diagram = Diagram.from_svg(svg, puml)
     count = index_of_clicked_participant(svg, svgelement)
     participant = diagram.participants[count - 1]
-    return puml.replace(participant.name, newname)
+    safe_newname = html.escape(newname, quote=True)
+    return puml.replace(participant.name, safe_newname)
 
 
 def delete_participant(puml: str, svg: str, svgelement: str) -> str:

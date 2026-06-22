@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Internal
+
+- Fixed reflected XSS in sequence routes by returning `jsonify` instead of raw strings
+- Fixed stored XSS in `edit_participant_name` by escaping user input with `html.escape` before writing to puml
+
 ## [0.29] - 2026-06-18
 
 ### External
