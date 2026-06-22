@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Internal
+
+- Add message now uses y-based insertion to place new messages between existing ones based on click position
+
 ## [0.29] - 2026-06-18
 
 ### External

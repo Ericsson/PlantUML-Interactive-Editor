@@ -401,3 +401,134 @@ participant Alice
             expected_puml = """@startuml
 @enduml"""
             assert response.data.decode("utf-8") == expected_puml
+
+
+class TestAddMessageYBasedInsertion:
+    """Tests for y-based message insertion positioning."""
+
+    def test_insert_between_messages(self, client):
+        """New message inserted between two existing messages based on y."""
+        puml = """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hello
+Bob -> Alice: Bye
+@enduml"""
+        test_data = {
+            "plantuml": puml,
+            "message": "Middle",
+            # y=80 is between Hello (cy=67.4) and Bye (cy=96.5)
+            "firstcoordinates": [28, 80],
+            "secondcoordinates": [84, 80],
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        with client:
+            response = client.post(
+                "/addMessage",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected = """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hello
+Alice -> Bob: Middle
+Bob -> Alice: Bye
+@enduml"""
+            assert response.data.decode("utf-8") == expected
+
+    def test_insert_before_all_messages(self, client):
+        """New message inserted before all existing messages when y is above them."""
+        puml = """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hello
+Bob -> Alice: Bye
+@enduml"""
+        test_data = {
+            "plantuml": puml,
+            "message": "First",
+            # y=50 is above Hello (cy=67.4)
+            "firstcoordinates": [28, 50],
+            "secondcoordinates": [84, 50],
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        with client:
+            response = client.post(
+                "/addMessage",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected = """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: First
+Alice -> Bob: Hello
+Bob -> Alice: Bye
+@enduml"""
+            assert response.data.decode("utf-8") == expected
+
+    def test_insert_after_all_messages(self, client):
+        """New message inserted after all existing messages when y is below them."""
+        puml = """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hello
+Bob -> Alice: Bye
+@enduml"""
+        test_data = {
+            "plantuml": puml,
+            "message": "Last",
+            # y=110 is below Bye (cy=96.5)
+            "firstcoordinates": [28, 110],
+            "secondcoordinates": [84, 110],
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        with client:
+            response = client.post(
+                "/addMessage",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected = """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hello
+Bob -> Alice: Bye
+Alice -> Bob: Last
+@enduml"""
+            assert response.data.decode("utf-8") == expected
+
+    def test_insert_no_existing_messages(self, client):
+        """New message inserted before @enduml when no messages exist."""
+        puml = """@startuml
+participant Alice
+participant Bob
+@enduml"""
+        test_data = {
+            "plantuml": puml,
+            "message": "Hi",
+            "firstcoordinates": [28, 50],
+            "secondcoordinates": [84, 50],
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        with client:
+            response = client.post(
+                "/addMessage",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected = """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hi
+@enduml"""
+            assert response.data.decode("utf-8") == expected

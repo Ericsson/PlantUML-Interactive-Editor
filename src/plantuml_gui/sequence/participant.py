@@ -27,7 +27,7 @@ from typing import List
 
 from pyquery import PyQuery as Pq
 
-from .classes import Diagram, Participant
+from .classes import Diagram, Message, Participant
 
 
 def index_of_clicked_participant(svg: str, svgelement: str) -> int:
@@ -106,6 +106,23 @@ def check_if_inside_participant(puml: str, svg: str, coords: List[int]):
     return False
 
 
+def _find_insertion_index(messages: List["Message"], y: float, lines: List[str]) -> int:
+    """Find the line index to insert a new message based on y-coordinate.
+
+    Returns the line index where the new message should be inserted:
+    - Before the first message whose cy > y
+    - If y is below all messages, returns the line before @enduml
+    """
+    for msg in messages:
+        if msg.cy > y:
+            return msg.index
+    # After all messages: insert before @enduml
+    for i in range(len(lines) - 1, -1, -1):
+        if lines[i].strip() == "@enduml":
+            return i
+    return len(lines)
+
+
 def add_message(
     puml: str,
     svg: str,
@@ -113,16 +130,17 @@ def add_message(
     firstcoordinates: List[int],
     secondcoordinates: List[int],
 ):
-    """Add a message between two participants at the correct index"""
+    """Add a message between two participants at the correct y-position."""
     first_x, first_y = firstcoordinates
-    second_x, second_y = secondcoordinates
+    second_x, _second_y = secondcoordinates
 
     diagram = Diagram.from_svg(svg, puml)
     sender = find_closest_participant(diagram.participants, first_x)
     reciever = find_closest_participant(diagram.participants, second_x)
 
     lines = puml.splitlines()
-    lines.insert(-1, f"{sender.name} -> {reciever.name}: {message}")
+    insert_at = _find_insertion_index(diagram.messages, first_y, lines)
+    lines.insert(insert_at, f"{sender.name} -> {reciever.name}: {message}")
     return "\n".join(lines)
 
 
