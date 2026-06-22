@@ -163,6 +163,18 @@ class TestLifelineExtraction:
         }""")
         assert result is None
 
+    def test_find_nearest_lifeline_allows_self_target(self, app_url, page):
+        """findNearestLifeline without exclude allows targeting the same lifeline."""
+        result = page.evaluate("""() => {
+            participantLifelines = [
+                {cx: 50, yTop: 30, yBottom: 100},
+                {cx: 80, yTop: 30, yBottom: 100}
+            ];
+            return findNearestLifeline(55, 50);
+        }""")
+        assert result is not None
+        assert result["cx"] == 50
+
 
 class TestMessageAddMode:
     def test_cancel_message_add_mode(self, app_url, page):

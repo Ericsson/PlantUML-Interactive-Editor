@@ -532,3 +532,31 @@ participant Bob
 Alice -> Bob: Hi
 @enduml"""
             assert response.get_json()["plantuml"] == expected
+
+    def test_insert_self_message(self, client):
+        """New self-message (same sender and receiver) inserted correctly."""
+        puml = """@startuml
+participant Alice
+participant Bob
+@enduml"""
+        test_data = {
+            "plantuml": puml,
+            "message": "think",
+            "firstcoordinates": [28, 50],
+            "secondcoordinates": [28, 50],
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        with client:
+            response = client.post(
+                "/addMessage",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected = """@startuml
+participant Alice
+participant Bob
+Alice -> Alice: think
+@enduml"""
+            assert response.get_json()["plantuml"] == expected
