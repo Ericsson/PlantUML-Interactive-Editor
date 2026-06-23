@@ -62,4 +62,6 @@ but adding them to the PlantUML code should still work.
   - Rename participant
   - Delete participant (cascades to messages)
 - Messages
-  - Add message between participants
+  - Add message between participants (hover lifeline → right-click → ghost arrow → click destination)
+  - Self-messages supported (same participant as sender and receiver)
+  - Messages inserted at correct vertical position between existing messages

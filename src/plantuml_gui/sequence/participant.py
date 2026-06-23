@@ -24,11 +24,11 @@
 
 import html
 import re
-from typing import List
+from typing import Dict, List
 
 from pyquery import PyQuery as Pq
 
-from .classes import Diagram, Participant
+from .classes import Diagram
 
 
 def index_of_clicked_participant(svg: str, svgelement: str) -> int:
@@ -81,52 +81,6 @@ def add_participant(puml: str, svg: str, svgelement: str, direction: str) -> str
     return "\n".join(lines)
 
 
-def find_closest_participant(
-    participants: List[Participant], target_cx: int
-) -> Participant:
-    """Find the participant with the closest cx value to the target_cx."""
-    min_distance = float("inf")
-    closest_participant = participants[0]
-
-    for participant in participants:
-        distance = abs(participant.cx - target_cx)
-        if distance < min_distance:
-            min_distance = distance
-            closest_participant = participant
-
-    return closest_participant
-
-
-def check_if_inside_participant(puml: str, svg: str, coords: List[int]):
-    x, y = coords
-    diagram = Diagram.from_svg(svg, puml)
-    for participant in diagram.participants:
-        if participant.contains_x(x):
-            return True
-
-    return False
-
-
-def add_message(
-    puml: str,
-    svg: str,
-    message: str,
-    firstcoordinates: List[int],
-    secondcoordinates: List[int],
-):
-    """Add a message between two participants at the correct index"""
-    first_x, first_y = firstcoordinates
-    second_x, second_y = secondcoordinates
-
-    diagram = Diagram.from_svg(svg, puml)
-    sender = find_closest_participant(diagram.participants, first_x)
-    reciever = find_closest_participant(diagram.participants, second_x)
-
-    lines = puml.splitlines()
-    lines.insert(-1, f"{sender.name} -> {reciever.name}: {message}")
-    return "\n".join(lines)
-
-
 def get_participant_name(puml: str, svg: str, svgelement: str) -> str:
     """Get participant name by matching the clicked SVG element."""
     diagram = Diagram.from_svg(svg, puml)
@@ -157,3 +111,38 @@ def delete_participant(puml: str, svg: str, svgelement: str) -> str:
 
     lines = [line for i, line in enumerate(lines) if i not in lines_to_remove]
     return "\n".join(lines)
+
+
+def get_participant_positions(puml: str, svg: str) -> List[Dict[str, object]]:
+    """Return participant lifeline positions for frontend hover detection."""
+    diagram = Diagram.from_svg(svg, puml)
+    d = Pq(svg)
+
+    # Extract lifeline vertical bounds from dashed lines
+    lifeline_bounds: Dict[float, Dict[str, float]] = {}
+    for line in d("line").items():
+        style = line.attr("style") or ""
+        if "stroke-dasharray:5.0,5.0" in style:
+            x = float(line.attr("x1"))
+            lifeline_bounds[x] = {
+                "yTop": float(line.attr("y1")),
+                "yBottom": float(line.attr("y2")),
+            }
+
+    positions = []
+    for participant in diagram.participants:
+        # Find matching lifeline (cx may differ by ~0.5 due to stroke-width)
+        bounds = {"yTop": 0.0, "yBottom": 0.0}
+        for lx, lb in lifeline_bounds.items():
+            if abs(lx - participant.cx) <= 1:
+                bounds = lb
+                break
+        positions.append(
+            {
+                "name": participant.name,
+                "cx": participant.cx,
+                "yTop": bounds["yTop"],
+                "yBottom": bounds["yBottom"],
+            }
+        )
+    return positions

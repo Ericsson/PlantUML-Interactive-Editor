@@ -24,13 +24,13 @@
 
 from flask import Blueprint, jsonify, request
 
+from .message import add_message
 from .participant import (
-    add_message,
     add_participant,
-    check_if_inside_participant,
     delete_participant,
     edit_participant_name,
     get_participant_name,
+    get_participant_positions,
 )
 
 sequence_bp = Blueprint("sequence", __name__)
@@ -54,23 +54,14 @@ def addmessage():
     message = data["message"]
     firstcoordinates = data["firstcoordinates"]
     secondcoordinates = data["secondcoordinates"]
+    arrow_type = data.get("arrowtype", "->")
     return jsonify(
         {
             "plantuml": add_message(
-                puml, svg, message, firstcoordinates, secondcoordinates
+                puml, svg, message, firstcoordinates, secondcoordinates, arrow_type
             )
         }
     )
-
-
-@sequence_bp.route("/checkIfInsideParticipant", methods=["POST"])
-def checkifinsideparticipant():
-    data = request.get_json()
-    puml = data["plantuml"]
-    svg = data["svg"]
-    coordinates = data["coordinates"]
-    is_inside = check_if_inside_participant(puml, svg, coordinates)
-    return jsonify({"isValid": is_inside})
 
 
 @sequence_bp.route("/getParticipantName", methods=["POST"])
@@ -99,3 +90,11 @@ def deleteparticipant():
     svg = data["svg"]
     svgelement = data["svgelement"]
     return jsonify({"plantuml": delete_participant(puml, svg, svgelement)})
+
+
+@sequence_bp.route("/getParticipantPositions", methods=["POST"])
+def getparticipantpositions():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    return jsonify({"positions": get_participant_positions(puml, svg)})

@@ -254,44 +254,6 @@ bob -> bob: hello
 @enduml"""
             assert response.get_json()["plantuml"] == expected_puml
 
-    def test_checkifinsideparticipant(self, client):
-        test_data = {
-            "plantuml": """@startuml
-participant Alice
-@enduml""",
-            "coordinates": [28, 40],
-        }
-        test_data["svg"] = extract_g_element(
-            _create_svg_from_uml(test_data["plantuml"])
-        )
-        with client:
-            response = client.post(
-                "/checkIfInsideParticipant",
-                data=json.dumps(test_data),
-                content_type="application/json",
-            )
-            response_json = response.get_json()
-            assert response_json["isValid"]
-
-    def test_checkifinsideparticipantfalse(self, client):
-        test_data = {
-            "plantuml": """@startuml
-participant Alice
-@enduml""",
-            "coordinates": [100, 40],
-        }
-        test_data["svg"] = extract_g_element(
-            _create_svg_from_uml(test_data["plantuml"])
-        )
-        with client:
-            response = client.post(
-                "/checkIfInsideParticipant",
-                data=json.dumps(test_data),
-                content_type="application/json",
-            )
-            response_json = response.get_json()
-            assert not response_json["isValid"]
-
     def test_getparticipantnameandrenderbidirectional(self, client):
         test_data = {
             "plantuml": """@startuml
@@ -401,3 +363,162 @@ participant Alice
             expected_puml = """@startuml
 @enduml"""
             assert response.get_json()["plantuml"] == expected_puml
+
+
+class TestAddMessageYBasedInsertion:
+    """Tests for y-based message insertion positioning."""
+
+    def test_insert_between_messages(self, client):
+        """New message inserted between two existing messages based on y."""
+        puml = """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hello
+Bob -> Alice: Bye
+@enduml"""
+        test_data = {
+            "plantuml": puml,
+            "message": "Middle",
+            # y=80 is between Hello (cy=67.4) and Bye (cy=96.5)
+            "firstcoordinates": [28, 80],
+            "secondcoordinates": [84, 80],
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        with client:
+            response = client.post(
+                "/addMessage",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected = """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hello
+Alice -> Bob: Middle
+Bob -> Alice: Bye
+@enduml"""
+            assert response.get_json()["plantuml"] == expected
+
+    def test_insert_before_all_messages(self, client):
+        """New message inserted before all existing messages when y is above them."""
+        puml = """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hello
+Bob -> Alice: Bye
+@enduml"""
+        test_data = {
+            "plantuml": puml,
+            "message": "First",
+            # y=50 is above Hello (cy=67.4)
+            "firstcoordinates": [28, 50],
+            "secondcoordinates": [84, 50],
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        with client:
+            response = client.post(
+                "/addMessage",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected = """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: First
+Alice -> Bob: Hello
+Bob -> Alice: Bye
+@enduml"""
+            assert response.get_json()["plantuml"] == expected
+
+    def test_insert_after_all_messages(self, client):
+        """New message inserted after all existing messages when y is below them."""
+        puml = """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hello
+Bob -> Alice: Bye
+@enduml"""
+        test_data = {
+            "plantuml": puml,
+            "message": "Last",
+            # y=110 is below Bye (cy=96.5)
+            "firstcoordinates": [28, 110],
+            "secondcoordinates": [84, 110],
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        with client:
+            response = client.post(
+                "/addMessage",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected = """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hello
+Bob -> Alice: Bye
+Alice -> Bob: Last
+@enduml"""
+            assert response.get_json()["plantuml"] == expected
+
+    def test_insert_no_existing_messages(self, client):
+        """New message inserted before @enduml when no messages exist."""
+        puml = """@startuml
+participant Alice
+participant Bob
+@enduml"""
+        test_data = {
+            "plantuml": puml,
+            "message": "Hi",
+            "firstcoordinates": [28, 50],
+            "secondcoordinates": [84, 50],
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        with client:
+            response = client.post(
+                "/addMessage",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected = """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hi
+@enduml"""
+            assert response.get_json()["plantuml"] == expected
+
+    def test_insert_self_message(self, client):
+        """New self-message (same sender and receiver) inserted correctly."""
+        puml = """@startuml
+participant Alice
+participant Bob
+@enduml"""
+        test_data = {
+            "plantuml": puml,
+            "message": "think",
+            "firstcoordinates": [28, 50],
+            "secondcoordinates": [28, 50],
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        with client:
+            response = client.post(
+                "/addMessage",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected = """@startuml
+participant Alice
+participant Bob
+Alice -> Alice: think
+@enduml"""
+            assert response.get_json()["plantuml"] == expected

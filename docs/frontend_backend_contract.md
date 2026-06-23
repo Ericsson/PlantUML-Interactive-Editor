@@ -61,8 +61,8 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 - **getParticipantName:** `{plantuml, svg, svgelement}`; returns `{"name": participant_name}`
 - **editParticipantName:** `{plantuml, svg, name, svgelement}`; returns `{"plantuml": updated_puml}`
 - **deleteParticipant:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}`
-- **addMessage:** `{plantuml, svg, message, svgelement, firstcoordinates, secondcoordinates}` — coordinates are `[x, y]` arrays from two clicks; returns `{"plantuml": updated_puml}`
-- **checkIfInsideParticipant:** `{plantuml, svg, coordinates}` — coordinates is `[x, y]`; returns `{"isValid": bool}`
+- **addMessage:** `{plantuml, svg, message, svgelement, firstcoordinates, secondcoordinates}` — coordinates are `[x, y]` arrays; y-coordinate determines insertion position between existing messages; returns `{"plantuml": updated_puml}`
+- **getParticipantPositions:** `{plantuml, svg}`; returns `{"positions": [{name, cx, yTop, yBottom}, ...]}` — called once per render to provide lifeline data for hover detection and ghost arrow
 
 ## script.js Requests
 
@@ -78,7 +78,7 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 
 For activity diagrams, the frontend captures `lastclickedsvgelement` on right-click (the actual SVG DOM element). Its `outerHTML` is sent as `svgelement`. The backend reconstructs the element's geometric identity (x/y for rects, points for polygons, cx/cy for ellipses) to match it against the parsed SVG.
 
-For sequence diagrams, the frontend computes `cx` from the clicked rect's x + width/2. For messages, it captures raw `[x, y]` coordinates from two sequential clicks on the SVG.
+For sequence diagrams, the frontend computes `cx` from the clicked rect's x + width/2. For messages, the frontend fetches participant positions from `/getParticipantPositions` on each render and uses them for hover detection (±15px tolerance from lifeline cx). It sends the lifeline cx and cursor y as `[x, y]` coordinates. The y-coordinate determines insertion position between existing messages.
 
 ## Response Handling
 
