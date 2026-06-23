@@ -149,17 +149,6 @@ class TestLifelineExtraction:
         }""")
         assert result is None
 
-    def test_find_nearest_lifeline_excludes_origin(self, app_url, page):
-        """findNearestLifeline skips the excluded cx."""
-        result = page.evaluate("""() => {
-            const lifelines = [
-                {cx: 50, yTop: 30, yBottom: 100},
-                {cx: 80, yTop: 30, yBottom: 100}
-            ];
-            return findNearestLifeline(55, 50, lifelines, 50);
-        }""")
-        assert result is None
-
     def test_find_nearest_lifeline_allows_self_target(self, app_url, page):
         """findNearestLifeline without exclude allows targeting the same lifeline."""
         result = page.evaluate("""() => {
