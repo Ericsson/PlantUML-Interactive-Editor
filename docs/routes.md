@@ -119,3 +119,9 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /getParticipantName** — Input: `plantuml`, `svg`, `svgelement`. Returns: participant name string.
 - **POST /editParticipantName** — Input: `plantuml`, `svg`, `name`, `svgelement`. Returns: modified puml.
 - **POST /deleteParticipant** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
+
+## Sequence Diagram (Messages)
+
+- **POST /getMessageText** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"text": message_label}`.
+- **POST /editMessageText** — Input: `plantuml`, `svg`, `svgelement`, `text`. Returns: JSON `{"plantuml": modified_puml}`.
+- **POST /deleteMessage** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"plantuml": modified_puml}`.

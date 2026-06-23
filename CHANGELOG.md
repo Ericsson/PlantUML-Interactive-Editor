@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### External
 
+- Edit message text: right-click a message arrow/line to open Edit Message dialog
+- Delete message: right-click a message arrow/line to delete it
 - Visual hover-based "Add Message" interaction for sequence diagrams: hover near a participant lifeline to see an indicator box, right-click for "Add Message" context menu, then use ghost arrow preview to select destination
 - Self-messages supported (send message to same participant)
 - Add message context menu offers solid arrow (->) or dashed arrow (-->) choice
@@ -15,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Internal
 
+- Added backend logic for sequence message edit and delete (index_of_clicked_message, get_message_text, edit_message_text, delete_message)
 - Add message now uses y-based insertion to place new messages between existing ones based on click position
 - Added /getParticipantPositions backend endpoint for lifeline position and name extraction
 - Fixed reflected XSS in sequence routes by returning `jsonify` instead of raw strings

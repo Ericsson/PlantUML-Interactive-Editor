@@ -244,21 +244,34 @@ function messageEventListeners() {
         var newmessage = $('#participant-message-text').val();
         try {
             const plantuml = trimlines(editor.session.getValue());
-            const response = await fetch("addMessage", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    'plantuml': plantuml,
-                    'svg': svg.innerHTML,
-                    'message': newmessage,
-                    'svgelement': lastclickedsvgelement.outerHTML,
-                    'firstcoordinates': firstClickCoordinates,
-                    'secondcoordinates': secondClickCoordinates,
-                    'arrowtype': messageArrowType,
-                }),
-            });
+            let response;
+            if (messageEditMode) {
+                messageEditMode = false;
+                response = await fetch("editMessageText", {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        'plantuml': plantuml,
+                        'svg': svg.innerHTML,
+                        'svgelement': lastclickedsvgelement.outerHTML,
+                        'text': newmessage
+                    }),
+                });
+            } else {
+                response = await fetch("addMessage", {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        'plantuml': plantuml,
+                        'svg': svg.innerHTML,
+                        'message': newmessage,
+                        'svgelement': lastclickedsvgelement.outerHTML,
+                        'firstcoordinates': firstClickCoordinates,
+                        'secondcoordinates': secondClickCoordinates,
+                        'arrowtype': messageArrowType,
+                    }),
+                });
+            }
             const data = await response.json();
             setPuml(data.plantuml)
         } catch (error) {
