@@ -1,14 +1,18 @@
+// State for the add-message interaction flow
 let isAddMessageActive = false;
 let firstClickCoordinates = null;
 let secondClickCoordinates = null;
 let messageOrigin = null;
 
+// Reusable SVG overlay elements (created once, moved on each frame)
 let indicatorBox = null;
 let ghostLine = null;
 let ghostArrow = null;
 let ghostSelfPath = null;
 
-function findNearestLifeline(x, y, excludeCx) {
+// --- Lifeline detection ---
+
+function findNearestLifeline(x, y, participantLifelines, excludeCx) {
     for (const lifeline of participantLifelines) {
         if (excludeCx !== undefined && lifeline.cx === excludeCx) continue;
         if (Math.abs(x - lifeline.cx) <= LIFELINE_TOLERANCE &&
@@ -18,6 +22,8 @@ function findNearestLifeline(x, y, excludeCx) {
     }
     return null;
 }
+
+// --- Hover indicator (blue circle on lifeline) ---
 
 function showIndicatorBox(svgElement, cx, y) {
     if (!indicatorBox) {
@@ -41,6 +47,8 @@ function hideIndicatorBox() {
     }
 }
 
+// --- Ghost arrow (dashed preview of the message being added) ---
+
 function showGhostArrow(svgElement, fromCx, toCx, y) {
     const g = svgElement.querySelector('g');
     if (!g) return;
@@ -63,7 +71,6 @@ function showGhostArrow(svgElement, fromCx, toCx, y) {
             `${fromCx},${y} ${fromCx + loopWidth},${y} ${fromCx + loopWidth},${y + loopHeight} ${fromCx},${y + loopHeight}`);
         if (!ghostSelfPath.parentNode) g.appendChild(ghostSelfPath);
 
-        // Arrowhead pointing left at the return
         if (!ghostArrow) {
             ghostArrow = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
             ghostArrow.setAttribute('fill', '#888');
@@ -76,7 +83,7 @@ function showGhostArrow(svgElement, fromCx, toCx, y) {
         return;
     }
 
-    // Normal message: straight line
+    // Normal message: straight dashed line with arrowhead
     hideGhostSelfPath();
     if (!ghostLine) {
         ghostLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -92,7 +99,6 @@ function showGhostArrow(svgElement, fromCx, toCx, y) {
     ghostLine.setAttribute('y2', y);
     if (!ghostLine.parentNode) g.appendChild(ghostLine);
 
-    // Arrowhead polygon pointing at toCx
     if (!ghostArrow) {
         ghostArrow = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
         ghostArrow.setAttribute('fill', '#888');
@@ -121,15 +127,46 @@ function hideGhostArrow() {
     if (ghostArrow && ghostArrow.parentNode) ghostArrow.parentNode.removeChild(ghostArrow);
 }
 
+// --- Message-add mode lifecycle ---
+
 function cancelMessageAddMode() {
     isAddMessageActive = false;
     messageOrigin = null;
     hideGhostArrow();
 }
 
+// --- Background context menu (right-click on diagram) ---
+
+function backgroundContextMenu(e, svgElement) {
+    e.preventDefault();
+
+    const transformed = svgPointFromEvent(e, svgElement);
+    const cx = transformed.x;
+    const cy = transformed.y;
+
+    if (isAddMessageActive) return;
+
+    const lifeline = findNearestLifeline(cx, cy, participantLifelines);
+    const addMessageItem = document.getElementById("addMessage");
+    addMessageItem.style.display = lifeline ? "block" : "none";
+
+    if (!lifeline) return;
+
+    firstClickCoordinates = [lifeline.cx, cy];
+    messageOrigin = {cx: lifeline.cx, y: cy, name: lifeline.name};
+
+    var contextMenu = document.getElementById('sequence-menu');
+    contextMenu.style.display = 'block';
+    contextMenu.style.left = e.pageX + 'px';
+    contextMenu.style.top = e.pageY + 'px';
+}
+
+// --- Mouse interaction handlers ---
+
 function setupLifelineInteraction(svgContainer) {
     const container = document.getElementById('colb-container');
 
+    // Mousemove: show indicator in normal mode, ghost arrow in message-add mode
     container.addEventListener('mousemove', (e) => {
         if (!svgContainer || !svgContainer.getScreenCTM()) return;
         const transformed = svgPointFromEvent(e, svgContainer);
@@ -137,7 +174,7 @@ function setupLifelineInteraction(svgContainer) {
         const y = transformed.y;
 
         if (isAddMessageActive) {
-            const dest = findNearestLifeline(x, y);
+            const dest = findNearestLifeline(x, y, participantLifelines);
             if (dest) {
                 showGhostArrow(svgContainer, messageOrigin.cx, dest.cx, y);
             } else {
@@ -146,7 +183,7 @@ function setupLifelineInteraction(svgContainer) {
             hideIndicatorBox();
         } else {
             hideGhostArrow();
-            const lifeline = findNearestLifeline(x, y);
+            const lifeline = findNearestLifeline(x, y, participantLifelines);
             if (lifeline) {
                 showIndicatorBox(svgContainer, lifeline.cx, y);
             } else {
@@ -155,6 +192,7 @@ function setupLifelineInteraction(svgContainer) {
         }
     });
 
+    // Click: confirm destination and open label dialog
     container.addEventListener('click', (e) => {
         if (!isAddMessageActive || !messageOrigin) return;
         if (!svgContainer || !svgContainer.getScreenCTM()) return;
@@ -163,10 +201,9 @@ function setupLifelineInteraction(svgContainer) {
         const x = transformed.x;
         const y = transformed.y;
 
-        const dest = findNearestLifeline(x, y);
+        const dest = findNearestLifeline(x, y, participantLifelines);
         if (!dest) return;
 
-        // Store coordinates and show label dialog
         secondClickCoordinates = [dest.cx, y];
         firstClickCoordinates = [messageOrigin.cx, y];
         const originName = messageOrigin.name;
@@ -183,13 +220,17 @@ function setupLifelineInteraction(svgContainer) {
     });
 }
 
+// --- Event listener registration ---
+
 function messageEventListeners() {
+    // "Add Message" context menu item enters message-add mode
     document.getElementById('addMessage').addEventListener('click', () => {
         isAddMessageActive = true;
         hideIndicatorBox();
         document.getElementById('sequence-menu').style.display = 'none';
     });
 
+    // Submit button in the message label modal sends the message to backend
     $('#submit-participant-message').on('click', async () => {
         const element = document.getElementById('colb')
         const svg = element.querySelector('g');
@@ -218,6 +259,7 @@ function messageEventListeners() {
         }
     });
 
+    // Escape cancels message-add mode
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && isAddMessageActive) {
             cancelMessageAddMode();

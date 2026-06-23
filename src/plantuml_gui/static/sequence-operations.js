@@ -1,7 +1,11 @@
+// Shared state
 let currentContextMenuHandler = null;
 let participantLifelines = [];
 const LIFELINE_TOLERANCE = 15;
 
+// --- Utilities ---
+
+// Convert mouse event screen coordinates to SVG coordinate space
 function svgPointFromEvent(e, svgElement) {
     let point = svgElement.createSVGPoint();
     point.x = e.clientX;
@@ -9,6 +13,7 @@ function svgPointFromEvent(e, svgElement) {
     return point.matrixTransform(svgElement.getScreenCTM().inverse());
 }
 
+// Fetch participant lifeline positions from backend (called once per render)
 async function extractLifelinePositions() {
     participantLifelines = [];
     const element = document.getElementById('colb');
@@ -28,38 +33,14 @@ async function extractLifelinePositions() {
     }
 }
 
+// --- Background context menu management ---
+
 function removeBackgroundMenuListener() {
     const background = document.getElementById('colb-container');
     if (currentContextMenuHandler) {
         background.removeEventListener('contextmenu', currentContextMenuHandler);
         currentContextMenuHandler = null;
     }
-}
-
-function backgroundContextMenu(e, svgElement) {
-    e.preventDefault();
-
-    const transformed = svgPointFromEvent(e, svgElement);
-    const cx = transformed.x;
-    const cy = transformed.y;
-
-    // If in message-add mode, ignore right-click on background
-    if (isAddMessageActive) return;
-
-    const lifeline = findNearestLifeline(cx, cy);
-    const addMessageItem = document.getElementById("addMessage");
-    addMessageItem.style.display = lifeline ? "block" : "none";
-
-    if (lifeline) {
-        // Store origin for message-add mode
-        firstClickCoordinates = [lifeline.cx, cy];
-        messageOrigin = {cx: lifeline.cx, y: cy, name: lifeline.name};
-    }
-
-    var contextMenu = document.getElementById('sequence-menu');
-    contextMenu.style.display = 'block';
-    contextMenu.style.left = e.pageX + 'px';
-    contextMenu.style.top = e.pageY + 'px';
 }
 
 function handleContextMenuBackground(svgElement) {
@@ -69,7 +50,10 @@ function handleContextMenuBackground(svgElement) {
     background.addEventListener('contextmenu', currentContextMenuHandler);
 }
 
+// --- Participant operation event listeners (rename, add, delete) ---
+
 function participantEventListeners() {
+    // Submit renamed participant name
     $('#submit-participant-name').on('click', async () => {
         const element = document.getElementById('colb');
         const svg = element.querySelector('g');
@@ -96,6 +80,7 @@ function participantEventListeners() {
         }
     });
 
+    // "Rename" context menu item: fetch current name and show rename modal
     document.getElementById('renameParticipant').addEventListener('click', async () => {
         const element = document.getElementById('colb');
         const svg = element.querySelector('g');
@@ -124,6 +109,7 @@ function participantEventListeners() {
         }
     });
 
+    // Add/Delete participant operations (data-driven to avoid repetition)
     const sequenceList = [{
         id: 'addParticipantLeft',
         endpoint: 'addParticipant',
@@ -170,94 +156,100 @@ function participantEventListeners() {
     });
 }
 
+// --- Participant rect handlers (dblclick, hover, contextmenu) ---
+
+function setupParticipantHandlers(svgelements, svg, element) {
+    for (let index = 0; index < svgelements.length; index++) {
+        let svgelement = svgelements[index];
+        if (svgelement.tagName.toLowerCase() === 'text') {
+            svgelement.style.pointerEvents = 'none';
+        }
+
+        if (!checkIfParticipant(svgelements, index)) continue;
+
+        svgelement.addEventListener('dblclick', async () => {
+            lastclickedsvgelement = svgelement;
+            try {
+                const plantuml = trimlines(editor.session.getValue());
+                const response = await fetch("getParticipantName", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        'plantuml': plantuml,
+                        'svg': svg.innerHTML,
+                        'svgelement': svgelement.outerHTML
+                    })
+                });
+                $('#participant-name-text').val((await response.json()).name);
+                $('#participant-name-modalForm').modal('show');
+                $('#participant-name-modalForm').on('shown.bs.modal', function() {
+                    $('#participant-name-text').trigger('focus');
+                });
+            } catch (error) {
+                displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+            }
+        });
+
+        let rectcolor = "";
+        svgelement.addEventListener('mouseover', function() {
+            const svg = element.querySelector('g');
+            resetHighlight(svg);
+            rectcolor = svgelement.getAttribute('fill');
+            svgelement.setAttribute('fill', '#d8d8d8');
+        });
+
+        svgelement.addEventListener('mouseout', function() {
+            svgelement.setAttribute('fill', rectcolor);
+        });
+
+        svgelement.addEventListener('contextmenu', function(e) {
+            lastclickedsvgelement = svgelement;
+            e.preventDefault();
+            e.stopPropagation();
+            var contextMenu = document.getElementById('participant-menu');
+            contextMenu.style.display = 'block';
+            contextMenu.style.left = e.pageX + 'px';
+            contextMenu.style.top = e.pageY + 'px';
+        });
+    }
+}
+
+// --- Entry point and orchestration ---
+
+// Called once when a sequence diagram is detected
 function sequenceEventListeners() {
     participantEventListeners();
     messageEventListeners();
 }
 
+// Called on every render when diagram type is sequence
 async function setHandlersForSequenceDiagram(pumlcontent, element) {
     fetchSvgFromPlantUml().then((svgContent) => {
         element.innerHTML = svgContent;
         const svgContainer = element.querySelector('svg');
-        const svg = element.querySelector('g')
+        const svg = element.querySelector('g');
         if (!svg) {
             toggleLoadingOverlay();
-            return
+            return;
         }
 
         extractLifelinePositions();
         cancelMessageAddMode();
 
-        const svgelements = svg.querySelectorAll('*');
         handleContextMenuBackground(svgContainer);
         setupLifelineInteraction(svgContainer);
+        setupParticipantHandlers(svg.querySelectorAll('*'), svg, element);
 
-        for (let index = 0; index < svgelements.length;) {
-            let svgelement = svgelements[index]
-            if (svgelement.tagName.toLowerCase() === 'text') {
-                svgelement.style.pointerEvents = 'none';
-            }
-
-            if (checkIfParticipant(svgelements, index)) {
-                svgelement.addEventListener('dblclick', async () => {
-                    lastclickedsvgelement = svgelement
-                    try {
-                        const plantuml = trimlines(editor.session.getValue());
-                        const response = await fetch("getParticipantName", {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                'plantuml': plantuml,
-                                'svg': svg.innerHTML,
-                                'svgelement': svgelement.outerHTML
-                            })
-                        });
-                        $('#participant-name-text').val((await response.json()).name);
-                        $('#participant-name-modalForm').modal('show');
-                        $('#participant-name-modalForm').on('shown.bs.modal', function () {
-                            $('#participant-name-text').trigger('focus');
-                        });
-
-
-                    } catch (error) {
-                        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-                    }
-                });
-
-                let rectcolor = ""
-                svgelement.addEventListener('mouseover', function() {
-                    const svg = element.querySelector('g');
-                    resetHighlight(svg);
-
-                    rectcolor = svgelement.getAttribute('fill')
-                    svgelement.setAttribute('fill', '#d8d8d8')
-                });
-
-                svgelement.addEventListener('mouseout', function() {
-                    svgelement.setAttribute('fill', rectcolor)
-                });
-
-                svgelement.addEventListener('contextmenu', function(e) {
-                    lastclickedsvgelement = svgelement;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    var contextMenu = document.getElementById('participant-menu');
-                    contextMenu.style.display = 'block';
-                    contextMenu.style.left = e.pageX + 'px';
-                    contextMenu.style.top = e.pageY + 'px';
-                });
-            }
-            index++
-        }
         toggleLoadingOverlay();
-
     }).catch((error) => {
         displayErrorMessage(`Error rendering SVG: ${error.message}`, error);
     });
 }
 
+// Identifies participant header rects by their PlantUML-specific style
 function checkIfParticipant(svgelements, index) {
-    return (svgelements[index].tagName.toLowerCase() === 'rect') && (svgelements[index].getAttribute('style') == "stroke:#181818;stroke-width:0.5;")
+    return (svgelements[index].tagName.toLowerCase() === 'rect') &&
+        (svgelements[index].getAttribute('style') == "stroke:#181818;stroke-width:0.5;");
 }

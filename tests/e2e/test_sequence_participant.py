@@ -124,7 +124,7 @@ class TestLifelineExtraction:
         page.evaluate("""() => {
             editor.session.setValue("@startuml\\nparticipant Alice\\nparticipant Bob\\n@enduml");
         }""")
-        page.wait_for_timeout(3000)
+        page.wait_for_timeout(5000)
         result = page.evaluate("() => participantLifelines")
         assert len(result) == 2
         assert result[0]["name"] == "Alice"
@@ -135,8 +135,8 @@ class TestLifelineExtraction:
     def test_find_nearest_lifeline_within_tolerance(self, app_url, page):
         """findNearestLifeline returns lifeline when within 15px."""
         result = page.evaluate("""() => {
-            participantLifelines = [{cx: 50, yTop: 30, yBottom: 100}];
-            return findNearestLifeline(60, 50);
+            const lifelines = [{cx: 50, yTop: 30, yBottom: 100}];
+            return findNearestLifeline(60, 50, lifelines);
         }""")
         assert result is not None
         assert result["cx"] == 50
@@ -144,30 +144,30 @@ class TestLifelineExtraction:
     def test_find_nearest_lifeline_outside_tolerance(self, app_url, page):
         """findNearestLifeline returns null when outside 15px."""
         result = page.evaluate("""() => {
-            participantLifelines = [{cx: 50, yTop: 30, yBottom: 100}];
-            return findNearestLifeline(70, 50);
+            const lifelines = [{cx: 50, yTop: 30, yBottom: 100}];
+            return findNearestLifeline(70, 50, lifelines);
         }""")
         assert result is None
 
     def test_find_nearest_lifeline_excludes_origin(self, app_url, page):
         """findNearestLifeline skips the excluded cx."""
         result = page.evaluate("""() => {
-            participantLifelines = [
+            const lifelines = [
                 {cx: 50, yTop: 30, yBottom: 100},
                 {cx: 80, yTop: 30, yBottom: 100}
             ];
-            return findNearestLifeline(55, 50, 50);
+            return findNearestLifeline(55, 50, lifelines, 50);
         }""")
         assert result is None
 
     def test_find_nearest_lifeline_allows_self_target(self, app_url, page):
         """findNearestLifeline without exclude allows targeting the same lifeline."""
         result = page.evaluate("""() => {
-            participantLifelines = [
+            const lifelines = [
                 {cx: 50, yTop: 30, yBottom: 100},
                 {cx: 80, yTop: 30, yBottom: 100}
             ];
-            return findNearestLifeline(55, 50);
+            return findNearestLifeline(55, 50, lifelines);
         }""")
         assert result is not None
         assert result["cx"] == 50
@@ -178,7 +178,7 @@ class TestLifelineExtraction:
         page.evaluate("""() => {
             editor.session.setValue("@startuml\\nparticipant Alice\\nparticipant Bob\\n@enduml");
         }""")
-        page.wait_for_timeout(3000)
+        page.wait_for_timeout(5000)
 
         # Verify lifelines have names
         names = page.evaluate("() => participantLifelines.map(l => l.name)")

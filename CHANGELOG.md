@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Visual hover-based "Add Message" interaction for sequence diagrams: hover near a participant lifeline to see an indicator box, right-click for "Add Message" context menu, then use ghost arrow preview to select destination
 - Self-messages supported (send message to same participant)
+- Fixed empty context menu appearing when right-clicking away from lifelines
 
 ### Internal
 
