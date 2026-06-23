@@ -60,11 +60,11 @@ function showGhostArrow(svgElement, fromCx, toCx, y) {
             ghostSelfPath = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
             ghostSelfPath.setAttribute('stroke', '#888');
             ghostSelfPath.setAttribute('stroke-width', '1.5');
-            ghostSelfPath.setAttribute('stroke-dasharray', '4,4');
             ghostSelfPath.setAttribute('opacity', '0.7');
             ghostSelfPath.setAttribute('fill', 'none');
             ghostSelfPath.setAttribute('pointer-events', 'none');
         }
+        ghostSelfPath.setAttribute('stroke-dasharray', messageArrowType === '-->' ? '4,4' : 'none');
         const loopWidth = 30;
         const loopHeight = 20;
         ghostSelfPath.setAttribute('points',
@@ -89,10 +89,10 @@ function showGhostArrow(svgElement, fromCx, toCx, y) {
         ghostLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         ghostLine.setAttribute('stroke', '#888');
         ghostLine.setAttribute('stroke-width', '1.5');
-        ghostLine.setAttribute('stroke-dasharray', '4,4');
         ghostLine.setAttribute('opacity', '0.7');
         ghostLine.setAttribute('pointer-events', 'none');
     }
+    ghostLine.setAttribute('stroke-dasharray', messageArrowType === '-->' ? '4,4' : 'none');
     ghostLine.setAttribute('x1', fromCx);
     ghostLine.setAttribute('y1', y);
     ghostLine.setAttribute('x2', toCx);
