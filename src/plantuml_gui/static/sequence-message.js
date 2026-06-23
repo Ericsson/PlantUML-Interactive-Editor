@@ -12,9 +12,8 @@ let ghostSelfPath = null;
 
 // --- Lifeline detection ---
 
-function findNearestLifeline(x, y, participantLifelines, excludeCx) {
+function findNearestLifeline(x, y, participantLifelines) {
     for (const lifeline of participantLifelines) {
-        if (excludeCx !== undefined && lifeline.cx === excludeCx) continue;
         if (Math.abs(x - lifeline.cx) <= LIFELINE_TOLERANCE &&
             y >= lifeline.yTop && y <= lifeline.yBottom) {
             return lifeline;
