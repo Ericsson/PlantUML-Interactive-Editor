@@ -81,16 +81,6 @@ def add_participant(puml: str, svg: str, svgelement: str, direction: str) -> str
     return "\n".join(lines)
 
 
-def check_if_inside_participant(puml: str, svg: str, coords: List[int]):
-    x, y = coords
-    diagram = Diagram.from_svg(svg, puml)
-    for participant in diagram.participants:
-        if participant.contains_x(x):
-            return True
-
-    return False
-
-
 def get_participant_name(puml: str, svg: str, svgelement: str) -> str:
     """Get participant name by matching the clicked SVG element."""
     diagram = Diagram.from_svg(svg, puml)

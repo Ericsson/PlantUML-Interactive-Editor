@@ -116,7 +116,6 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /addParticipant** — Input: `plantuml`, `svg`, `svgelement`, `direction` ('left'/'right'). Returns: modified puml.
 - **POST /addMessage** — Input: `plantuml`, `svg`, `message`, `firstcoordinates` ([x,y]), `secondcoordinates` ([x,y]). Returns: modified puml. Y-coordinate determines insertion position between existing messages.
 - **POST /getParticipantPositions** — Input: `plantuml`, `svg`. Returns: JSON `{"positions": [{name, cx, yTop, yBottom}, ...]}`. Called once per render for hover detection.
-- **POST /checkIfInsideParticipant** — Input: `plantuml`, `svg`, `coordinates` ([x,y]). Returns: JSON `{"isValid": bool}`. Legacy; replaced by getParticipantPositions.
 - **POST /getParticipantName** — Input: `plantuml`, `svg`, `svgelement`. Returns: participant name string.
 - **POST /editParticipantName** — Input: `plantuml`, `svg`, `name`, `svgelement`. Returns: modified puml.
 - **POST /deleteParticipant** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.

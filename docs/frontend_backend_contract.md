@@ -63,7 +63,6 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 - **deleteParticipant:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}`
 - **addMessage:** `{plantuml, svg, message, svgelement, firstcoordinates, secondcoordinates}` — coordinates are `[x, y]` arrays; y-coordinate determines insertion position between existing messages; returns `{"plantuml": updated_puml}`
 - **getParticipantPositions:** `{plantuml, svg}`; returns `{"positions": [{name, cx, yTop, yBottom}, ...]}` — called once per render to provide lifeline data for hover detection and ghost arrow
-- **checkIfInsideParticipant:** `{plantuml, svg, coordinates}` — coordinates is `[x, y]`; returns `{"isValid": bool}` (legacy; replaced by getParticipantPositions)
 
 ## script.js Requests
 

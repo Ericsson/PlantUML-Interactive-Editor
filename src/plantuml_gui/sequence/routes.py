@@ -27,7 +27,6 @@ from flask import Blueprint, jsonify, request
 from .message import add_message
 from .participant import (
     add_participant,
-    check_if_inside_participant,
     delete_participant,
     edit_participant_name,
     get_participant_name,
@@ -62,16 +61,6 @@ def addmessage():
             )
         }
     )
-
-
-@sequence_bp.route("/checkIfInsideParticipant", methods=["POST"])
-def checkifinsideparticipant():
-    data = request.get_json()
-    puml = data["plantuml"]
-    svg = data["svg"]
-    coordinates = data["coordinates"]
-    is_inside = check_if_inside_participant(puml, svg, coordinates)
-    return jsonify({"isValid": is_inside})
 
 
 @sequence_bp.route("/getParticipantName", methods=["POST"])

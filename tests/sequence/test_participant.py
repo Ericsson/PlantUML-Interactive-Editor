@@ -254,44 +254,6 @@ bob -> bob: hello
 @enduml"""
             assert response.get_json()["plantuml"] == expected_puml
 
-    def test_checkifinsideparticipant(self, client):
-        test_data = {
-            "plantuml": """@startuml
-participant Alice
-@enduml""",
-            "coordinates": [28, 40],
-        }
-        test_data["svg"] = extract_g_element(
-            _create_svg_from_uml(test_data["plantuml"])
-        )
-        with client:
-            response = client.post(
-                "/checkIfInsideParticipant",
-                data=json.dumps(test_data),
-                content_type="application/json",
-            )
-            response_json = response.get_json()
-            assert response_json["isValid"]
-
-    def test_checkifinsideparticipantfalse(self, client):
-        test_data = {
-            "plantuml": """@startuml
-participant Alice
-@enduml""",
-            "coordinates": [100, 40],
-        }
-        test_data["svg"] = extract_g_element(
-            _create_svg_from_uml(test_data["plantuml"])
-        )
-        with client:
-            response = client.post(
-                "/checkIfInsideParticipant",
-                data=json.dumps(test_data),
-                content_type="application/json",
-            )
-            response_json = response.get_json()
-            assert not response_json["isValid"]
-
     def test_getparticipantnameandrenderbidirectional(self, client):
         test_data = {
             "plantuml": """@startuml

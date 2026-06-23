@@ -146,8 +146,6 @@ function backgroundContextMenu(e, svgElement) {
     if (isAddMessageActive) return;
 
     const lifeline = findNearestLifeline(cx, cy, participantLifelines);
-    const addMessageItem = document.getElementById("addMessage");
-    addMessageItem.style.display = lifeline ? "block" : "none";
 
     if (!lifeline) return;
 
