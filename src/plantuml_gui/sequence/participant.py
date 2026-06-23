@@ -28,7 +28,7 @@ from typing import Dict, List
 
 from pyquery import PyQuery as Pq
 
-from .classes import Diagram, Message, Participant
+from .classes import Diagram
 
 
 def index_of_clicked_participant(svg: str, svgelement: str) -> int:
@@ -81,22 +81,6 @@ def add_participant(puml: str, svg: str, svgelement: str, direction: str) -> str
     return "\n".join(lines)
 
 
-def find_closest_participant(
-    participants: List[Participant], target_cx: int
-) -> Participant:
-    """Find the participant with the closest cx value to the target_cx."""
-    min_distance = float("inf")
-    closest_participant = participants[0]
-
-    for participant in participants:
-        distance = abs(participant.cx - target_cx)
-        if distance < min_distance:
-            min_distance = distance
-            closest_participant = participant
-
-    return closest_participant
-
-
 def check_if_inside_participant(puml: str, svg: str, coords: List[int]):
     x, y = coords
     diagram = Diagram.from_svg(svg, puml)
@@ -105,44 +89,6 @@ def check_if_inside_participant(puml: str, svg: str, coords: List[int]):
             return True
 
     return False
-
-
-def _find_insertion_index(messages: List["Message"], y: float, lines: List[str]) -> int:
-    """Find the line index to insert a new message based on y-coordinate.
-
-    Returns the line index where the new message should be inserted:
-    - Before the first message whose cy > y
-    - If y is below all messages, returns the line before @enduml
-    """
-    for msg in messages:
-        if msg.cy > y:
-            return msg.index
-    # After all messages: insert before @enduml
-    for i in range(len(lines) - 1, -1, -1):
-        if lines[i].strip() == "@enduml":
-            return i
-    return len(lines)
-
-
-def add_message(
-    puml: str,
-    svg: str,
-    message: str,
-    firstcoordinates: List[int],
-    secondcoordinates: List[int],
-):
-    """Add a message between two participants at the correct y-position."""
-    first_x, first_y = firstcoordinates
-    second_x, _second_y = secondcoordinates
-
-    diagram = Diagram.from_svg(svg, puml)
-    sender = find_closest_participant(diagram.participants, first_x)
-    reciever = find_closest_participant(diagram.participants, second_x)
-
-    lines = puml.splitlines()
-    insert_at = _find_insertion_index(diagram.messages, first_y, lines)
-    lines.insert(insert_at, f"{sender.name} -> {reciever.name}: {message}")
-    return "\n".join(lines)
 
 
 def get_participant_name(puml: str, svg: str, svgelement: str) -> str:

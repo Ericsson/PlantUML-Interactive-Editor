@@ -24,8 +24,8 @@
 
 from flask import Blueprint, jsonify, request
 
+from .message import add_message
 from .participant import (
-    add_message,
     add_participant,
     check_if_inside_participant,
     delete_participant,
