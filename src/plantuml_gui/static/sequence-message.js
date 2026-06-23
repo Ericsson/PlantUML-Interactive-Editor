@@ -5,7 +5,7 @@ let secondClickCoordinates = null;
 let messageOrigin = null;
 
 // Reusable SVG overlay elements (created once, moved on each frame)
-let indicatorBox = null;
+let indicatorCircle = null;
 let ghostLine = null;
 let ghostArrow = null;
 let ghostSelfPath = null;
@@ -25,25 +25,25 @@ function findNearestLifeline(x, y, participantLifelines, excludeCx) {
 
 // --- Hover indicator (blue circle on lifeline) ---
 
-function showIndicatorBox(svgElement, cx, y) {
-    if (!indicatorBox) {
-        indicatorBox = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        indicatorBox.setAttribute('r', '5');
-        indicatorBox.setAttribute('fill', '#5b9bd5');
-        indicatorBox.setAttribute('opacity', '0.7');
-        indicatorBox.setAttribute('pointer-events', 'none');
+function showIndicatorCircle(svgElement, cx, y) {
+    if (!indicatorCircle) {
+        indicatorCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        indicatorCircle.setAttribute('r', '5');
+        indicatorCircle.setAttribute('fill', '#5b9bd5');
+        indicatorCircle.setAttribute('opacity', '0.7');
+        indicatorCircle.setAttribute('pointer-events', 'none');
     }
-    indicatorBox.setAttribute('cx', cx);
-    indicatorBox.setAttribute('cy', y);
+    indicatorCircle.setAttribute('cx', cx);
+    indicatorCircle.setAttribute('cy', y);
     const g = svgElement.querySelector('g');
-    if (g && !indicatorBox.parentNode) {
-        g.appendChild(indicatorBox);
+    if (g && !indicatorCircle.parentNode) {
+        g.appendChild(indicatorCircle);
     }
 }
 
-function hideIndicatorBox() {
-    if (indicatorBox && indicatorBox.parentNode) {
-        indicatorBox.parentNode.removeChild(indicatorBox);
+function hideIndicatorCircle() {
+    if (indicatorCircle && indicatorCircle.parentNode) {
+        indicatorCircle.parentNode.removeChild(indicatorCircle);
     }
 }
 
@@ -180,14 +180,14 @@ function setupLifelineInteraction(svgContainer) {
             } else {
                 hideGhostArrow();
             }
-            hideIndicatorBox();
+            hideIndicatorCircle();
         } else {
             hideGhostArrow();
             const lifeline = findNearestLifeline(x, y, participantLifelines);
             if (lifeline) {
-                showIndicatorBox(svgContainer, lifeline.cx, y);
+                showIndicatorCircle(svgContainer, lifeline.cx, y);
             } else {
-                hideIndicatorBox();
+                hideIndicatorCircle();
             }
         }
     });
@@ -226,7 +226,7 @@ function messageEventListeners() {
     // "Add Message" context menu item enters message-add mode
     document.getElementById('addMessage').addEventListener('click', () => {
         isAddMessageActive = true;
-        hideIndicatorBox();
+        hideIndicatorCircle();
         document.getElementById('sequence-menu').style.display = 'none';
     });
 
