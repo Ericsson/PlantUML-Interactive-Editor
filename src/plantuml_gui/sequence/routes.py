@@ -54,10 +54,11 @@ def addmessage():
     message = data["message"]
     firstcoordinates = data["firstcoordinates"]
     secondcoordinates = data["secondcoordinates"]
+    arrow_type = data.get("arrowtype", "->")
     return jsonify(
         {
             "plantuml": add_message(
-                puml, svg, message, firstcoordinates, secondcoordinates
+                puml, svg, message, firstcoordinates, secondcoordinates, arrow_type
             )
         }
     )

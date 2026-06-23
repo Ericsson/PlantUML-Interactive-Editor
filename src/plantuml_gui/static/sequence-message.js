@@ -3,6 +3,7 @@ let isAddMessageActive = false;
 let firstClickCoordinates = null;
 let secondClickCoordinates = null;
 let messageOrigin = null;
+let messageArrowType = '->';
 
 // Reusable SVG overlay elements (created once, moved on each frame)
 let indicatorCircle = null;
@@ -220,8 +221,16 @@ function setupLifelineInteraction(svgContainer) {
 // --- Event listener registration ---
 
 function messageEventListeners() {
-    // "Add Message" context menu item enters message-add mode
-    document.getElementById('addMessage').addEventListener('click', () => {
+    // "Add Message" context menu items enter message-add mode
+    document.getElementById('addMessageSolid').addEventListener('click', () => {
+        messageArrowType = '->';
+        isAddMessageActive = true;
+        hideIndicatorCircle();
+        document.getElementById('sequence-menu').style.display = 'none';
+    });
+
+    document.getElementById('addMessageDashed').addEventListener('click', () => {
+        messageArrowType = '-->';
         isAddMessageActive = true;
         hideIndicatorCircle();
         document.getElementById('sequence-menu').style.display = 'none';
@@ -247,6 +256,7 @@ function messageEventListeners() {
                     'svgelement': lastclickedsvgelement.outerHTML,
                     'firstcoordinates': firstClickCoordinates,
                     'secondcoordinates': secondClickCoordinates,
+                    'arrowtype': messageArrowType,
                 }),
             });
             const data = await response.json();

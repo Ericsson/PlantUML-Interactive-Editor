@@ -66,6 +66,7 @@ def add_message(
     message: str,
     firstcoordinates: List[int],
     secondcoordinates: List[int],
+    arrow_type: str = "->",
 ):
     """Add a message between two participants at the correct y-position."""
     first_x, first_y = firstcoordinates
@@ -77,5 +78,5 @@ def add_message(
 
     lines = puml.splitlines()
     insert_at = _find_insertion_index(diagram.messages, first_y, lines)
-    lines.insert(insert_at, f"{sender.name} -> {reciever.name}: {message}")
+    lines.insert(insert_at, f"{sender.name} {arrow_type} {reciever.name}: {message}")
     return "\n".join(lines)
