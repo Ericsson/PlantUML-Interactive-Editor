@@ -40,7 +40,8 @@
 │   └── static/             # Frontend assets
 │       ├── script.js       # Main activity diagram JS
 │       ├── activity.js     # Activity-specific interactions
-│       ├── sequence.js     # Sequence diagram support (WIP)
+│       ├── sequence-message.js  # Sequence add-message interaction (hover, ghost arrow, modal)
+│       ├── sequence-operations.js # Sequence participant operations and orchestration
 │       ├── mode-plantuml.js # Ace editor PlantUML mode
 │       ├── styles.css      # Main stylesheet (imports css/ modules)
 │       └── css/            # Modular CSS files
