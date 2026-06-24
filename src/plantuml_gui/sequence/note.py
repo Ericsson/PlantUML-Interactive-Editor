@@ -29,7 +29,7 @@ from pyquery import PyQuery as Pq
 from .classes import Diagram, Message
 
 
-def _extract_note_positions(svg: str, puml: str) -> List[tuple[float, int]]:
+def extract_note_positions(svg: str, puml: str) -> List[tuple[float, int]]:
     """Extract (cy, line_index) for each note from SVG path data."""
     d = Pq(svg)
     paths = list(d("path").items())
@@ -74,7 +74,7 @@ def _find_insertion_index(
     elements: List[tuple[float, int]] = []
     for msg in messages:
         elements.append((msg.cy, msg.index))
-    elements.extend(_extract_note_positions(svg, puml))
+    elements.extend(extract_note_positions(svg, puml))
     elements.sort(key=lambda x: x[0])
 
     for cy, line_index in elements:

@@ -26,31 +26,8 @@ from typing import List
 
 from pyquery import PyQuery as Pq
 
-from .classes import Diagram, Message, Participant
-from .note import _extract_note_positions
-
-
-def _find_insertion_index(
-    messages: List[Message], svg: str, puml: str, y: float, lines: List[str]
-) -> int:
-    """Find the line index to insert a new message based on y-coordinate.
-
-    Considers both messages and existing notes ordered by their SVG Y-position.
-    """
-    elements: List[tuple[float, int]] = []
-    for msg in messages:
-        elements.append((msg.cy, msg.index))
-    elements.extend(_extract_note_positions(svg, puml))
-    elements.sort(key=lambda x: x[0])
-
-    for cy, line_index in elements:
-        if cy > y:
-            return line_index
-
-    for i in range(len(lines) - 1, -1, -1):
-        if lines[i].strip() == "@enduml":
-            return i
-    return len(lines)
+from .classes import Diagram, Participant
+from .note import _find_insertion_index
 
 
 def _find_closest_participant(
