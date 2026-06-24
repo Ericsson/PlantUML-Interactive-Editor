@@ -27,19 +27,26 @@ from typing import List
 from pyquery import PyQuery as Pq
 
 from .classes import Diagram, Message, Participant
+from .note import _extract_note_positions
 
 
-def _find_insertion_index(messages: List[Message], y: float, lines: List[str]) -> int:
+def _find_insertion_index(
+    messages: List[Message], svg: str, puml: str, y: float, lines: List[str]
+) -> int:
     """Find the line index to insert a new message based on y-coordinate.
 
-    Returns the line index where the new message should be inserted:
-    - Before the first message whose cy > y
-    - If y is below all messages, returns the line before @enduml
+    Considers both messages and existing notes ordered by their SVG Y-position.
     """
+    elements: List[tuple[float, int]] = []
     for msg in messages:
-        if msg.cy > y:
-            return msg.index
-    # After all messages: insert before @enduml
+        elements.append((msg.cy, msg.index))
+    elements.extend(_extract_note_positions(svg, puml))
+    elements.sort(key=lambda x: x[0])
+
+    for cy, line_index in elements:
+        if cy > y:
+            return line_index
+
     for i in range(len(lines) - 1, -1, -1):
         if lines[i].strip() == "@enduml":
             return i
@@ -79,7 +86,7 @@ def add_message(
     reciever = _find_closest_participant(diagram.participants, second_x)
 
     lines = puml.splitlines()
-    insert_at = _find_insertion_index(diagram.messages, first_y, lines)
+    insert_at = _find_insertion_index(diagram.messages, svg, puml, first_y, lines)
     lines.insert(insert_at, f"{sender.name} {arrow_type} {reciever.name}: {message}")
     return "\n".join(lines)
 
