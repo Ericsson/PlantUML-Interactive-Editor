@@ -35,12 +35,14 @@ def _extract_note_positions(svg: str, puml: str) -> List[tuple[float, int]]:
     paths = list(d("path").items())
     positions = []
     note_count = 0
+    i = 0
 
-    for i, path in enumerate(paths):
+    while i < len(paths):
+        path = paths[i]
         if path.attr("fill") != "#FEFFDD":
+            i += 1
             continue
         if i + 1 < len(paths) and paths[i + 1].attr("fill") == "#FEFFDD":
-            # Extract Y from path d attribute: "M5,80.4297 L..."
             d_attr = path.attr("d") or ""
             parts = d_attr.split(",")
             if len(parts) >= 2:
@@ -54,6 +56,9 @@ def _extract_note_positions(svg: str, puml: str) -> List[tuple[float, int]]:
             note_count += 1
             line_index = _find_note_line_index(puml, note_count)
             positions.append((cy, line_index))
+            i += 2  # skip the fold corner path
+        else:
+            i += 1
 
     return positions
 
