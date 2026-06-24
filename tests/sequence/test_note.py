@@ -26,8 +26,15 @@
 
 import re
 
-from plantuml_gui.sequence.note import add_note
+from plantuml_gui.sequence.note import (
+    add_note,
+    delete_note,
+    edit_note,
+    get_note_text,
+    index_of_clicked_note,
+)
 from plantuml_gui.shared.render import _create_svg_from_uml
+from pyquery import PyQuery as Pq
 
 
 def extract_g_inner(svg_string):
@@ -35,6 +42,21 @@ def extract_g_inner(svg_string):
     match = re.search(r"<g>(.*?)</g>", svg_string, re.DOTALL)
     if match:
         return match.group(1)
+    return None
+
+
+def extract_note_path(svg_string, note_index=0):
+    """Extract the outerHTML of the nth note body path from SVG."""
+    d = Pq(svg_string)
+    paths = list(d("path").items())
+    count = 0
+    for i, path in enumerate(paths):
+        if path.attr("fill") != "#FEFFDD":
+            continue
+        if i + 1 < len(paths) and paths[i + 1].attr("fill") == "#FEFFDD":
+            if count == note_index:
+                return str(path)
+            count += 1
     return None
 
 
@@ -98,6 +120,72 @@ class TestAddNote:
         svg = extract_g_inner(_create_svg_from_uml(puml))
         result = add_note(puml, svg, "Alice", "over", "Solo note", 50.0)
         expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : Solo note\n@enduml"
+        assert result == expected
+
+
+class TestIndexOfClickedNote:
+    def test_click_first_note(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\nnote over Alice : My note\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 0)
+        assert svgelement is not None
+        assert index_of_clicked_note(svg, svgelement) == 1
+
+    def test_click_second_note(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\nnote over Alice : First\nnote over Bob : Second\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 1)
+        assert svgelement is not None
+        assert index_of_clicked_note(svg, svgelement) == 2
+
+
+class TestGetNoteText:
+    def test_get_note_text(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : My note\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 0)
+        assert get_note_text(puml, svg, svgelement) == "My note"
+
+    def test_get_second_note_text(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : First\nnote over Bob : Second\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 1)
+        assert get_note_text(puml, svg, svgelement) == "Second"
+
+
+class TestEditNote:
+    def test_edit_note(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : Old text\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 0)
+        result = edit_note(puml, svg, svgelement, "New text")
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : New text\n@enduml"
+        assert result == expected
+
+    def test_edit_second_note(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : First\nnote over Bob : Second\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 1)
+        result = edit_note(puml, svg, svgelement, "Updated")
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : First\nnote over Bob : Updated\n@enduml"
+        assert result == expected
+
+
+class TestDeleteNote:
+    def test_delete_note(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : My note\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 0)
+        result = delete_note(puml, svg, svgelement)
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\n@enduml"
+        assert result == expected
+
+    def test_delete_second_note(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : First\nnote over Bob : Second\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 1)
+        result = delete_note(puml, svg, svgelement)
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : First\n@enduml"
         assert result == expected
 
 

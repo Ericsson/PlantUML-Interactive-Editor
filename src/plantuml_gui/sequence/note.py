@@ -24,6 +24,8 @@
 
 from typing import List
 
+from pyquery import PyQuery as Pq
+
 from .classes import Diagram, Message
 
 
@@ -74,4 +76,73 @@ def add_note(
     insert_at = _find_insertion_index(diagram.messages, y_position, lines)
     note_line = _build_note_line(participant, placement, text, second_participant)
     lines.insert(insert_at, note_line)
+    return "\n".join(lines)
+
+
+def _find_note_line_index(puml: str, note_index: int) -> int:
+    """Find the puml line index of the nth note (1-based)."""
+    lines = puml.splitlines()
+    count = 0
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("note "):
+            count += 1
+            if count == note_index:
+                return i
+    return -1
+
+
+def index_of_clicked_note(svg: str, svgelement: str) -> int:
+    """Find the 1-based index of the clicked note in the SVG.
+
+    Notes are rendered as path elements with fill #FEFFDD. Each note
+    has two paths (body + fold corner). We count the body paths (those
+    followed by another #FEFFDD path) and match by the d attribute.
+    """
+    clicked = Pq(svgelement)
+    clicked_d = clicked.attr("d")
+
+    d = Pq(svg)
+    paths = list(d("path").items())
+    count = 0
+
+    for i, path in enumerate(paths):
+        if path.attr("fill") != "#FEFFDD":
+            continue
+        # A note body path is followed by the fold corner path
+        if i + 1 < len(paths) and paths[i + 1].attr("fill") == "#FEFFDD":
+            count += 1
+            if path.attr("d") == clicked_d:
+                return count
+
+    return -1
+
+
+def get_note_text(puml: str, svg: str, svgelement: str) -> str:
+    """Get the text of the clicked note."""
+    idx = index_of_clicked_note(svg, svgelement)
+    line_index = _find_note_line_index(puml, idx)
+    line = puml.splitlines()[line_index]
+    colon_pos = line.find(": ")
+    return line[colon_pos + 2 :] if colon_pos != -1 else ""
+
+
+def edit_note(puml: str, svg: str, svgelement: str, text: str) -> str:
+    """Edit the text of the clicked note."""
+    idx = index_of_clicked_note(svg, svgelement)
+    line_index = _find_note_line_index(puml, idx)
+    lines = puml.splitlines()
+    line = lines[line_index]
+    colon_pos = line.find(": ")
+    if colon_pos != -1:
+        lines[line_index] = line[: colon_pos + 2] + text
+    return "\n".join(lines)
+
+
+def delete_note(puml: str, svg: str, svgelement: str) -> str:
+    """Delete the clicked note."""
+    idx = index_of_clicked_note(svg, svgelement)
+    line_index = _find_note_line_index(puml, idx)
+    lines = puml.splitlines()
+    del lines[line_index]
     return "\n".join(lines)
