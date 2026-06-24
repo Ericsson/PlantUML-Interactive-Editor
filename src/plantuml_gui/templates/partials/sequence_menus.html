@@ -54,6 +54,47 @@
 <div class="dropdown-menu" id="sequence-menu">
   <li><a class="dropdown-item" href="#" id="addMessageSolid">Add Message <span style="display:inline-block;width:20px;border-top:2px solid #333;vertical-align:middle;margin-left:4px"></span></a></li>
   <li><a class="dropdown-item" href="#" id="addMessageDashed">Add Message <span style="display:inline-block;width:20px;border-top:2px dashed #333;vertical-align:middle;margin-left:4px"></span></a></li>
+  <li><hr class="dropdown-divider"></li>
+  <li><a class="dropdown-item" href="#" id="seq-addNote">Add Note &#9998;</a></li>
+</div>
+
+<div class="dropdown-menu" id="seq-note-placement-menu">
+  <li><a class="dropdown-item" href="#" data-placement="over">Over this participant</a></li>
+  <li><a class="dropdown-item" href="#" data-placement="left">Left of this participant</a></li>
+  <li><a class="dropdown-item" href="#" data-placement="right">Right of this participant</a></li>
+  <li><a class="dropdown-item" href="#" data-placement="spanning">Spanning participants</a></li>
+</div>
+
+<div class="dropdown-menu" id="seq-note-menu">
+  <li><a class="dropdown-item" href="#" id="seq-editNote">Edit Note</a></li>
+  <li><hr class="dropdown-divider"></li>
+  <li><a class="dropdown-item" href="#" id="seq-deleteNote">Delete Note</a></li>
+</div>
+
+<div class="modal fade" id="seq-note-modalForm" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+      <div class="modal-content shadow">
+          <div class="modal-header">
+              <h5 class="modal-title">Add Note</h5>
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                  <span aria-hidden="true">&times;</span>
+              </button>
+          </div>
+          <div class="modal-body">
+              <div class="form-group">
+                  <label for="seq-note-text" class="col-form-label">Note text:</label>
+                  <textarea class="form-control" id="seq-note-text"></textarea>
+              </div>
+              <div class="form-group" id="seq-note-second-participant-group" style="display:none">
+                  <label for="seq-note-second-participant" class="col-form-label">Second participant:</label>
+                  <select class="form-control" id="seq-note-second-participant"></select>
+              </div>
+          </div>
+          <div class="modal-footer">
+              <button id="seq-submit-note" type="button" class="btn btn-primary" onclick="submitNote()">Submit</button>
+          </div>
+      </div>
+  </div>
 </div>
 
 <div class="dropdown-menu" id="participant-menu">

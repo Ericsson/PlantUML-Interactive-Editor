@@ -47,12 +47,12 @@ def generate_file_hash(file_path):
         return hashlib.sha256(file_content).hexdigest()[:8]
 
 
-SCRIPT_PATH = os.path.join(shared_bp.static_folder, "script.js")
+SCRIPT_PATH = os.path.join(shared_bp.static_folder, "sequence-operations.js")
 
 
 @shared_bp.route("/")
 def home():
-    # generate hash for script.js
+    # generate hash for cache busting
     file_hash = generate_file_hash(SCRIPT_PATH)
     # pass hash to the template
     return render_template(
