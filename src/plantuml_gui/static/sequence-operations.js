@@ -161,6 +161,8 @@ function participantEventListeners() {
 function setupParticipantHandlers(svgelements, svg, element) {
     for (let index = 0; index < svgelements.length; index++) {
         let svgelement = svgelements[index];
+        // Disable pointer events only on participant text (font-size 14) so clicks
+        // pass through to the rect beneath. Message text (font-size 13) stays clickable.
         if (svgelement.tagName.toLowerCase() === 'text' &&
             svgelement.getAttribute('font-size') === '14') {
             svgelement.style.pointerEvents = 'none';
