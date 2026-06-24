@@ -17,7 +17,8 @@
 │   │   ├── classes.py      # Diagram, Participant, Message data classes
 │   │   ├── participant.py  # Participant logic (add, rename, delete, positions)
 │   │   ├── message.py      # Message logic (add message, y-based insertion)
-│   │   └── note.py         # Note logic (add, edit, delete notes)
+│   │   ├── note.py         # Note logic (add, edit, delete notes)
+│   │   └── util.py         # Shared utilities (insertion index, note position extraction)
 │   ├── activity/           # Activity diagram package
 │   │   ├── routes.py       # All activity routes (~64 endpoints)
 │   │   ├── classes.py      # RectElement, PolyElement, Ellipse, SvgChunk, TextElement

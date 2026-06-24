@@ -127,7 +127,7 @@ class TestAddNote:
         puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\nnote over Alice : Existing\nBob -> Alice: Reply\n@enduml"
         svg = extract_g_inner(_create_svg_from_uml(puml))
         # Use a y between the existing note and the second message
-        from plantuml_gui.sequence.note import extract_note_positions
+        from plantuml_gui.sequence.util import extract_note_positions
 
         note_positions = extract_note_positions(svg, puml)
         from plantuml_gui.sequence.classes import Diagram

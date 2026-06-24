@@ -27,7 +27,7 @@ from typing import List
 from pyquery import PyQuery as Pq
 
 from .classes import Diagram, Participant
-from .note import _find_insertion_index
+from .util import find_insertion_index
 
 
 def _find_closest_participant(
@@ -63,7 +63,7 @@ def add_message(
     reciever = _find_closest_participant(diagram.participants, second_x)
 
     lines = puml.splitlines()
-    insert_at = _find_insertion_index(diagram.messages, svg, puml, first_y, lines)
+    insert_at = find_insertion_index(diagram.messages, svg, puml, first_y, lines)
     lines.insert(insert_at, f"{sender.name} {arrow_type} {reciever.name}: {message}")
     return "\n".join(lines)
 
