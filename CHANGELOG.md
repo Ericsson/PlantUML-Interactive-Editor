@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### External
 
+- Add note to sequence diagram: right-click lifeline blue circle → Add Note sub-menu with placement options (over, left of, right of, spanning participants)
 - Edit message text: right-click a message arrow/line to open Edit Message dialog
 - Delete message: right-click a message arrow/line to delete it
 - Visual hover-based "Add Message" interaction for sequence diagrams: hover near a participant lifeline to see an indicator box, right-click for "Add Message" context menu, then use ghost arrow preview to select destination
