@@ -249,3 +249,51 @@ class TestAddNoteRoute:
                 content_type="application/json",
             )
             assert response.get_json()["plantuml"] == puml
+
+
+class TestNoteRoutes:
+    def test_get_note_text_route(self, client):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : My note\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 0)
+        test_data = {"plantuml": puml, "svg": svg, "svgelement": svgelement}
+        with client:
+            response = client.post(
+                "/getSeqNoteText",
+                data=__import__("json").dumps(test_data),
+                content_type="application/json",
+            )
+            assert response.get_json()["text"] == "My note"
+
+    def test_edit_note_route(self, client):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : Old text\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 0)
+        test_data = {
+            "plantuml": puml,
+            "svg": svg,
+            "svgelement": svgelement,
+            "text": "New text",
+        }
+        with client:
+            response = client.post(
+                "/editSeqNote",
+                data=__import__("json").dumps(test_data),
+                content_type="application/json",
+            )
+            expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : New text\n@enduml"
+            assert response.get_json()["plantuml"] == expected
+
+    def test_delete_note_route(self, client):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : My note\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 0)
+        test_data = {"plantuml": puml, "svg": svg, "svgelement": svgelement}
+        with client:
+            response = client.post(
+                "/deleteSeqNote",
+                data=__import__("json").dumps(test_data),
+                content_type="application/json",
+            )
+            expected = "@startuml\nparticipant Alice\nparticipant Bob\n@enduml"
+            assert response.get_json()["plantuml"] == expected
