@@ -29,11 +29,54 @@ from pyquery import PyQuery as Pq
 from .classes import Diagram, Message
 
 
-def _find_insertion_index(messages: List[Message], y: float, lines: List[str]) -> int:
-    """Find the line index to insert a new note based on y-coordinate."""
+def _extract_note_positions(svg: str, puml: str) -> List[tuple[float, int]]:
+    """Extract (cy, line_index) for each note from SVG path data."""
+    d = Pq(svg)
+    paths = list(d("path").items())
+    positions = []
+    note_count = 0
+
+    for i, path in enumerate(paths):
+        if path.attr("fill") != "#FEFFDD":
+            continue
+        if i + 1 < len(paths) and paths[i + 1].attr("fill") == "#FEFFDD":
+            # Extract Y from path d attribute: "M5,80.4297 L..."
+            d_attr = path.attr("d") or ""
+            parts = d_attr.split(",")
+            if len(parts) >= 2:
+                y_str = parts[1].split(" ")[0]
+                try:
+                    cy = float(y_str)
+                except ValueError:
+                    cy = 0.0
+            else:
+                cy = 0.0
+            note_count += 1
+            line_index = _find_note_line_index(puml, note_count)
+            positions.append((cy, line_index))
+
+    return positions
+
+
+def _find_insertion_index(
+    messages: List[Message], svg: str, puml: str, y: float, lines: List[str]
+) -> int:
+    """Find the line index to insert a new element based on y-coordinate.
+
+    Considers both messages and existing notes ordered by their SVG Y-position.
+    """
+    # Collect all elements with (cy, line_index)
+    elements: List[tuple[float, int]] = []
     for msg in messages:
-        if msg.cy > y:
-            return msg.index
+        elements.append((msg.cy, msg.index))
+    elements.extend(_extract_note_positions(svg, puml))
+    elements.sort(key=lambda x: x[0])
+
+    for cy, line_index in elements:
+        if cy > y:
+            return line_index
+
+    # After all elements: insert before @enduml
     for i in range(len(lines) - 1, -1, -1):
         if lines[i].strip() == "@enduml":
             return i
@@ -73,7 +116,7 @@ def add_note(
 
     diagram = Diagram.from_svg(svg, puml)
     lines = puml.splitlines()
-    insert_at = _find_insertion_index(diagram.messages, y_position, lines)
+    insert_at = _find_insertion_index(diagram.messages, svg, puml, y_position, lines)
     note_line = _build_note_line(participant, placement, text, second_participant)
     lines.insert(insert_at, note_line)
     return "\n".join(lines)

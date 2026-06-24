@@ -115,6 +115,30 @@ class TestAddNote:
         result = add_note(puml, svg, "Alice", "over", "", 0.0)
         assert result == puml
 
+    def test_add_note_above_existing_note(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\nnote over Alice : Existing\nBob -> Alice: Reply\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        # Use y=0 to place above everything
+        result = add_note(puml, svg, "Alice", "over", "Above", 0.0)
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : Above\nAlice -> Bob: Hello\nnote over Alice : Existing\nBob -> Alice: Reply\n@enduml"
+        assert result == expected
+
+    def test_add_note_below_existing_note(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\nnote over Alice : Existing\nBob -> Alice: Reply\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        # Use a y between the existing note and the second message
+        from plantuml_gui.sequence.note import _extract_note_positions
+
+        note_positions = _extract_note_positions(svg, puml)
+        from plantuml_gui.sequence.classes import Diagram
+
+        diagram = Diagram.from_svg(svg, puml)
+        # y between existing note and Reply message
+        y_between = (note_positions[0][0] + diagram.messages[1].cy) / 2
+        result = add_note(puml, svg, "Bob", "over", "Between", y_between)
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\nnote over Alice : Existing\nnote over Bob : Between\nBob -> Alice: Reply\n@enduml"
+        assert result == expected
+
     def test_add_note_no_messages(self):
         puml = "@startuml\nparticipant Alice\nparticipant Bob\n@enduml"
         svg = extract_g_inner(_create_svg_from_uml(puml))
