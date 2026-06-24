@@ -146,6 +146,39 @@ class TestAddNote:
         expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : Solo note\n@enduml"
         assert result == expected
 
+    def test_add_note_left_attached_to_message(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\nBob -> Alice: Reply\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        from plantuml_gui.sequence.classes import Diagram
+
+        diagram = Diagram.from_svg(svg, puml)
+        # Use the exact cy of the first message
+        result = add_note(
+            puml, svg, "Alice", "left", "Attached", diagram.messages[0].cy
+        )
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\nnote left : Attached\nBob -> Alice: Reply\n@enduml"
+        assert result == expected
+
+    def test_add_note_right_attached_to_message(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        from plantuml_gui.sequence.classes import Diagram
+
+        diagram = Diagram.from_svg(svg, puml)
+        result = add_note(
+            puml, svg, "Bob", "right", "Side note", diagram.messages[0].cy
+        )
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\nnote right : Side note\n@enduml"
+        assert result == expected
+
+    def test_add_note_left_far_from_message_uses_participant(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        # y=0 is far from any message
+        result = add_note(puml, svg, "Alice", "left", "Far note", 0.0)
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote left of Alice : Far note\nAlice -> Bob: Hello\n@enduml"
+        assert result == expected
+
 
 class TestIndexOfClickedNote:
     def test_click_first_note(self):

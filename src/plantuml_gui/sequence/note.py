@@ -88,6 +88,21 @@ def _find_insertion_index(
     return len(lines)
 
 
+MESSAGE_NOTE_TOLERANCE = 10.0
+
+
+def _find_nearest_message(messages: List[Message], y: float) -> Message | None:
+    """Find the message closest to y if within tolerance."""
+    closest = None
+    min_dist = MESSAGE_NOTE_TOLERANCE
+    for msg in messages:
+        dist = abs(msg.cy - y)
+        if dist < min_dist:
+            min_dist = dist
+            closest = msg
+    return closest
+
+
 def _build_note_line(
     participant: str,
     placement: str,
@@ -115,12 +130,26 @@ def add_note(
     y_position: float,
     second_participant: str | None = None,
 ) -> str:
-    """Add a note at the correct Y-position in the sequence diagram."""
+    """Add a note at the correct Y-position in the sequence diagram.
+
+    If placement is 'left' or 'right' and the y_position is close to an
+    existing message, uses message-attached syntax (note left/right : text)
+    and inserts immediately after that message.
+    """
     if not text:
         return puml
 
     diagram = Diagram.from_svg(svg, puml)
     lines = puml.splitlines()
+
+    # Check if we should attach to a nearby message
+    if placement in ("left", "right"):
+        nearest = _find_nearest_message(diagram.messages, y_position)
+        if nearest:
+            note_line = f"note {placement} : {text}"
+            lines.insert(nearest.index + 1, note_line)
+            return "\n".join(lines)
+
     insert_at = _find_insertion_index(diagram.messages, svg, puml, y_position, lines)
     note_line = _build_note_line(participant, placement, text, second_participant)
     lines.insert(insert_at, note_line)
