@@ -500,36 +500,17 @@ function noteOperationEventListeners() {
 
 // Global function called by onclick on the submit-note button
 async function submitNote() {
-    var textarea = document.getElementById('seq-note-text');
-    console.log('textarea element:', textarea);
-    console.log('textarea.value:', JSON.stringify(textarea.value));
-    console.log('textarea.textContent:', JSON.stringify(textarea.textContent));
-    console.log('textarea.innerHTML:', JSON.stringify(textarea.innerHTML));
-    console.log('all textareas on page:', document.querySelectorAll('textarea').length);
-    document.querySelectorAll('textarea').forEach(function(t) {
-        console.log('  textarea id=' + t.id + ' value=' + JSON.stringify(t.value));
-    });
+    var text = document.getElementById('seq-note-text').value;
+    if (!text) return;
+
     var element = document.getElementById('colb');
     var svg = element.querySelector('g');
-    var text = document.getElementById('seq-note-text').value;
-    console.log('note text:', text);
-    console.log('noteEditMode:', noteEditMode);
-    console.log('messageOrigin:', messageOrigin);
-    console.log('notePlacement:', notePlacement);
-    console.log('firstClickCoordinates:', firstClickCoordinates);
-    if (!text) {
-        console.log('text is empty, returning');
-        return;
-    }
 
     try {
         var plantuml = trimlines(editor.session.getValue());
-        console.log('plantuml length:', plantuml.length);
-        console.log('svg innerHTML length:', svg.innerHTML.length);
         var response;
         if (noteEditMode) {
             noteEditMode = false;
-            console.log('editing note...');
             response = await fetch("editSeqNote", {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -552,21 +533,16 @@ async function submitNote() {
             if (notePlacement === 'spanning') {
                 body.secondParticipant = document.getElementById('seq-note-second-participant').value;
             }
-            console.log('adding note, body:', JSON.stringify(body).substring(0, 200));
             response = await fetch("addNote", {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(body)
             });
         }
-        console.log('response status:', response.status);
         var data = await response.json();
-        console.log('response data plantuml:', data.plantuml.substring(0, 100));
         $('#seq-note-modalForm').modal('hide');
         setPuml(data.plantuml);
-        console.log('setPuml done');
     } catch (error) {
-        console.error('submitNote error:', error);
         displayErrorMessage(`Error with fetch API: ${error.message}`, error);
     }
 }
