@@ -25,6 +25,7 @@
 from flask import Blueprint, jsonify, request
 
 from .message import add_message, delete_message, edit_message_text, get_message_text
+from .note import add_note
 from .participant import (
     add_participant,
     delete_participant,
@@ -126,3 +127,22 @@ def deletemessage():
     svg = data["svg"]
     svgelement = data["svgelement"]
     return jsonify({"plantuml": delete_message(puml, svg, svgelement)})
+
+
+@sequence_bp.route("/addNote", methods=["POST"])
+def addnote():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    participant = data["participant"]
+    placement = data["placement"]
+    text = data["text"]
+    y_position = data["yPosition"]
+    second_participant = data.get("secondParticipant")
+    return jsonify(
+        {
+            "plantuml": add_note(
+                puml, svg, participant, placement, text, y_position, second_participant
+            )
+        }
+    )

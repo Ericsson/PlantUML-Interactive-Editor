@@ -125,3 +125,7 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /getMessageText** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"text": message_label}`.
 - **POST /editMessageText** — Input: `plantuml`, `svg`, `svgelement`, `text`. Returns: JSON `{"plantuml": modified_puml}`.
 - **POST /deleteMessage** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"plantuml": modified_puml}`.
+
+## Sequence Diagram (Notes)
+
+- **POST /addNote** — Input: `plantuml`, `svg`, `participant`, `placement` ('over'/'left'/'right'/'spanning'), `text`, `yPosition`, optional `secondParticipant`. Returns: JSON `{"plantuml": modified_puml}`. Y-coordinate determines insertion position.

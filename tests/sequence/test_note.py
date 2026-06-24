@@ -99,3 +99,65 @@ class TestAddNote:
         result = add_note(puml, svg, "Alice", "over", "Solo note", 50.0)
         expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : Solo note\n@enduml"
         assert result == expected
+
+
+class TestAddNoteRoute:
+    def test_add_note_over_route(self, client):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        test_data = {
+            "plantuml": puml,
+            "svg": svg,
+            "participant": "Alice",
+            "placement": "over",
+            "text": "My note",
+            "yPosition": 0.0,
+        }
+        with client:
+            response = client.post(
+                "/addNote",
+                data=__import__("json").dumps(test_data),
+                content_type="application/json",
+            )
+            expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : My note\nAlice -> Bob: Hello\n@enduml"
+            assert response.get_json()["plantuml"] == expected
+
+    def test_add_note_spanning_route(self, client):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        test_data = {
+            "plantuml": puml,
+            "svg": svg,
+            "participant": "Alice",
+            "placement": "spanning",
+            "text": "Span note",
+            "yPosition": 0.0,
+            "secondParticipant": "Bob",
+        }
+        with client:
+            response = client.post(
+                "/addNote",
+                data=__import__("json").dumps(test_data),
+                content_type="application/json",
+            )
+            expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice, Bob : Span note\nAlice -> Bob: Hello\n@enduml"
+            assert response.get_json()["plantuml"] == expected
+
+    def test_add_note_empty_text_route(self, client):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        test_data = {
+            "plantuml": puml,
+            "svg": svg,
+            "participant": "Alice",
+            "placement": "over",
+            "text": "",
+            "yPosition": 0.0,
+        }
+        with client:
+            response = client.post(
+                "/addNote",
+                data=__import__("json").dumps(test_data),
+                content_type="application/json",
+            )
+            assert response.get_json()["plantuml"] == puml
