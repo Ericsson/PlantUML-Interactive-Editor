@@ -364,6 +364,79 @@ participant Alice
 @enduml"""
             assert response.get_json()["plantuml"] == expected_puml
 
+    def test_delete_participant_with_note_over(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hello
+note over Alice : think
+@enduml""",
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        test_data["svgelement"] = extract_participant_rect(test_data["svg"], 0)
+        with client:
+            response = client.post(
+                "/deleteParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant Bob
+@enduml"""
+            assert response.get_json()["plantuml"] == expected_puml
+
+    def test_delete_participant_with_note_left(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hello
+note left of Alice : think
+@enduml""",
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        test_data["svgelement"] = extract_participant_rect(test_data["svg"], 0)
+        with client:
+            response = client.post(
+                "/deleteParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant Bob
+@enduml"""
+            assert response.get_json()["plantuml"] == expected_puml
+
+    def test_delete_participant_keeps_unrelated_note(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hello
+note over Bob : think
+@enduml""",
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        test_data["svgelement"] = extract_participant_rect(test_data["svg"], 0)
+        with client:
+            response = client.post(
+                "/deleteParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant Bob
+note over Bob : think
+@enduml"""
+            assert response.get_json()["plantuml"] == expected_puml
+
 
 class TestAddMessageYBasedInsertion:
     """Tests for y-based message insertion positioning."""

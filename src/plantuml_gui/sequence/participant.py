@@ -98,7 +98,7 @@ def edit_participant_name(puml: str, svg: str, newname: str, svgelement: str) ->
 
 
 def delete_participant(puml: str, svg: str, svgelement: str) -> str:
-    """Delete a participant and all messages referencing it (cascade)."""
+    """Delete a participant and all messages and notes referencing it (cascade)."""
     diagram = Diagram.from_svg(svg, puml)
     count = index_of_clicked_participant(svg, svgelement)
     participant = diagram.participants[count - 1]
@@ -108,6 +108,10 @@ def delete_participant(puml: str, svg: str, svgelement: str) -> str:
     for msg in diagram.messages:
         if msg.from_participant == participant or msg.to_participant == participant:
             lines_to_remove.add(msg.index)
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("note ") and participant.name in stripped:
+            lines_to_remove.add(i)
 
     lines = [line for i, line in enumerate(lines) if i not in lines_to_remove]
     return "\n".join(lines)

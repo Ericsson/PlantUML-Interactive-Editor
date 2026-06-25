@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### External
 
+- Deleting a participant now also deletes any notes referencing that participant
 - Add note to sequence diagram: right-click lifeline blue circle → Add Note sub-menu with placement options (over, left of, right of, spanning participants)
 - Edit message text: right-click a message arrow/line to open Edit Message dialog
 - Delete message: right-click a message arrow/line to delete it
