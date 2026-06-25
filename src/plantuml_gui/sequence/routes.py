@@ -138,11 +138,19 @@ def addnote():
     placement = data["placement"]
     text = data["text"]
     y_position = data["yPosition"]
+    x_position = data.get("xPosition")
     second_participant = data.get("secondParticipant")
     return jsonify(
         {
             "plantuml": add_note(
-                puml, svg, participant, placement, text, y_position, second_participant
+                puml,
+                svg,
+                participant,
+                placement,
+                text,
+                y_position,
+                second_participant,
+                x_position,
             )
         }
     )

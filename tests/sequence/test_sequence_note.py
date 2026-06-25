@@ -179,6 +179,38 @@ class TestAddNote:
         expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote left of Alice : Far note\nAlice -> Bob: Hello\n@enduml"
         assert result == expected
 
+    def test_add_note_right_outside_message_span_uses_participant(self):
+        """Note right of Bob at same Y as Alice->Bob message but x outside message span
+        should use participant syntax, not message-attached syntax."""
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nparticipant Carol\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        from plantuml_gui.sequence.classes import Diagram
+
+        diagram = Diagram.from_svg(svg, puml)
+        msg_cy = diagram.messages[0].cy
+        # Carol's cx is to the right of the Alice->Bob message span
+        carol_cx = diagram.participants[2].cx
+        result = add_note(
+            puml, svg, "Carol", "right", "Carol note", msg_cy, x_position=carol_cx
+        )
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nparticipant Carol\nAlice -> Bob: Hello\nnote right of Carol : Carol note\n@enduml"
+        assert result == expected
+
+    def test_add_note_near_self_message_uses_participant(self):
+        """Note left/right near a self-message should use participant syntax, not message-attached."""
+        puml = "@startuml\nparticipant Alice\nAlice -> Alice: self\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        from plantuml_gui.sequence.classes import Diagram
+
+        diagram = Diagram.from_svg(svg, puml)
+        msg_cy = diagram.messages[0].cy
+        alice_cx = diagram.participants[0].cx
+        result = add_note(
+            puml, svg, "Alice", "right", "My note", msg_cy - 5, x_position=alice_cx
+        )
+        expected = "@startuml\nparticipant Alice\nnote right of Alice : My note\nAlice -> Alice: self\n@enduml"
+        assert result == expected
+
 
 class TestIndexOfClickedNote:
     def test_click_first_note(self):

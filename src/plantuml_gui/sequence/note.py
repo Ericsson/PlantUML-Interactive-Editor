@@ -32,15 +32,25 @@ from .util import _find_note_line_index, find_insertion_index
 MESSAGE_NOTE_TOLERANCE = 10.0
 
 
-def _find_nearest_message(messages: List[Message], y: float) -> Message | None:
-    """Find the message closest to y if within tolerance."""
+def _find_nearest_message(
+    messages: List[Message], y: float, x: float | None
+) -> Message | None:
+    """Find the message closest to y if within tolerance and x is within the message span."""
     closest = None
     min_dist = MESSAGE_NOTE_TOLERANCE
     for msg in messages:
+        if msg.from_participant == msg.to_participant:
+            continue  # self-messages have no horizontal span
         dist = abs(msg.cy - y)
-        if dist < min_dist:
-            min_dist = dist
-            closest = msg
+        if dist >= min_dist:
+            continue
+        if x is not None:
+            left_cx = min(msg.from_participant.cx, msg.to_participant.cx)
+            right_cx = max(msg.from_participant.cx, msg.to_participant.cx)
+            if not (left_cx <= x <= right_cx):
+                continue
+        min_dist = dist
+        closest = msg
     return closest
 
 
@@ -70,12 +80,14 @@ def add_note(
     text: str,
     y_position: float,
     second_participant: str | None = None,
+    x_position: float | None = None,
 ) -> str:
     """Add a note at the correct Y-position in the sequence diagram.
 
     If placement is 'left' or 'right' and the y_position is close to an
-    existing message, uses message-attached syntax (note left/right : text)
-    and inserts immediately after that message.
+    existing message, and x_position falls within the message's horizontal
+    span, uses message-attached syntax (note left/right : text) and inserts
+    immediately after that message.
     """
     if not text:
         return puml
@@ -85,7 +97,7 @@ def add_note(
 
     # Check if we should attach to a nearby message
     if placement in ("left", "right"):
-        nearest = _find_nearest_message(diagram.messages, y_position)
+        nearest = _find_nearest_message(diagram.messages, y_position, x_position)
         if nearest:
             note_line = f"note {placement} : {text}"
             lines.insert(nearest.index + 1, note_line)

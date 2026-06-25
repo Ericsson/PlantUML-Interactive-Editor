@@ -528,7 +528,8 @@ async function submitNote() {
                 participant: messageOrigin.name,
                 placement: notePlacement,
                 text: text,
-                yPosition: firstClickCoordinates[1]
+                yPosition: firstClickCoordinates[1],
+                xPosition: firstClickCoordinates[0]
             };
             if (notePlacement === 'spanning') {
                 body.secondParticipant = document.getElementById('seq-note-second-participant').value;
