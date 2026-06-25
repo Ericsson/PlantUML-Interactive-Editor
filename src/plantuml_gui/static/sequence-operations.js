@@ -161,7 +161,10 @@ function participantEventListeners() {
 function setupParticipantHandlers(svgelements, svg, element) {
     for (let index = 0; index < svgelements.length; index++) {
         let svgelement = svgelements[index];
-        if (svgelement.tagName.toLowerCase() === 'text') {
+        // Disable pointer events only on participant text (font-size 14) so clicks
+        // pass through to the rect beneath. Message text (font-size 13) stays clickable.
+        if (svgelement.tagName.toLowerCase() === 'text' &&
+            svgelement.getAttribute('font-size') === '14') {
             svgelement.style.pointerEvents = 'none';
         }
 
@@ -222,6 +225,7 @@ function setupParticipantHandlers(svgelements, svg, element) {
 function sequenceEventListeners() {
     participantEventListeners();
     messageEventListeners();
+    messageOperationEventListeners();
 }
 
 // Called on every render when diagram type is sequence
@@ -241,6 +245,7 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
         handleContextMenuBackground(svgContainer);
         setupLifelineInteraction(svgContainer);
         setupParticipantHandlers(svg.querySelectorAll('*'), svg, element);
+        setupMessageHandlers(svg.querySelectorAll('*'), svg);
 
         toggleLoadingOverlay();
     }).catch((error) => {
@@ -252,4 +257,102 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
 function checkIfParticipant(svgelements, index) {
     return (svgelements[index].tagName.toLowerCase() === 'rect') &&
         (svgelements[index].getAttribute('style') == "stroke:#181818;stroke-width:0.5;");
+}
+
+// Identifies message elements (polygons and lines with stroke-width:1.0, and message text)
+function checkIfMessageElement(svgelement) {
+    const tag = svgelement.tagName.toLowerCase();
+    const style = svgelement.getAttribute('style') || '';
+    if ((tag === 'polygon' || tag === 'line') && style.includes('stroke-width:1.0')) {
+        return true;
+    }
+    if (tag === 'text' && svgelement.getAttribute('font-size') === '13') {
+        return true;
+    }
+    return false;
+}
+
+// --- Message element handlers (hover, contextmenu) ---
+
+function setupMessageHandlers(svgelements, svg) {
+    for (let index = 0; index < svgelements.length; index++) {
+        let svgelement = svgelements[index];
+        if (!checkIfMessageElement(svgelement)) continue;
+
+        svgelement.addEventListener('mouseover', function() {
+            svgelement.style.fontWeight = 'bold';
+            svgelement.style.strokeWidth = '2.0';
+        });
+
+        svgelement.addEventListener('mouseout', function() {
+            svgelement.style.fontWeight = '';
+            svgelement.style.strokeWidth = '';
+        });
+
+        svgelement.addEventListener('contextmenu', function(e) {
+            lastclickedsvgelement = svgelement;
+            e.preventDefault();
+            e.stopPropagation();
+            var contextMenu = document.getElementById('message-menu');
+            contextMenu.style.display = 'block';
+            contextMenu.style.left = e.pageX + 'px';
+            contextMenu.style.top = e.pageY + 'px';
+        });
+    }
+}
+
+// --- Message operation event listeners (edit, delete) ---
+
+let messageEditMode = false;
+
+function messageOperationEventListeners() {
+    // "Edit Message" context menu item
+    document.getElementById('editMessage').addEventListener('click', async () => {
+        const element = document.getElementById('colb');
+        const svg = element.querySelector('g');
+        try {
+            const plantuml = trimlines(editor.session.getValue());
+            const response = await fetch("getMessageText", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    'plantuml': plantuml,
+                    'svg': svg.innerHTML,
+                    'svgelement': lastclickedsvgelement.outerHTML
+                })
+            });
+            const text = (await response.json()).text;
+            messageEditMode = true;
+            $('#participant-modalForm .modal-title').text('Edit Message');
+            $('#participant-message-text').val(text);
+            $('#participant-modalForm').modal('show');
+            $('#participant-modalForm').on('shown.bs.modal', function() {
+                $('#participant-message-text').trigger('focus');
+            });
+        } catch (error) {
+            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+        }
+    });
+
+    // "Delete Message" context menu item
+    document.getElementById('deleteMessage').addEventListener('click', async () => {
+        const element = document.getElementById('colb');
+        const svg = element.querySelector('g');
+        try {
+            const plantuml = trimlines(editor.session.getValue());
+            const response = await fetch("deleteMessage", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    'plantuml': plantuml,
+                    'svg': svg.innerHTML,
+                    'svgelement': lastclickedsvgelement.outerHTML
+                })
+            });
+            const data = await response.json();
+            setPuml(data.plantuml);
+        } catch (error) {
+            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+        }
+    });
 }

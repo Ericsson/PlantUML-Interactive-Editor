@@ -72,7 +72,8 @@
 │   ├── shared/             # Shared route tests (render, encode/decode)
 │   │   └── test_render.py
 │   ├── sequence/           # Sequence diagram tests
-│   │   └── test_participant.py
+│   │   ├── test_participant.py
+│   │   └── test_message.py
 │   └── e2e/                # Playwright end-to-end tests
 │       ├── conftest.py     # Live server fixture
 │       ├── test_app_loads.py  # App loads correctly
