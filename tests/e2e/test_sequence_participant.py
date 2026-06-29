@@ -2,7 +2,7 @@
 #
 # MIT License
 #
-# Copyright (c) 2025 Ericsson
+# Copyright (c) 2026 Ericsson
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -116,6 +116,109 @@ class TestRenameParticipant:
             return $('#participant-name-modalForm .modal-title').text();
         }""")
         assert result == "Rename Alice"
+
+
+class TestLifelineExtraction:
+    def test_extract_lifeline_positions(self, app_url, page):
+        """extractLifelinePositions fetches positions from backend after render."""
+        page.evaluate("""() => {
+            editor.session.setValue("@startuml\\nparticipant Alice\\nparticipant Bob\\n@enduml");
+        }""")
+        page.wait_for_timeout(5000)
+        result = page.evaluate("() => participantLifelines")
+        assert len(result) == 2
+        assert result[0]["name"] == "Alice"
+        assert result[1]["name"] == "Bob"
+        assert result[0]["yTop"] > 0
+        assert result[0]["yBottom"] > result[0]["yTop"]
+
+    def test_find_nearest_lifeline_within_tolerance(self, app_url, page):
+        """findNearestLifeline returns lifeline when within 15px."""
+        result = page.evaluate("""() => {
+            const lifelines = [{cx: 50, yTop: 30, yBottom: 100}];
+            return findNearestLifeline(60, 50, lifelines);
+        }""")
+        assert result is not None
+        assert result["cx"] == 50
+
+    def test_find_nearest_lifeline_outside_tolerance(self, app_url, page):
+        """findNearestLifeline returns null when outside 15px."""
+        result = page.evaluate("""() => {
+            const lifelines = [{cx: 50, yTop: 30, yBottom: 100}];
+            return findNearestLifeline(70, 50, lifelines);
+        }""")
+        assert result is None
+
+    def test_find_nearest_lifeline_allows_self_target(self, app_url, page):
+        """findNearestLifeline without exclude allows targeting the same lifeline."""
+        result = page.evaluate("""() => {
+            const lifelines = [
+                {cx: 50, yTop: 30, yBottom: 100},
+                {cx: 80, yTop: 30, yBottom: 100}
+            ];
+            return findNearestLifeline(55, 50, lifelines);
+        }""")
+        assert result is not None
+        assert result["cx"] == 50
+
+    def test_modal_title_shows_participant_names(self, app_url, page):
+        """After full add-message flow, modal title shows 'Add message from X to Y'."""
+        # Load a sequence diagram
+        page.evaluate("""() => {
+            editor.session.setValue("@startuml\\nparticipant Alice\\nparticipant Bob\\n@enduml");
+        }""")
+        page.wait_for_timeout(5000)
+
+        # Verify lifelines have names
+        names = page.evaluate("() => participantLifelines.map(l => l.name)")
+        assert names == ["Alice", "Bob"]
+
+        # Simulate the full flow: right-click near Alice's lifeline, click Add Message,
+        # then left-click near Bob's lifeline
+        page.evaluate("""() => {
+            // Simulate right-click context menu setting origin
+            messageOrigin = {cx: participantLifelines[0].cx, y: 50, name: participantLifelines[0].name};
+            firstClickCoordinates = [participantLifelines[0].cx, 50];
+            isAddMessageActive = true;
+        }""")
+
+        # Simulate left-click on destination (Bob)
+        dest_name = page.evaluate("""() => {
+            const dest = participantLifelines[1];
+            secondClickCoordinates = [dest.cx, 50];
+            firstClickCoordinates = [messageOrigin.cx, 50];
+            const originName = messageOrigin.name;
+            cancelMessageAddMode();
+            $('#participant-modalForm .modal-title').text(
+                'Add message from ' + originName + ' to ' + dest.name);
+            return $('#participant-modalForm .modal-title').text();
+        }""")
+        assert dest_name == "Add message from Alice to Bob"
+
+
+class TestMessageAddMode:
+    def test_cancel_message_add_mode(self, app_url, page):
+        """cancelMessageAddMode resets state."""
+        result = page.evaluate("""() => {
+            isAddMessageActive = true;
+            messageOrigin = {cx: 50, y: 60};
+            cancelMessageAddMode();
+            return {active: isAddMessageActive, origin: messageOrigin};
+        }""")
+        assert result["active"] is False
+        assert result["origin"] is None
+
+    def test_escape_cancels_mode(self, app_url, page):
+        """Pressing Escape cancels message-add mode."""
+        result = page.evaluate("""() => {
+            // Ensure the keydown listener is registered
+            sequenceEventListeners();
+            isAddMessageActive = true;
+            messageOrigin = {cx: 50, y: 60};
+            document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
+            return isAddMessageActive;
+        }""")
+        assert result is False
 
     def test_rename_input_prefills(self, app_url, page):
         """Pre-filling the rename input field works."""

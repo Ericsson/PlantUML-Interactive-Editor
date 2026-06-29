@@ -14,8 +14,9 @@
 │   │   └── parse_changelog.py # CHANGELOG.md parser for version history
 │   ├── sequence/           # Sequence diagram package
 │   │   ├── routes.py       # Sequence routes (/addParticipant, /addMessage, etc.)
-│   │   ├── classes.py      # Diagram, Participant data classes
-│   │   └── participant.py  # Participant logic
+│   │   ├── classes.py      # Diagram, Participant, Message data classes
+│   │   ├── participant.py  # Participant logic (add, rename, delete, positions)
+│   │   └── message.py      # Message logic (add message, y-based insertion)
 │   ├── activity/           # Activity diagram package
 │   │   ├── routes.py       # All activity routes (~64 endpoints)
 │   │   ├── classes.py      # RectElement, PolyElement, Ellipse, SvgChunk, TextElement
@@ -40,7 +41,8 @@
 │   └── static/             # Frontend assets
 │       ├── script.js       # Main activity diagram JS
 │       ├── activity.js     # Activity-specific interactions
-│       ├── sequence.js     # Sequence diagram support (WIP)
+│       ├── sequence-message.js  # Sequence add-message interaction (hover, ghost arrow, modal)
+│       ├── sequence-operations.js # Sequence participant operations and orchestration
 │       ├── mode-plantuml.js # Ace editor PlantUML mode
 │       ├── styles.css      # Main stylesheet (imports css/ modules)
 │       └── css/            # Modular CSS files
@@ -70,7 +72,8 @@
 │   ├── shared/             # Shared route tests (render, encode/decode)
 │   │   └── test_render.py
 │   ├── sequence/           # Sequence diagram tests
-│   │   └── test_participant.py
+│   │   ├── test_participant.py
+│   │   └── test_message.py
 │   └── e2e/                # Playwright end-to-end tests
 │       ├── conftest.py     # Live server fixture
 │       ├── test_app_loads.py  # App loads correctly
