@@ -145,6 +145,7 @@ function backgroundContextMenu(e, svgElement) {
     const cy = transformed.y;
 
     if (isAddMessageActive) return;
+    if (isActivationAddMode()) return;
 
     const lifeline = findNearestLifeline(cx, cy, participantLifelines);
 
@@ -179,6 +180,9 @@ function setupLifelineInteraction(svgContainer) {
                 hideGhostArrow();
             }
             hideIndicatorCircle();
+        } else if (isActivationAddMode()) {
+            handleActivationMouseMove(svgContainer, y);
+            hideIndicatorCircle();
         } else {
             hideGhostArrow();
             const lifeline = findNearestLifeline(x, y, participantLifelines);
@@ -192,8 +196,19 @@ function setupLifelineInteraction(svgContainer) {
 
     // Click: confirm destination and open label dialog
     container.addEventListener('click', (e) => {
-        if (!isAddMessageActive || !messageOrigin) return;
         if (!svgContainer || !svgContainer.getScreenCTM()) return;
+
+        // Activation-add mode: confirm the bar end and open the end-type chooser.
+        if (isActivationAddMode()) {
+            const transformed = svgPointFromEvent(e, svgContainer);
+            // Stop propagation so the global menu-dismiss handler does not
+            // immediately hide the chooser we are about to show.
+            e.stopPropagation();
+            handleActivationClick(e, transformed.y);
+            return;
+        }
+
+        if (!isAddMessageActive || !messageOrigin) return;
 
         const transformed = svgPointFromEvent(e, svgContainer);
         const x = transformed.x;

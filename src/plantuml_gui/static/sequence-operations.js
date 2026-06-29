@@ -227,6 +227,7 @@ function sequenceEventListeners() {
     messageEventListeners();
     messageOperationEventListeners();
     noteOperationEventListeners();
+    activationEventListeners();
 }
 
 // Called on every render when diagram type is sequence
@@ -242,6 +243,7 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
 
         extractLifelinePositions();
         cancelMessageAddMode();
+        cancelActivationAddMode();
 
         handleContextMenuBackground(svgContainer);
         setupLifelineInteraction(svgContainer);

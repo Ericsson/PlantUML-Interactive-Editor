@@ -521,7 +521,8 @@ function addSequenceEventListeners() {
             'participant-menu',
             'message-menu',
             'seq-note-placement-menu',
-            'seq-note-menu'
+            'seq-note-menu',
+            'activation-end-menu'
         ];
 
         menuIds.forEach(function(id) {

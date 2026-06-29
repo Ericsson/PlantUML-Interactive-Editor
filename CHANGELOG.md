@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### External
 
+- Activation bars for sequence diagrams: right-click a lifeline → Activate, drag down to preview a ghost bar, then left-click and choose Deactivate or Destroy to end it (supports nested activations)
 - Deleting a participant now also deletes any notes referencing that participant
 - Fixed note left/right placement incorrectly attaching to a message at the same Y when the click was outside the message's horizontal span
 - Fixed note left/right near a self-message incorrectly using message-attached syntax instead of participant syntax
