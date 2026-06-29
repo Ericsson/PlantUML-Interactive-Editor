@@ -24,6 +24,7 @@
 
 from flask import Blueprint, jsonify, request
 
+from .activation import add_activation
 from .message import add_message, delete_message, edit_message_text, get_message_text
 from .note import add_note, delete_note, edit_note, get_note_text
 from .participant import (
@@ -62,6 +63,20 @@ def addmessage():
                 puml, svg, message, firstcoordinates, secondcoordinates, arrow_type
             )
         }
+    )
+
+
+@sequence_bp.route("/addActivation", methods=["POST"])
+def addactivation():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    participant = data["participant"]
+    start_y = data["startY"]
+    end_y = data["endY"]
+    end_type = data["endType"]
+    return jsonify(
+        {"plantuml": add_activation(puml, svg, participant, start_y, end_y, end_type)}
     )
 
 

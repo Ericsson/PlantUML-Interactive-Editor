@@ -126,6 +126,10 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /editMessageText** — Input: `plantuml`, `svg`, `svgelement`, `text`. Returns: JSON `{"plantuml": modified_puml}`.
 - **POST /deleteMessage** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"plantuml": modified_puml}`.
 
+## Sequence Diagram (Activation Bars)
+
+- **POST /addActivation** — Input: `plantuml`, `svg`, `participant`, `startY`, `endY`, `endType` ('deactivate'/'destroy'). Returns: JSON `{"plantuml": modified_puml}`. Inserts a matched `activate <participant>` line at the `startY` position and a closing `deactivate <participant>` (or `destroy <participant>`) line at the `endY` position. `endType` defaults to 'deactivate' for any value other than 'destroy'.
+
 ## Sequence Diagram (Notes)
 
 - **POST /addNote** — Input: `plantuml`, `svg`, `participant`, `placement` ('over'/'left'/'right'/'spanning'), `text`, `yPosition`, optional `secondParticipant`. Returns: JSON `{"plantuml": modified_puml}`. Y-coordinate determines insertion position.
