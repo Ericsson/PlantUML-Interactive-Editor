@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### External
 
+- Deleting a participant now also deletes any notes referencing that participant
+- Fixed note left/right placement incorrectly attaching to a message at the same Y when the click was outside the message's horizontal span
+- Fixed note left/right near a self-message incorrectly using message-attached syntax instead of participant syntax
+- Add note to sequence diagram: right-click lifeline blue circle → Add Note sub-menu with placement options (over, left of, right of, spanning participants)
 - Edit message text: right-click a message arrow/line to open Edit Message dialog
 - Delete message: right-click a message arrow/line to delete it
 - Visual hover-based "Add Message" interaction for sequence diagrams: hover near a participant lifeline to see an indicator box, right-click for "Add Message" context menu, then use ghost arrow preview to select destination
@@ -17,6 +21,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Internal
 
+- Added backend logic for sequence note add, edit, and delete (add_note, index_of_clicked_note, get_note_text, edit_note, delete_note)
+- Added /addNote, /getSeqNoteText, /editSeqNote, /deleteSeqNote backend endpoints for sequence notes
 - Added backend logic for sequence message edit and delete (index_of_clicked_message, get_message_text, edit_message_text, delete_message)
 - Add message now uses y-based insertion to place new messages between existing ones based on click position
 - Added /getParticipantPositions backend endpoint for lifeline position and name extraction

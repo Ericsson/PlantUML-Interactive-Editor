@@ -25,6 +25,7 @@
 from flask import Blueprint, jsonify, request
 
 from .message import add_message, delete_message, edit_message_text, get_message_text
+from .note import add_note, delete_note, edit_note, get_note_text
 from .participant import (
     add_participant,
     delete_participant,
@@ -126,3 +127,58 @@ def deletemessage():
     svg = data["svg"]
     svgelement = data["svgelement"]
     return jsonify({"plantuml": delete_message(puml, svg, svgelement)})
+
+
+@sequence_bp.route("/addNote", methods=["POST"])
+def addnote():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    participant = data["participant"]
+    placement = data["placement"]
+    text = data["text"]
+    y_position = data["yPosition"]
+    x_position = data.get("xPosition")
+    second_participant = data.get("secondParticipant")
+    return jsonify(
+        {
+            "plantuml": add_note(
+                puml,
+                svg,
+                participant,
+                placement,
+                text,
+                y_position,
+                second_participant,
+                x_position,
+            )
+        }
+    )
+
+
+@sequence_bp.route("/getSeqNoteText", methods=["POST"])
+def getseqnotetext():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    return jsonify({"text": get_note_text(puml, svg, svgelement)})
+
+
+@sequence_bp.route("/editSeqNote", methods=["POST"])
+def editseqnote():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    text = data["text"]
+    return jsonify({"plantuml": edit_note(puml, svg, svgelement, text)})
+
+
+@sequence_bp.route("/deleteSeqNote", methods=["POST"])
+def deleteseqnote():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    return jsonify({"plantuml": delete_note(puml, svg, svgelement)})

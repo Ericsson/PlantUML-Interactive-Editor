@@ -226,6 +226,7 @@ function sequenceEventListeners() {
     participantEventListeners();
     messageEventListeners();
     messageOperationEventListeners();
+    noteOperationEventListeners();
 }
 
 // Called on every render when diagram type is sequence
@@ -246,6 +247,7 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
         setupLifelineInteraction(svgContainer);
         setupParticipantHandlers(svg.querySelectorAll('*'), svg, element);
         setupMessageHandlers(svg.querySelectorAll('*'), svg);
+        setupNoteHandlers(svg.querySelectorAll('*'));
 
         toggleLoadingOverlay();
     }).catch((error) => {
@@ -267,6 +269,12 @@ function checkIfMessageElement(svgelement) {
         return true;
     }
     if (tag === 'text' && svgelement.getAttribute('font-size') === '13') {
+        // Exclude note text (preceded by a #FEFFDD path)
+        let prev = svgelement.previousElementSibling;
+        if (prev && prev.tagName.toLowerCase() === 'path' &&
+            prev.getAttribute('fill') === '#FEFFDD') {
+            return false;
+        }
         return true;
     }
     return false;
@@ -355,4 +363,187 @@ function messageOperationEventListeners() {
             displayErrorMessage(`Error with fetch API: ${error.message}`, error);
         }
     });
+}
+
+// --- Note element handlers ---
+
+function setupNoteHandlers(svgelements) {
+    for (let index = 0; index < svgelements.length; index++) {
+        let svgelement = svgelements[index];
+        const tag = svgelement.tagName.toLowerCase();
+
+        // Note body paths have fill #FEFFDD
+        if (tag === 'path' && svgelement.getAttribute('fill') === '#FEFFDD') {
+            svgelement.addEventListener('contextmenu', function(e) {
+                lastclickedsvgelement = svgelement;
+                e.preventDefault();
+                e.stopPropagation();
+                var contextMenu = document.getElementById('seq-note-menu');
+                contextMenu.style.display = 'block';
+                contextMenu.style.left = e.pageX + 'px';
+                contextMenu.style.top = e.pageY + 'px';
+            });
+        }
+
+        // Note text should not be hoverable
+        if (tag === 'text' && svgelement.getAttribute('font-size') === '13') {
+            let prev = svgelement.previousElementSibling;
+            if (prev && prev.tagName.toLowerCase() === 'path' &&
+                prev.getAttribute('fill') === '#FEFFDD') {
+                svgelement.style.pointerEvents = 'none';
+            }
+        }
+    }
+}
+
+// --- Note operation event listeners ---
+
+let notePlacement = '';
+let noteEditMode = false;
+
+function noteOperationEventListeners() {
+    // "Add Note" in sequence-menu shows the placement menu
+    document.getElementById('seq-addNote').addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var seqMenu = document.getElementById('sequence-menu');
+        var placementMenu = document.getElementById('seq-note-placement-menu');
+        placementMenu.style.display = 'block';
+        placementMenu.style.left = seqMenu.style.left;
+        placementMenu.style.top = seqMenu.style.top;
+        seqMenu.style.display = 'none';
+    });
+
+    // Placement menu items
+    document.getElementById('seq-note-placement-menu').addEventListener('click', function(e) {
+        var item = e.target.closest('[data-placement]');
+        if (!item) return;
+        e.preventDefault();
+        notePlacement = item.getAttribute('data-placement');
+        document.getElementById('seq-note-placement-menu').style.display = 'none';
+
+        // Show/hide second participant dropdown
+        var group = document.getElementById('seq-note-second-participant-group');
+        if (notePlacement === 'spanning') {
+            var select = document.getElementById('seq-note-second-participant');
+            select.innerHTML = '';
+            participantLifelines.forEach(function(p) {
+                if (p.name !== messageOrigin.name) {
+                    var opt = document.createElement('option');
+                    opt.value = p.name;
+                    opt.textContent = p.name;
+                    select.appendChild(opt);
+                }
+            });
+            group.style.display = 'block';
+        } else {
+            group.style.display = 'none';
+        }
+
+        noteEditMode = false;
+        document.querySelector('#seq-note-modalForm .modal-title').textContent = 'Add Note';
+        document.getElementById('seq-note-text').value = '';
+        $('#seq-note-modalForm').modal('show');
+    });
+
+    // Submit note - uses global submitNote() called via onclick in HTML
+    // (see submitNote function below)
+
+    // Edit Note
+    document.getElementById('seq-editNote').addEventListener('click', async function() {
+        var element = document.getElementById('colb');
+        var svg = element.querySelector('g');
+        try {
+            var plantuml = trimlines(editor.session.getValue());
+            var response = await fetch("getSeqNoteText", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    plantuml: plantuml,
+                    svg: svg.innerHTML,
+                    svgelement: lastclickedsvgelement.outerHTML
+                })
+            });
+            var text = (await response.json()).text;
+            noteEditMode = true;
+            document.querySelector('#seq-note-modalForm .modal-title').textContent = 'Edit Note';
+            document.getElementById('seq-note-text').value = text;
+            document.getElementById('seq-note-second-participant-group').style.display = 'none';
+            $('#seq-note-modalForm').modal('show');
+        } catch (error) {
+            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+        }
+    });
+
+    // Delete Note
+    document.getElementById('seq-deleteNote').addEventListener('click', async function() {
+        var element = document.getElementById('colb');
+        var svg = element.querySelector('g');
+        try {
+            var plantuml = trimlines(editor.session.getValue());
+            var response = await fetch("deleteSeqNote", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    plantuml: plantuml,
+                    svg: svg.innerHTML,
+                    svgelement: lastclickedsvgelement.outerHTML
+                })
+            });
+            var data = await response.json();
+            setPuml(data.plantuml);
+        } catch (error) {
+            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+        }
+    });
+}
+
+// Global function called by onclick on the submit-note button
+async function submitNote() {
+    var text = document.getElementById('seq-note-text').value;
+    if (!text) return;
+
+    var element = document.getElementById('colb');
+    var svg = element.querySelector('g');
+
+    try {
+        var plantuml = trimlines(editor.session.getValue());
+        var response;
+        if (noteEditMode) {
+            noteEditMode = false;
+            response = await fetch("editSeqNote", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    plantuml: plantuml,
+                    svg: svg.innerHTML,
+                    svgelement: lastclickedsvgelement.outerHTML,
+                    text: text
+                })
+            });
+        } else {
+            var body = {
+                plantuml: plantuml,
+                svg: svg.innerHTML,
+                participant: messageOrigin.name,
+                placement: notePlacement,
+                text: text,
+                yPosition: firstClickCoordinates[1],
+                xPosition: firstClickCoordinates[0]
+            };
+            if (notePlacement === 'spanning') {
+                body.secondParticipant = document.getElementById('seq-note-second-participant').value;
+            }
+            response = await fetch("addNote", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+        }
+        var data = await response.json();
+        $('#seq-note-modalForm').modal('hide');
+        setPuml(data.plantuml);
+    } catch (error) {
+        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+    }
 }

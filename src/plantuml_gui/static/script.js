@@ -488,7 +488,7 @@ function addActivityEventListeners() {
             'ellipse-menu',
             'if-menu',
             'fork-menu',
-            'note-menu',
+            'seq-note-menu',
             'group-menu',
             'merge-menu',
             'while-menu',
@@ -519,7 +519,9 @@ function addSequenceEventListeners() {
         var menuIds = [
             'sequence-menu',
             'participant-menu',
-            'message-menu'
+            'message-menu',
+            'seq-note-placement-menu',
+            'seq-note-menu'
         ];
 
         menuIds.forEach(function(id) {
