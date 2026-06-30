@@ -154,6 +154,25 @@ function backgroundContextMenu(e, svgElement) {
     firstClickCoordinates = [lifeline.cx, cy];
     messageOrigin = {cx: lifeline.cx, y: cy, name: lifeline.name};
 
+    // If the right-click landed on an activation bar (a rect with the
+    // stroke:#181818;stroke-width:1.0 style; participant headers use 0.5 and the
+    // SVG background uses a transparent stroke), show the "Delete activation
+    // bar" item and remember the clicked bar for the delete request.
+    const target = e.target;
+    const onBar = target && target.tagName &&
+        target.tagName.toLowerCase() === 'rect' &&
+        (target.getAttribute('style') || '').includes('stroke:#181818;stroke-width:1.0');
+    const deleteItem = document.getElementById('seq-deleteActivation-item');
+    const deleteDivider = document.getElementById('seq-deleteActivation-divider');
+    if (onBar) {
+        lastclickedsvgelement = target;
+        deleteItem.style.display = '';
+        deleteDivider.style.display = '';
+    } else {
+        deleteItem.style.display = 'none';
+        deleteDivider.style.display = 'none';
+    }
+
     var contextMenu = document.getElementById('sequence-menu');
     contextMenu.style.display = 'block';
     contextMenu.style.left = e.pageX + 'px';

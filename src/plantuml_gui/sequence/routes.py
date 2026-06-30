@@ -24,7 +24,7 @@
 
 from flask import Blueprint, jsonify, request
 
-from .activation import add_activation
+from .activation import add_activation, delete_activation
 from .message import (
     add_message,
     delete_message,
@@ -87,6 +87,15 @@ def addactivation():
             )
         }
     )
+
+
+@sequence_bp.route("/deleteActivation", methods=["POST"])
+def deleteactivation():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    return jsonify({"plantuml": delete_activation(puml, svg, svgelement)})
 
 
 @sequence_bp.route("/getParticipantName", methods=["POST"])

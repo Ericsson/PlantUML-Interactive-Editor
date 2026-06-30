@@ -78,3 +78,4 @@ but adding them to the PlantUML code should still work.
   - Deactivate ends the bar; Destroy ends the lifeline with an X
   - Nested activations supported (overlapping bars stack)
   - activate/deactivate/destroy lines inserted at the correct vertical position based on click Y-coordinate
+  - Delete an activation bar (right-click the bar → Delete activation bar); removes the matched activate + deactivate/destroy pair, leaving nested bars intact

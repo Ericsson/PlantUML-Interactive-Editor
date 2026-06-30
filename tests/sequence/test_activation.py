@@ -27,7 +27,33 @@
 import re
 
 from flask import json
-from plantuml_gui.sequence.activation import add_activation
+from plantuml_gui.sequence.activation import add_activation, delete_activation
+from plantuml_gui.shared.render import _create_svg_from_uml
+from pyquery import PyQuery as Pq
+
+
+def _svg_g(puml):
+    """Render puml and return the inner HTML of the <g> element."""
+    full = _create_svg_from_uml(puml)
+    return re.search(r"<g>(.*?)</g>", full, re.DOTALL).group(1)
+
+
+def _activation_rects(svg_inner):
+    """Return [(x, y, outerHTML)] for activation bars, deduped, sorted by (y, x)."""
+    d = Pq("<g>" + svg_inner + "</g>")
+    seen = set()
+    rects = []
+    for rect in d("rect").items():
+        if "stroke:#181818;stroke-width:1.0" not in (rect.attr("style") or ""):
+            continue
+        x = float(rect.attr("x"))
+        y = float(rect.attr("y"))
+        if (x, y) in seen:
+            continue
+        seen.add((x, y))
+        rects.append((x, y, str(rect)))
+    return sorted(rects, key=lambda r: (r[1], r[0]))
+
 
 THREE_MESSAGE_PUML = """@startuml
 participant alice
@@ -172,6 +198,109 @@ alice -> bob: m3
         assert len(response.get_json()["positions"]) == 3
 
 
+class TestDeleteActivation:
+    SINGLE_BAR = """@startuml
+participant alice
+participant bob
+alice -> bob: m1
+activate bob
+bob -> alice: m2
+deactivate bob
+alice -> bob: m3
+@enduml"""
+
+    NESTED = """@startuml
+participant alice
+participant bob
+alice -> bob: m1
+activate bob
+bob -> alice: m2
+alice -> bob: m3
+activate bob
+bob -> alice: m4
+deactivate bob
+deactivate bob
+alice -> bob: m5
+@enduml"""
+
+    TWO_BARS = """@startuml
+participant alice
+participant bob
+alice -> bob: m1
+activate bob
+bob -> alice: m2
+deactivate bob
+alice -> bob: m3
+activate bob
+bob -> alice: m4
+deactivate bob
+alice -> bob: m5
+@enduml"""
+
+    DESTROY_BAR = """@startuml
+participant alice
+participant bob
+alice -> bob: m1
+activate bob
+bob -> alice: m2
+destroy bob
+alice -> bob: m3
+@enduml"""
+
+    def test_delete_single_bar(self):
+        svg = _svg_g(self.SINGLE_BAR)
+        rects = _activation_rects(svg)
+        assert len(rects) == 1
+        result = delete_activation(self.SINGLE_BAR, svg, rects[0][2])
+        assert "activate bob" not in result
+        assert "deactivate bob" not in result
+        # The messages are untouched.
+        for msg in ["alice -> bob: m1", "bob -> alice: m2", "alice -> bob: m3"]:
+            assert msg in result
+
+    def test_delete_outer_keeps_inner(self):
+        svg = _svg_g(self.NESTED)
+        rects = _activation_rects(svg)
+        assert len(rects) == 2
+        # rects sorted by (y, x): the outer bar starts higher up.
+        result = delete_activation(self.NESTED, svg, rects[0][2])
+        lines = result.splitlines()
+        assert lines.count("activate bob") == 1
+        assert lines.count("deactivate bob") == 1
+        # The surviving (inner) bar still wraps m4.
+        activate_at = lines.index("activate bob")
+        assert lines[activate_at - 1] == "alice -> bob: m3"
+
+    def test_delete_inner_keeps_outer(self):
+        svg = _svg_g(self.NESTED)
+        rects = _activation_rects(svg)
+        result = delete_activation(self.NESTED, svg, rects[1][2])
+        lines = result.splitlines()
+        assert lines.count("activate bob") == 1
+        assert lines.count("deactivate bob") == 1
+        # The surviving (outer) bar still starts below m1.
+        activate_at = lines.index("activate bob")
+        assert lines[activate_at - 1] == "alice -> bob: m1"
+
+    def test_delete_first_of_two_sequential(self):
+        svg = _svg_g(self.TWO_BARS)
+        rects = _activation_rects(svg)
+        assert len(rects) == 2
+        result = delete_activation(self.TWO_BARS, svg, rects[0][2])
+        lines = result.splitlines()
+        assert lines.count("activate bob") == 1
+        # The surviving (second) bar wraps m4, not m2.
+        activate_at = lines.index("activate bob")
+        assert lines[activate_at - 1] == "alice -> bob: m3"
+
+    def test_delete_destroy_bar(self):
+        svg = _svg_g(self.DESTROY_BAR)
+        rects = _activation_rects(svg)
+        result = delete_activation(self.DESTROY_BAR, svg, rects[0][2])
+        assert "activate bob" not in result
+        assert "destroy bob" not in result
+
+
 class TestAddActivationRoute:
     def test_valid_request_returns_pair(self, client):
         payload = {
@@ -226,3 +355,33 @@ class TestAddActivationRoute:
         result = response.get_json()["plantuml"]
         assert "activate bob" in result
         assert "deactivate bob" in result
+
+
+class TestDeleteActivationRoute:
+    SINGLE_BAR = """@startuml
+participant alice
+participant bob
+alice -> bob: m1
+activate bob
+bob -> alice: m2
+deactivate bob
+alice -> bob: m3
+@enduml"""
+
+    def test_delete_request_removes_bar(self, client):
+        svg = _svg_g(self.SINGLE_BAR)
+        rects = _activation_rects(svg)
+        payload = {
+            "plantuml": self.SINGLE_BAR,
+            "svg": svg,
+            "svgelement": rects[0][2],
+        }
+        response = client.post(
+            "/deleteActivation",
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        result = response.get_json()["plantuml"]
+        assert "activate bob" not in result
+        assert "deactivate bob" not in result

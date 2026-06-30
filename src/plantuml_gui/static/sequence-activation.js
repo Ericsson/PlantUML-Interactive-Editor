@@ -169,6 +169,28 @@ function activationEventListeners() {
         submitActivation('destroy');
     });
 
+    // "Delete" on an existing bar removes its activate + close pair.
+    document.getElementById('seq-deleteActivation').addEventListener('click', async () => {
+        const element = document.getElementById('colb');
+        const svg = element.querySelector('g');
+        try {
+            const plantuml = trimlines(editor.session.getValue());
+            const response = await fetch("deleteActivation", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    plantuml: plantuml,
+                    svg: svg.innerHTML,
+                    svgelement: lastclickedsvgelement.outerHTML
+                })
+            });
+            const data = await response.json();
+            setPuml(data.plantuml);
+        } catch (error) {
+            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+        }
+    });
+
     // Escape cancels activation-add mode.
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && isAddActivationActive) {
