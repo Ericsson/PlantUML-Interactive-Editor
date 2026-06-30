@@ -46,6 +46,8 @@
 │       ├── script.js       # Main activity diagram JS
 │       ├── activity.js     # Activity-specific interactions
 │       ├── sequence-message.js  # Sequence add-message interaction (hover, ghost arrow, modal)
+│       ├── sequence-activation.js # Sequence activation-bar interaction (ghost bar, two-click)
+│       ├── sequence-group.js    # Sequence group-block interaction (ghost box, two-click, modal)
 │       ├── sequence-operations.js # Sequence participant operations and orchestration
 │       ├── mode-plantuml.js # Ace editor PlantUML mode
 │       ├── styles.css      # Main stylesheet (imports css/ modules)

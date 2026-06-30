@@ -146,6 +146,7 @@ function backgroundContextMenu(e, svgElement) {
 
     if (isAddMessageActive) return;
     if (isActivationAddMode()) return;
+    if (isGroupAddMode()) return;
 
     const lifeline = findNearestLifeline(cx, cy, participantLifelines);
 
@@ -217,6 +218,9 @@ function setupLifelineInteraction() {
         } else if (isActivationAddMode()) {
             handleActivationMouseMove(svgContainer, y);
             hideIndicatorCircle();
+        } else if (isGroupAddMode()) {
+            handleGroupMouseMove(svgContainer, y);
+            hideIndicatorCircle();
         } else {
             hideGhostArrow();
             const lifeline = findNearestLifeline(x, y, participantLifelines);
@@ -240,6 +244,14 @@ function setupLifelineInteraction() {
             // immediately hide the chooser we are about to show.
             e.stopPropagation();
             handleActivationClick(e, transformed.y);
+            return;
+        }
+
+        // Group-add mode: first click sets start, second click locks the range.
+        if (isGroupAddMode()) {
+            const transformed = svgPointFromEvent(e, svgContainer);
+            e.stopPropagation();
+            handleGroupClick(e, transformed.y);
             return;
         }
 
