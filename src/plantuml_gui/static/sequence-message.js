@@ -162,11 +162,26 @@ function backgroundContextMenu(e, svgElement) {
 
 // --- Mouse interaction handlers ---
 
-function setupLifelineInteraction(svgContainer) {
+// Guards against attaching the container listeners more than once. The
+// listeners read the live svg on each event, so they survive re-renders and
+// must NOT be re-added per render (doing so stacked stale-closure handlers
+// that computed conflicting coordinates).
+let lifelineInteractionAttached = false;
+
+// Returns the current diagram svg element (replaced on every render).
+function getLiveSequenceSvg() {
+    const colb = document.getElementById('colb');
+    return colb ? colb.querySelector('svg') : null;
+}
+
+function setupLifelineInteraction() {
+    if (lifelineInteractionAttached) return;
+    lifelineInteractionAttached = true;
     const container = document.getElementById('colb-container');
 
     // Mousemove: show indicator in normal mode, ghost arrow in message-add mode
     container.addEventListener('mousemove', (e) => {
+        const svgContainer = getLiveSequenceSvg();
         if (!svgContainer || !svgContainer.getScreenCTM()) return;
         const transformed = svgPointFromEvent(e, svgContainer);
         const x = transformed.x;
@@ -196,6 +211,7 @@ function setupLifelineInteraction(svgContainer) {
 
     // Click: confirm destination and open label dialog
     container.addEventListener('click', (e) => {
+        const svgContainer = getLiveSequenceSvg();
         if (!svgContainer || !svgContainer.getScreenCTM()) return;
 
         // Activation-add mode: confirm the bar end and open the end-type chooser.

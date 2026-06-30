@@ -25,41 +25,40 @@
 """Activation bar logic for sequence diagrams.
 
 A single user gesture creates one balanced activation bar for one participant:
-an ``activate <P>`` line at the start-Y position and a closing ``deactivate <P>``
-or ``destroy <P>`` line at the end-Y position. Because the gesture always starts
-by activating and inserts a matched pair, a participant can never be deactivated
-without first being activated.
+an ``activate <P>`` line before the message at ``start_index`` and a closing
+``deactivate <P>`` or ``destroy <P>`` line after the message at ``end_index``.
+Because the gesture always starts by activating and inserts a matched pair, a
+participant can never be deactivated without first being activated.
 """
-
-from .classes import Diagram
-from .util import find_insertion_index
 
 
 def add_activation(
     puml: str,
-    svg: str,
     participant_name: str,
-    start_y: float,
-    end_y: float,
+    start_index: int,
+    end_index: int,
     end_type: str,
 ) -> str:
-    """Insert a matched activate + close pair for a participant by Y-position.
+    """Insert a matched activate + close pair for a participant by line index.
 
-    ``end_type`` is ``"destroy"`` to end the lifeline with an X, otherwise the
-    bar is closed with ``deactivate``. The closing line is inserted first (it
-    sits at a greater-or-equal line index), then the ``activate`` line, so
-    source order always has ``activate`` before its close and the index of the
-    start insertion stays valid.
+    ``start_index`` and ``end_index`` are the puml line numbers of the messages
+    nearest to where the user started and ended the gesture. The ``activate``
+    line is inserted just *after* the start message and the closing line just
+    *after* the end message, so both anchor below their nearest message. The bar
+    therefore covers the messages following the start message up to and
+    including the end message. ``end_type`` is ``"destroy"`` to end the lifeline
+    with an X, otherwise the bar is closed with ``deactivate``.
+
+    The closing line is inserted first (it sits at a greater-or-equal line
+    index), then the ``activate`` line, so the start insertion index stays valid.
     """
     keyword = "destroy" if end_type == "destroy" else "deactivate"
 
-    diagram = Diagram.from_svg(svg, puml)
     lines = puml.splitlines()
 
-    start_index = find_insertion_index(diagram.messages, svg, puml, start_y, lines)
-    end_index = find_insertion_index(diagram.messages, svg, puml, end_y, lines)
-
-    # Insert the closing line first so start_index remains valid afterwards.
-    lines.insert(end_index, f"{keyword} {participant_name}")
-    lines.insert(start_index, f"activate {participant_name}")
+    # Insert the closing line after the end message, then the opening line after
+    # the start message. Inserting the (lower) end line first keeps the start
+    # insertion index valid.
+    lines.insert(end_index + 1, f"{keyword} {participant_name}")
+    lines.insert(start_index + 1, f"activate {participant_name}")
     return "\n".join(lines)

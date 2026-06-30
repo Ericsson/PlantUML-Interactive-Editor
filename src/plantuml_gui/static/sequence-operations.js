@@ -242,11 +242,12 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
         }
 
         extractLifelinePositions();
+        fetchMessagePositions();
         cancelMessageAddMode();
         cancelActivationAddMode();
 
         handleContextMenuBackground(svgContainer);
-        setupLifelineInteraction(svgContainer);
+        setupLifelineInteraction();
         setupParticipantHandlers(svg.querySelectorAll('*'), svg, element);
         setupMessageHandlers(svg.querySelectorAll('*'), svg);
         setupNoteHandlers(svg.querySelectorAll('*'));

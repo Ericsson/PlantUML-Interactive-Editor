@@ -28,7 +28,7 @@ from typing import Dict, List
 
 from pyquery import PyQuery as Pq
 
-from .classes import Diagram
+from .classes import Diagram, is_participant_rect
 
 
 def index_of_clicked_participant(svg: str, svgelement: str) -> int:
@@ -50,6 +50,8 @@ def index_of_clicked_participant(svg: str, svgelement: str) -> int:
     seen_cx: set[float] = set()
     count = 0
     for rect in d("rect").items():
+        if not is_participant_rect(rect):
+            continue  # skip activation bars and other non-participant rects
         cx = float(rect.attr("x")) + float(rect.attr("width")) / 2
         if cx not in seen_cx:
             seen_cx.add(cx)

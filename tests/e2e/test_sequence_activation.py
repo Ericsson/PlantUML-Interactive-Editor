@@ -44,6 +44,56 @@ class TestActivationMenus:
 
 
 class TestActivationAddMode:
+    def test_lifeline_listeners_do_not_accumulate(self, app_url, page):
+        """Re-rendering must not stack duplicate mousemove handlers.
+
+        Regression: setupLifelineInteraction used to add a listener (capturing a
+        now-stale svg) on every render, so one mouse move ran the handler many
+        times with conflicting coordinates -- breaking the ghost and placing the
+        bar using a stale click. After the fix the handler runs exactly once.
+        """
+        # Re-render several times with growing diagrams to attempt accumulation.
+        for msgs in [
+            "A1 -> A2: a",
+            "A1 -> A2: a\\nA2 -> A1: b",
+            "A1 -> A2: a\\nA2 -> A1: b\\nA1 -> A2: c",
+        ]:
+            page.evaluate(
+                """(msgs) => {
+                    editor.session.setValue(
+                        "@startuml\\nparticipant A1\\nparticipant A2\\n"
+                        + msgs + "\\n@enduml");
+                }""",
+                msgs,
+            )
+            page.wait_for_timeout(3000)
+
+        count = page.evaluate("""() => {
+            window.__amm = 0;
+            const orig = handleActivationMouseMove;
+            handleActivationMouseMove = function() {
+                window.__amm++;
+                return orig.apply(this, arguments);
+            };
+            // Enter activation mode with a synthetic origin (the count does not
+            // depend on real snapping data, only on how many listeners fire).
+            activationOrigin = {cx: 80, name: 'A2', startMessageIndex: 3, startCy: 60};
+            isAddActivationActive = true;
+
+            const svg = document.querySelector('#colb svg');
+            const r = svg.getBoundingClientRect();
+            document.getElementById('colb-container').dispatchEvent(
+                new MouseEvent('mousemove',
+                    {clientX: r.x + r.width / 2,
+                     clientY: r.y + r.height / 2, bubbles: true}));
+
+            const c = window.__amm;
+            handleActivationMouseMove = orig;
+            cancelActivationAddMode();
+            return c;
+        }""")
+        assert count == 1
+
     def test_is_activation_add_mode_reflects_flag(self, app_url, page):
         """isActivationAddMode reflects the mode flag."""
         result = page.evaluate("""() => {
@@ -57,28 +107,28 @@ class TestActivationAddMode:
         assert result["off"] is False
 
     def test_cancel_activation_add_mode_resets_state(self, app_url, page):
-        """cancelActivationAddMode clears mode and origin."""
+        """cancelActivationAddMode clears mode, origin, and end message."""
         result = page.evaluate("""() => {
             isAddActivationActive = true;
-            activationOrigin = {cx: 50, name: 'Bob', startY: 40};
-            activationEndY = 90;
+            activationOrigin = {cx: 50, name: 'Bob', startMessageIndex: 3, startCy: 40};
+            activationEndMessage = {index: 4, cy: 90};
             cancelActivationAddMode();
             return {
                 active: isAddActivationActive,
                 origin: activationOrigin,
-                endY: activationEndY
+                endMessage: activationEndMessage
             };
         }""")
         assert result["active"] is False
         assert result["origin"] is None
-        assert result["endY"] is None
+        assert result["endMessage"] is None
 
     def test_escape_cancels_activation_mode(self, app_url, page):
         """Pressing Escape cancels activation-add mode."""
         result = page.evaluate("""() => {
             sequenceEventListeners();
             isAddActivationActive = true;
-            activationOrigin = {cx: 50, name: 'Bob', startY: 40};
+            activationOrigin = {cx: 50, name: 'Bob', startMessageIndex: 3, startCy: 40};
             document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
             return isActivationAddMode();
         }""")
@@ -100,10 +150,11 @@ class TestActivationFlow:
         names = page.evaluate("() => participantLifelines.map(l => l.name)")
         assert names == ["Alice", "Bob"]
 
+        # hello is at line index 3 in the loaded puml
         page.evaluate("""() => {
             const bob = participantLifelines[1];
-            activationOrigin = {cx: bob.cx, name: bob.name, startY: bob.yTop + 5};
-            activationEndY = bob.yBottom - 5;
+            activationOrigin = {cx: bob.cx, name: bob.name, startMessageIndex: 3, startCy: 60};
+            activationEndMessage = {index: 3, cy: 60};
             submitActivation('deactivate');
         }""")
         page.wait_for_timeout(5000)
@@ -120,8 +171,8 @@ class TestActivationFlow:
 
         page.evaluate("""() => {
             const bob = participantLifelines[1];
-            activationOrigin = {cx: bob.cx, name: bob.name, startY: bob.yTop + 5};
-            activationEndY = bob.yBottom - 5;
+            activationOrigin = {cx: bob.cx, name: bob.name, startMessageIndex: 3, startCy: 60};
+            activationEndMessage = {index: 3, cy: 60};
             submitActivation('destroy');
         }""")
         page.wait_for_timeout(5000)
@@ -131,3 +182,51 @@ class TestActivationFlow:
         )
         assert "activate Bob" in lines
         assert "destroy Bob" in lines
+
+    def test_second_bar_uses_refreshed_message_positions(self, app_url, page):
+        """Adding a second bar must work once one already exists.
+
+        After the first bar renders, fetchMessagePositions runs against an SVG
+        that now contains an activation rect. This is the scenario that used to
+        500 (activation rect mistaken for a participant). Verify message
+        positions still resolve and a second balanced bar is added.
+        """
+        # Three messages so positions are unambiguous.
+        page.evaluate("""() => {
+            editor.session.setValue(
+                "@startuml\\nparticipant Alice\\nparticipant Bob\\n"
+                + "Alice -> Bob: m1\\nBob -> Alice: m2\\nAlice -> Bob: m3\\n@enduml");
+        }""")
+        page.wait_for_timeout(5000)
+
+        # First bar around the first message, driven by the fetched positions.
+        page.evaluate("""() => {
+            const bob = participantLifelines[1];
+            const m = messagePositions[0];
+            activationOrigin = {cx: bob.cx, name: bob.name,
+                                startMessageIndex: m.index, startCy: m.cy};
+            activationEndMessage = {index: m.index, cy: m.cy};
+            submitActivation('deactivate');
+        }""")
+        page.wait_for_timeout(5000)
+
+        # After the bar rendered, positions must still resolve (no 500).
+        msg_count = page.evaluate("() => messagePositions.length")
+        assert msg_count == 3
+
+        # Second bar around the last message.
+        page.evaluate("""() => {
+            const bob = participantLifelines[1];
+            const m = messagePositions[messagePositions.length - 1];
+            activationOrigin = {cx: bob.cx, name: bob.name,
+                                startMessageIndex: m.index, startCy: m.cy};
+            activationEndMessage = {index: m.index, cy: m.cy};
+            submitActivation('deactivate');
+        }""")
+        page.wait_for_timeout(5000)
+
+        lines = page.evaluate(
+            "() => editor.session.getValue().split('\\n').map(l => l.trim())"
+        )
+        assert lines.count("activate Bob") == 2
+        assert lines.count("deactivate Bob") == 2

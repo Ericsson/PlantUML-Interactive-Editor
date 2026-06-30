@@ -125,10 +125,11 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /getMessageText** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"text": message_label}`.
 - **POST /editMessageText** — Input: `plantuml`, `svg`, `svgelement`, `text`. Returns: JSON `{"plantuml": modified_puml}`.
 - **POST /deleteMessage** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"plantuml": modified_puml}`.
+- **POST /getMessagePositions** — Input: `plantuml`, `svg`. Returns: JSON `{"positions": [{cy, index, text}, ...]}` — one entry per message with its SVG Y-coordinate, puml line index, and label. Called once per render so the frontend can snap activation-bar endpoints to the nearest message.
 
 ## Sequence Diagram (Activation Bars)
 
-- **POST /addActivation** — Input: `plantuml`, `svg`, `participant`, `startY`, `endY`, `endType` ('deactivate'/'destroy'). Returns: JSON `{"plantuml": modified_puml}`. Inserts a matched `activate <participant>` line at the `startY` position and a closing `deactivate <participant>` (or `destroy <participant>`) line at the `endY` position. `endType` defaults to 'deactivate' for any value other than 'destroy'.
+- **POST /addActivation** — Input: `plantuml`, `participant`, `startMessageIndex` (int), `endMessageIndex` (int), `endType` ('deactivate'/'destroy'). Returns: JSON `{"plantuml": modified_puml}`. Inserts a matched `activate <participant>` line just before the message at `startMessageIndex` and a closing `deactivate <participant>` (or `destroy <participant>`) line just after the message at `endMessageIndex`. The indexes are puml line numbers; the frontend obtains them from `/getMessagePositions`. `endType` defaults to 'deactivate' for any value other than 'destroy'.
 
 ## Sequence Diagram (Notes)
 

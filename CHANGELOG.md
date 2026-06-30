@@ -22,8 +22,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Internal
 
-- Added backend logic for sequence participant activation bars (add_activation) inserting a matched activate + deactivate/destroy pair by Y-position
-- Added /addActivation backend endpoint for sequence activation bars
+- Added backend logic for sequence participant activation bars (add_activation) inserting a matched activate + deactivate/destroy pair around the selected message lines
+- Added /addActivation and /getMessagePositions backend endpoints for sequence activation bars
+- Made sequence diagram parsing ignore activation-bar rects so message/participant parsing keeps working once a bar exists
+- Cache-busting hash now covers all static JS files, not just script.js
 - Added backend logic for sequence note add, edit, and delete (add_note, index_of_clicked_note, get_note_text, edit_note, delete_note)
 - Added /addNote, /getSeqNoteText, /editSeqNote, /deleteSeqNote backend endpoints for sequence notes
 - Added backend logic for sequence message edit and delete (index_of_clicked_message, get_message_text, edit_message_text, delete_message)
