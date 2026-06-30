@@ -17,12 +17,10 @@ function showGhostGroupBox(svgElement, startCy, endCy) {
 
     if (!ghostGroupBox) {
         ghostGroupBox = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        ghostGroupBox.setAttribute('fill', 'rgba(200, 220, 255, 0.2)');
-        ghostGroupBox.setAttribute('stroke', '#5b9bd5');
+        ghostGroupBox.setAttribute('fill', 'rgba(200, 200, 200, 0.3)');
+        ghostGroupBox.setAttribute('stroke', '#888');
         ghostGroupBox.setAttribute('stroke-width', '1.5');
         ghostGroupBox.setAttribute('stroke-dasharray', '5,3');
-        ghostGroupBox.setAttribute('rx', '3');
-        ghostGroupBox.setAttribute('ry', '3');
         ghostGroupBox.setAttribute('pointer-events', 'none');
     }
 
@@ -121,43 +119,6 @@ function handleGroupClick(e, y) {
     // Store indexes for submission
     document.getElementById('seq-submit-group').dataset.startIndex = startIndex;
     document.getElementById('seq-submit-group').dataset.endIndex = endIndex;
-}
-
-// --- Event listener registration (called from sequenceEventListeners) ---
-
-function groupEventListeners() {
-    // "Add Group" context menu item shows the type submenu
-    document.getElementById('seq-addGroup').addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        var seqMenu = document.getElementById('sequence-menu');
-        var typeMenu = document.getElementById('seq-group-type-menu');
-        typeMenu.style.display = 'block';
-        typeMenu.style.left = seqMenu.style.left;
-        typeMenu.style.top = seqMenu.style.top;
-        seqMenu.style.display = 'none';
-    });
-
-    // Type submenu items enter group-add mode
-    document.getElementById('seq-group-type-menu').addEventListener('click', function (e) {
-        var item = e.target.closest('[data-group-type]');
-        if (!item) return;
-        e.preventDefault();
-        selectedGroupType = item.getAttribute('data-group-type');
-        document.getElementById('seq-group-type-menu').style.display = 'none';
-
-        // Enter group-add mode — first click will set the start anchor
-        isAddGroupActive = true;
-        groupOrigin = null;
-        hideIndicatorCircle();
-    });
-
-    // Escape cancels group-add mode
-    document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape' && isAddGroupActive) {
-            cancelGroupAddMode();
-        }
-    });
 }
 
 // Global function called by onclick on the submit-group button

@@ -228,7 +228,7 @@ function sequenceEventListeners() {
     messageOperationEventListeners();
     noteOperationEventListeners();
     activationEventListeners();
-    groupEventListeners();
+    groupOperationEventListeners();
 }
 
 // Called on every render when diagram type is sequence
@@ -499,6 +499,43 @@ function noteOperationEventListeners() {
             setPuml(data.plantuml);
         } catch (error) {
             displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+        }
+    });
+}
+
+// --- Group operation event listeners ---
+
+function groupOperationEventListeners() {
+    // "Add Group" in sequence-menu shows the type submenu
+    document.getElementById('seq-addGroup').addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var seqMenu = document.getElementById('sequence-menu');
+        var typeMenu = document.getElementById('seq-group-type-menu');
+        typeMenu.style.display = 'block';
+        typeMenu.style.left = seqMenu.style.left;
+        typeMenu.style.top = seqMenu.style.top;
+        seqMenu.style.display = 'none';
+    });
+
+    // Type submenu items enter group-add mode
+    document.getElementById('seq-group-type-menu').addEventListener('click', function(e) {
+        var item = e.target.closest('[data-group-type]');
+        if (!item) return;
+        e.preventDefault();
+        selectedGroupType = item.getAttribute('data-group-type');
+        document.getElementById('seq-group-type-menu').style.display = 'none';
+
+        // Enter group-add mode — first click will set the start anchor
+        isAddGroupActive = true;
+        groupOrigin = null;
+        hideIndicatorCircle();
+    });
+
+    // Escape cancels group-add mode
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && isAddGroupActive) {
+            cancelGroupAddMode();
         }
     });
 }
