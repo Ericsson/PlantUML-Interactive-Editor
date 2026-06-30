@@ -25,6 +25,7 @@
 from flask import Blueprint, jsonify, request
 
 from .activation import add_activation, delete_activation
+from .group import add_group
 from .message import (
     add_message,
     delete_message,
@@ -223,3 +224,20 @@ def deleteseqnote():
     svg = data["svg"]
     svgelement = data["svgelement"]
     return jsonify({"plantuml": delete_note(puml, svg, svgelement)})
+
+
+@sequence_bp.route("/addGroup", methods=["POST"])
+def addgroup():
+    data = request.get_json()
+    puml = data["plantuml"]
+    group_type = data["groupType"]
+    label = data["label"]
+    start_message_index = data["startMessageIndex"]
+    end_message_index = data["endMessageIndex"]
+    try:
+        result = add_group(
+            puml, group_type, label, start_message_index, end_message_index
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"plantuml": result})

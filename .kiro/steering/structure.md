@@ -18,6 +18,7 @@
 │   │   ├── participant.py  # Participant logic (add, rename, delete, positions)
 │   │   ├── message.py      # Message logic (add message, y-based insertion)
 │   │   ├── activation.py   # Activation bar logic (activate + deactivate/destroy pair)
+│   │   ├── group.py        # Group block logic (group, alt, opt, loop)
 │   │   ├── note.py         # Note logic (add, edit, delete notes)
 │   │   └── util.py         # Shared utilities (insertion index, note position extraction)
 │   ├── activity/           # Activity diagram package
@@ -77,7 +78,8 @@
 │   ├── sequence/           # Sequence diagram tests
 │   │   ├── test_participant.py
 │   │   ├── test_message.py
-│   │   └── test_activation.py
+│   │   ├── test_activation.py
+│   │   └── test_sequence_group.py
 │   └── e2e/                # Playwright end-to-end tests
 │       ├── conftest.py     # Live server fixture
 │       ├── test_app_loads.py  # App loads correctly

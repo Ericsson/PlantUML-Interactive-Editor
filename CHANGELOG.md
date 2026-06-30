@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### External
 
+- Group blocks for sequence diagrams: right-click a lifeline → Add Group sub-menu to pick group/alt/opt/loop, then click two messages to define the range (ghost box preview), type a label, and the group is created
 - Activation bars for sequence diagrams: right-click a lifeline → Activate, drag down to preview a ghost bar, then left-click and choose Deactivate or Destroy to end it (supports nested activations)
 - Delete an activation bar: right-click the bar → Delete activation bar (removes the matched activate + deactivate/destroy pair)
 - Deleting a participant now also deletes any notes referencing that participant
@@ -23,6 +24,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Internal
 
+- Added backend logic for sequence group blocks (add_group) wrapping a message range in group/alt/opt/loop...end syntax
+- Added /addGroup backend endpoint for sequence group blocks
 - Added backend logic for sequence participant activation bars (add_activation) inserting a matched activate + deactivate/destroy pair around the selected message lines
 - Added /addActivation and /getMessagePositions backend endpoints for sequence activation bars
 - Added delete_activation logic and /deleteActivation endpoint to remove a clicked activation bar's matched activate + close pair (stack-paired, nesting-aware)

@@ -73,6 +73,7 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 - **getMessagePositions:** `{plantuml, svg}`; returns `{"positions": [{cy, index, text}, ...]}` — one entry per message (SVG Y, puml line index, label). Fetched each render into `messagePositions`; the activation gesture snaps to the nearest message and sends its line index.
 - **addActivation:** `{plantuml, participant, startMessageIndex, endMessageIndex, endType}`; returns `{"plantuml": updated_puml}` — inserts a matched `activate` line before the message at `startMessageIndex` and a closing `deactivate`/`destroy` line after the message at `endMessageIndex`; `endType` is 'deactivate' or 'destroy' (defaults to 'deactivate')
 - **deleteActivation:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}` — `svgelement` is the right-clicked activation-bar rect; removes that bar's `activate` line and its paired `deactivate`/`destroy` line (handles nested bars)
+- **addGroup:** `{plantuml, groupType, label, startMessageIndex, endMessageIndex}`; returns `{"plantuml": updated_puml}` — wraps messages between `startMessageIndex` and `endMessageIndex` in a `<groupType> <label> ... end` block; `groupType` is 'group', 'alt', 'opt', or 'loop'; indexes are puml line numbers from `messagePositions`; range is normalized (order does not matter); returns 400 with `{"error": message}` for invalid group types
 
 ## script.js Requests
 
