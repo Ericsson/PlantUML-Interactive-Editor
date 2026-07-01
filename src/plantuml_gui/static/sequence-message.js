@@ -145,6 +145,7 @@ function backgroundContextMenu(e, svgElement) {
     const cy = transformed.y;
 
     if (isAddMessageActive) return;
+    if (isActivationAddMode()) return;
 
     const lifeline = findNearestLifeline(cx, cy, participantLifelines);
 
@@ -152,6 +153,25 @@ function backgroundContextMenu(e, svgElement) {
 
     firstClickCoordinates = [lifeline.cx, cy];
     messageOrigin = {cx: lifeline.cx, y: cy, name: lifeline.name};
+
+    // If the right-click landed on an activation bar (a rect with the
+    // stroke:#181818;stroke-width:1.0 style; participant headers use 0.5 and the
+    // SVG background uses a transparent stroke), show the "Delete activation
+    // bar" item and remember the clicked bar for the delete request.
+    const target = e.target;
+    const onBar = target && target.tagName &&
+        target.tagName.toLowerCase() === 'rect' &&
+        (target.getAttribute('style') || '').includes('stroke:#181818;stroke-width:1.0');
+    const deleteItem = document.getElementById('seq-deleteActivation-item');
+    const deleteDivider = document.getElementById('seq-deleteActivation-divider');
+    if (onBar) {
+        lastclickedsvgelement = target;
+        deleteItem.style.display = '';
+        deleteDivider.style.display = '';
+    } else {
+        deleteItem.style.display = 'none';
+        deleteDivider.style.display = 'none';
+    }
 
     var contextMenu = document.getElementById('sequence-menu');
     contextMenu.style.display = 'block';
@@ -161,11 +181,26 @@ function backgroundContextMenu(e, svgElement) {
 
 // --- Mouse interaction handlers ---
 
-function setupLifelineInteraction(svgContainer) {
+// Guards against attaching the container listeners more than once. The
+// listeners read the live svg on each event, so they survive re-renders and
+// must NOT be re-added per render (doing so stacked stale-closure handlers
+// that computed conflicting coordinates).
+let lifelineInteractionAttached = false;
+
+// Returns the current diagram svg element (replaced on every render).
+function getLiveSequenceSvg() {
+    const colb = document.getElementById('colb');
+    return colb ? colb.querySelector('svg') : null;
+}
+
+function setupLifelineInteraction() {
+    if (lifelineInteractionAttached) return;
+    lifelineInteractionAttached = true;
     const container = document.getElementById('colb-container');
 
     // Mousemove: show indicator in normal mode, ghost arrow in message-add mode
     container.addEventListener('mousemove', (e) => {
+        const svgContainer = getLiveSequenceSvg();
         if (!svgContainer || !svgContainer.getScreenCTM()) return;
         const transformed = svgPointFromEvent(e, svgContainer);
         const x = transformed.x;
@@ -178,6 +213,9 @@ function setupLifelineInteraction(svgContainer) {
             } else {
                 hideGhostArrow();
             }
+            hideIndicatorCircle();
+        } else if (isActivationAddMode()) {
+            handleActivationMouseMove(svgContainer, y);
             hideIndicatorCircle();
         } else {
             hideGhostArrow();
@@ -192,8 +230,20 @@ function setupLifelineInteraction(svgContainer) {
 
     // Click: confirm destination and open label dialog
     container.addEventListener('click', (e) => {
-        if (!isAddMessageActive || !messageOrigin) return;
+        const svgContainer = getLiveSequenceSvg();
         if (!svgContainer || !svgContainer.getScreenCTM()) return;
+
+        // Activation-add mode: confirm the bar end and open the end-type chooser.
+        if (isActivationAddMode()) {
+            const transformed = svgPointFromEvent(e, svgContainer);
+            // Stop propagation so the global menu-dismiss handler does not
+            // immediately hide the chooser we are about to show.
+            e.stopPropagation();
+            handleActivationClick(e, transformed.y);
+            return;
+        }
+
+        if (!isAddMessageActive || !messageOrigin) return;
 
         const transformed = svgPointFromEvent(e, svgContainer);
         const x = transformed.x;

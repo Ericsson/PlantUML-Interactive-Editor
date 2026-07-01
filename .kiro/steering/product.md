@@ -33,6 +33,7 @@ Enterprise developers and technical teams (primarily at Ericsson and similar com
 ### Sequence Diagrams
 - Participants (add left/right, rename, delete with cascade)
 - Add messages between participants
+- Activation bars (activate, deactivate, destroy participants)
 
 ## Business Objectives
 

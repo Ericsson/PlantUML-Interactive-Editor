@@ -25,6 +25,7 @@
 import hashlib
 import io
 import os
+from functools import lru_cache
 
 from flask import Blueprint, jsonify, render_template, request, send_file
 
@@ -41,19 +42,29 @@ shared_bp = Blueprint(
 )
 
 
-def generate_file_hash(file_path):
-    with open(file_path, "rb") as file:
-        file_content = file.read()
-        return hashlib.sha256(file_content).hexdigest()[:8]
+@lru_cache(maxsize=1)
+def generate_static_js_hash():
+    """Hash all static JS files so editing any of them busts the browser cache.
 
-
-SCRIPT_PATH = os.path.join(shared_bp.static_folder, "script.js")
+    The template applies a single ?v=<hash> query string to every script tag,
+    so the hash must cover every served JS file (not just script.js) to avoid
+    browsers serving a stale module after it changes. Cached for the life of
+    the process: static files don't change without a restart, so re-reading
+    and re-hashing every JS file on every request to / is wasted work.
+    """
+    static_dir = shared_bp.static_folder
+    hasher = hashlib.sha256()
+    for name in sorted(os.listdir(static_dir)):
+        if name.endswith(".js"):
+            with open(os.path.join(static_dir, name), "rb") as file:
+                hasher.update(file.read())
+    return hasher.hexdigest()[:8]
 
 
 @shared_bp.route("/")
 def home():
-    # generate hash for script.js
-    file_hash = generate_file_hash(SCRIPT_PATH)
+    # Cache-busting hash covering all static JS files.
+    file_hash = generate_static_js_hash()
     # pass hash to the template
     return render_template(
         "index.html", script_hash=file_hash, version=__version__

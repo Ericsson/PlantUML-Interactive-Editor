@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### External
 
+- Activation bars for sequence diagrams: right-click a lifeline → Activate, drag down to preview a ghost bar, then left-click and choose Deactivate or Destroy to end it (supports nested activations)
+- Delete an activation bar: right-click the bar → Delete activation bar (removes the matched activate + deactivate/destroy pair)
 - Deleting a participant now also deletes any notes referencing that participant
 - Fixed note left/right placement incorrectly attaching to a message at the same Y when the click was outside the message's horizontal span
 - Fixed note left/right near a self-message incorrectly using message-attached syntax instead of participant syntax
@@ -21,6 +23,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Internal
 
+- Added backend logic for sequence participant activation bars (add_activation) inserting a matched activate + deactivate/destroy pair around the selected message lines
+- Added /addActivation and /getMessagePositions backend endpoints for sequence activation bars
+- Added delete_activation logic and /deleteActivation endpoint to remove a clicked activation bar's matched activate + close pair (stack-paired, nesting-aware)
+- Made sequence diagram parsing ignore activation-bar rects so message/participant parsing keeps working once a bar exists
+- Cache-busting hash now covers all static JS files, not just script.js
 - Added backend logic for sequence note add, edit, and delete (add_note, index_of_clicked_note, get_note_text, edit_note, delete_note)
 - Added /addNote, /getSeqNoteText, /editSeqNote, /deleteSeqNote backend endpoints for sequence notes
 - Added backend logic for sequence message edit and delete (index_of_clicked_message, get_message_text, edit_message_text, delete_message)

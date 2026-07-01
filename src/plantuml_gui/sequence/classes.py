@@ -27,6 +27,31 @@ from typing import Dict, List
 
 from pyquery import PyQuery as Pq  # pragma: no cover
 
+# Style PlantUML gives participant header rects. Used to distinguish them from
+# other rects in the SVG (e.g. activation bars, which use stroke-width:1.0).
+# Matches the identification used by the frontend's checkIfParticipant.
+PARTICIPANT_RECT_STYLE = "stroke:#181818;stroke-width:0.5;"
+
+
+def is_participant_rect(rect: Pq) -> bool:
+    """Return True if an SVG rect is a participant header (not an activation bar)."""
+    return (rect.attr("style") or "") == PARTICIPANT_RECT_STYLE
+
+
+def _participant_at(participants: List["Participant"], x: float) -> "Participant":
+    """Return the participant whose header spans ``x``, else the closest by cx.
+
+    Falling back to the nearest participant keeps message parsing robust when an
+    arrow endpoint lands slightly outside a header box (for example when an
+    activation bar shifts where the arrow meets the lifeline), instead of
+    raising and turning the whole request into a 500. Callers only parse
+    messages after participants are parsed, so the list is non-empty here.
+    """
+    for participant in participants:
+        if participant.contains_x(x):
+            return participant
+    return min(participants, key=lambda p: abs(p.cx - x))
+
 
 @dataclass
 class Participant:
@@ -87,8 +112,8 @@ class Message:
 
         message = text.text()
 
-        from_participant = next((p for p in participants if p.contains_x(start_x)))
-        to_participant = next((p for p in participants if p.contains_x(arrow_x)))
+        from_participant = _participant_at(participants, start_x)
+        to_participant = _participant_at(participants, arrow_x)
 
         return cls(from_participant, to_participant, message, cy)
 
@@ -106,8 +131,8 @@ class Message:
         start_x = x1
         to_x = x2
 
-        from_participant = next((p for p in participants if p.contains_x(start_x)))
-        to_participant = next((p for p in participants if p.contains_x(to_x)))
+        from_participant = _participant_at(participants, start_x)
+        to_participant = _participant_at(participants, to_x)
 
         return cls(
             from_participant=from_participant,
@@ -134,7 +159,7 @@ class Message:
 
         message = text.text()
 
-        from_participant = next((p for p in participants if p.contains_x(start_x)))
+        from_participant = _participant_at(participants, start_x)
 
         return cls(
             from_participant=from_participant,
@@ -164,6 +189,8 @@ class Diagram:
         unique_participants: Dict[int, Participant] = {}
 
         for rect in svg("rect").items():
+            if not is_participant_rect(rect):
+                continue  # skip activation bars and other non-participant rects
             text = rect.next()
             participant = Participant.from_svg(rect, text)
 

@@ -22,7 +22,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from typing import List
+from typing import Dict, List
 
 from pyquery import PyQuery as Pq
 
@@ -162,3 +162,21 @@ def delete_message(puml: str, svg: str, svgelement: str) -> str:
     lines = puml.splitlines()
     del lines[message.index]
     return "\n".join(lines)
+
+
+def get_message_positions(puml: str, svg: str) -> List[Dict[str, object]]:
+    """Return message positions for frontend snapping during activation-bar gestures.
+
+    Each entry contains the SVG Y-coordinate (``cy``), the puml line index
+    (``index``), and the message label text (``text``).  The frontend stores
+    these as ``messagePositions`` and uses them to snap the start/end of an
+    activation bar to the nearest message line.
+    """
+    diagram = Diagram.from_svg(svg, puml)
+    lines = puml.splitlines()
+    positions = []
+    for msg in diagram.messages:
+        colon_pos = lines[msg.index].find(": ")
+        text = lines[msg.index][colon_pos + 2 :] if colon_pos != -1 else ""
+        positions.append({"cy": msg.cy, "index": msg.index, "text": text})
+    return positions

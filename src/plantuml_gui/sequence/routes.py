@@ -24,7 +24,14 @@
 
 from flask import Blueprint, jsonify, request
 
-from .message import add_message, delete_message, edit_message_text, get_message_text
+from .activation import add_activation, delete_activation
+from .message import (
+    add_message,
+    delete_message,
+    edit_message_text,
+    get_message_positions,
+    get_message_text,
+)
 from .note import add_note, delete_note, edit_note, get_note_text
 from .participant import (
     add_participant,
@@ -63,6 +70,32 @@ def addmessage():
             )
         }
     )
+
+
+@sequence_bp.route("/addActivation", methods=["POST"])
+def addactivation():
+    data = request.get_json()
+    puml = data["plantuml"]
+    participant = data["participant"]
+    start_index = data["startMessageIndex"]
+    end_index = data["endMessageIndex"]
+    end_type = data["endType"]
+    return jsonify(
+        {
+            "plantuml": add_activation(
+                puml, participant, start_index, end_index, end_type
+            )
+        }
+    )
+
+
+@sequence_bp.route("/deleteActivation", methods=["POST"])
+def deleteactivation():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    return jsonify({"plantuml": delete_activation(puml, svg, svgelement)})
 
 
 @sequence_bp.route("/getParticipantName", methods=["POST"])
@@ -127,6 +160,14 @@ def deletemessage():
     svg = data["svg"]
     svgelement = data["svgelement"]
     return jsonify({"plantuml": delete_message(puml, svg, svgelement)})
+
+
+@sequence_bp.route("/getMessagePositions", methods=["POST"])
+def getmessagepositions():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    return jsonify({"positions": get_message_positions(puml, svg)})
 
 
 @sequence_bp.route("/addNote", methods=["POST"])
