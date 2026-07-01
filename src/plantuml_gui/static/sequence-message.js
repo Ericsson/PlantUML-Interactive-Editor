@@ -275,6 +275,7 @@ function setupLifelineInteraction() {
 
         cancelMessageAddMode();
 
+        messageEditMode = false;
         $('#participant-modalForm .modal-title').text(
             'Add message from ' + originName + ' to ' + dest.name);
         $('#participant-message-text').val("");
