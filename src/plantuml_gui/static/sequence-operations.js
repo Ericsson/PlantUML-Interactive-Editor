@@ -247,6 +247,7 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
         cancelMessageAddMode();
         cancelActivationAddMode();
         cancelGroupAddMode();
+        cancelNoteAddMode();
 
         handleContextMenuBackground(svgContainer);
         setupLifelineInteraction();
@@ -293,6 +294,7 @@ function setupMessageHandlers(svgelements, svg) {
         if (!checkIfMessageElement(svgelement)) continue;
 
         svgelement.addEventListener('mouseover', function() {
+            if (isSequenceAddMode()) return;
             svgelement.style.fontWeight = 'bold';
             svgelement.style.strokeWidth = '2.0';
         });
@@ -303,9 +305,11 @@ function setupMessageHandlers(svgelements, svg) {
         });
 
         svgelement.addEventListener('contextmenu', function(e) {
-            lastclickedsvgelement = svgelement;
             e.preventDefault();
             e.stopPropagation();
+            if (isSequenceAddMode()) return;
+
+            lastclickedsvgelement = svgelement;
             var contextMenu = document.getElementById('message-menu');
             contextMenu.style.display = 'block';
             contextMenu.style.left = e.pageX + 'px';
@@ -405,12 +409,22 @@ function setupNoteHandlers(svgelements) {
 
 let notePlacement = '';
 let noteEditMode = false;
+let isAddNoteActive = false;
+
+function isNoteAddMode() {
+    return isAddNoteActive;
+}
+
+function cancelNoteAddMode() {
+    isAddNoteActive = false;
+}
 
 function noteOperationEventListeners() {
     // "Add Note" in sequence-menu shows the placement menu
     document.getElementById('seq-addNote').addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
+        isAddNoteActive = true;
         var seqMenu = document.getElementById('sequence-menu');
         var placementMenu = document.getElementById('seq-note-placement-menu');
         placementMenu.style.display = 'block';
@@ -446,6 +460,7 @@ function noteOperationEventListeners() {
         }
 
         noteEditMode = false;
+        isAddNoteActive = true;
         document.querySelector('#seq-note-modalForm .modal-title').textContent = 'Add Note';
         document.getElementById('seq-note-text').value = '';
         $('#seq-note-modalForm').modal('show');
@@ -471,6 +486,7 @@ function noteOperationEventListeners() {
             });
             var text = (await response.json()).text;
             noteEditMode = true;
+            isAddNoteActive = false;
             document.querySelector('#seq-note-modalForm .modal-title').textContent = 'Edit Note';
             document.getElementById('seq-note-text').value = text;
             document.getElementById('seq-note-second-participant-group').style.display = 'none';
@@ -499,6 +515,12 @@ function noteOperationEventListeners() {
             setPuml(data.plantuml);
         } catch (error) {
             displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+        }
+    });
+
+    $('#seq-note-modalForm').on('hidden.bs.modal', function() {
+        if (!noteEditMode) {
+            cancelNoteAddMode();
         }
     });
 }
@@ -538,6 +560,7 @@ function groupOperationEventListeners() {
             cancelGroupAddMode();
         }
     });
+
 }
 
 // Global function called by onclick on the submit-note button
@@ -584,6 +607,7 @@ async function submitNote() {
         }
         var data = await response.json();
         $('#seq-note-modalForm').modal('hide');
+        cancelNoteAddMode();
         setPuml(data.plantuml);
     } catch (error) {
         displayErrorMessage(`Error with fetch API: ${error.message}`, error);

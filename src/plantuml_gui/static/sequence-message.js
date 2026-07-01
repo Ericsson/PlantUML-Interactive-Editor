@@ -135,6 +135,13 @@ function cancelMessageAddMode() {
     hideGhostArrow();
 }
 
+function isSequenceAddMode() {
+    return isAddMessageActive ||
+        (typeof isActivationAddMode === 'function' && isActivationAddMode()) ||
+        (typeof isGroupAddMode === 'function' && isGroupAddMode()) ||
+        (typeof isNoteAddMode === 'function' && isNoteAddMode());
+}
+
 // --- Background context menu (right-click on diagram) ---
 
 function backgroundContextMenu(e, svgElement) {
@@ -144,9 +151,7 @@ function backgroundContextMenu(e, svgElement) {
     const cx = transformed.x;
     const cy = transformed.y;
 
-    if (isAddMessageActive) return;
-    if (isActivationAddMode()) return;
-    if (isGroupAddMode()) return;
+    if (isSequenceAddMode()) return;
 
     const lifeline = findNearestLifeline(cx, cy, participantLifelines);
 
