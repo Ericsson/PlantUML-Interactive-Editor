@@ -129,7 +129,7 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 
 ## Sequence Diagram (Activation Bars)
 
-- **POST /addActivation** — Input: `plantuml`, `participant`, `startMessageIndex` (int), `endMessageIndex` (int), `endType` ('deactivate'/'destroy'). Returns: JSON `{"plantuml": modified_puml}`. Inserts a matched `activate <participant>` line just before the message at `startMessageIndex` and a closing `deactivate <participant>` (or `destroy <participant>`) line just after the message at `endMessageIndex`. The indexes are puml line numbers; the frontend obtains them from `/getMessagePositions`. `endType` defaults to 'deactivate' for any value other than 'destroy'.
+- **POST /addActivation** — Input: `plantuml`, `participant`, `startMessageIndex` (int), `endMessageIndex` (int), `endType` ('deactivate'/'destroy'). Returns: JSON `{"plantuml": modified_puml}`. Inserts a matched `activate <participant>` line just after the message at `startMessageIndex` and a closing `deactivate <participant>` (or `destroy <participant>`) line just after the message at `endMessageIndex`. The indexes are puml line numbers; the frontend obtains them from `/getMessagePositions`. `endType` defaults to 'deactivate' for any value other than 'destroy'.
 - **POST /deleteActivation** — Input: `plantuml`, `svg`, `svgelement` (the clicked activation-bar rect). Returns: JSON `{"plantuml": modified_puml}`. Matches the clicked bar to its `activate`/`deactivate`(or `destroy`) pair — by participant, the message above the `activate` line, and nesting level — and removes both lines, leaving nested or sibling bars intact.
 
 ## Sequence Diagram (Notes)
