@@ -25,6 +25,7 @@
 import hashlib
 import io
 import os
+from functools import lru_cache
 
 from flask import Blueprint, jsonify, render_template, request, send_file
 
@@ -41,12 +42,15 @@ shared_bp = Blueprint(
 )
 
 
+@lru_cache(maxsize=1)
 def generate_static_js_hash():
     """Hash all static JS files so editing any of them busts the browser cache.
 
     The template applies a single ?v=<hash> query string to every script tag,
     so the hash must cover every served JS file (not just script.js) to avoid
-    browsers serving a stale module after it changes.
+    browsers serving a stale module after it changes. Cached for the life of
+    the process: static files don't change without a restart, so re-reading
+    and re-hashing every JS file on every request to / is wasted work.
     """
     static_dir = shared_bp.static_folder
     hasher = hashlib.sha256()
