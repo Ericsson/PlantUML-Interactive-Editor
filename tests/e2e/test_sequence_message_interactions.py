@@ -192,8 +192,8 @@ class TestSequenceGroupLockedY:
         assert result["origin"] == {"startMessageIndex": 4, "startCy": 80}
         assert result["type"] == "loop"
         assert result["ghostAttached"] is True
-        assert result["ghostY"] == "70"
-        assert result["ghostHeight"] == "20"
+        assert result["ghostY"] == "55"
+        assert result["ghostHeight"] == "50"
 
     def test_group_mousemove_keeps_start_locked_and_updates_current_end(
         self, app_url, page
@@ -230,11 +230,11 @@ class TestSequenceGroupLockedY:
         }""")
 
         assert result["expanded"]["origin"] == {"startMessageIndex": 4, "startCy": 80}
-        assert result["expanded"]["y"] == "70"
-        assert result["expanded"]["height"] == "60"
+        assert result["expanded"]["y"] == "55"
+        assert result["expanded"]["height"] == "90"
         assert result["shrunkBack"]["origin"] == {"startMessageIndex": 4, "startCy": 80}
-        assert result["shrunkBack"]["y"] == "30"
-        assert result["shrunkBack"]["height"] == "60"
+        assert result["shrunkBack"]["y"] == "15"
+        assert result["shrunkBack"]["height"] == "90"
 
     def test_group_click_confirms_current_range_and_opens_label_modal(
         self, app_url, page
