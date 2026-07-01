@@ -191,9 +191,10 @@ function activationEventListeners() {
         }
     });
 
-    // Escape cancels activation-add mode.
+    // Escape cancels activation flow (both drag and end-type chooser).
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && isAddActivationActive) {
+        if (e.key === 'Escape' && (isAddActivationActive || activationOrigin)) {
+            document.getElementById('activation-end-menu').style.display = 'none';
             cancelActivationAddMode();
         }
     });
