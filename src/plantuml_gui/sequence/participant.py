@@ -112,8 +112,10 @@ def delete_participant(puml: str, svg: str, svgelement: str) -> str:
             lines_to_remove.add(msg.index)
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if stripped.startswith("note ") and participant.name in stripped:
-            lines_to_remove.add(i)
+        if stripped.startswith("note "):
+            header = stripped.split(" : ", 1)[0]
+            if participant.name in header:
+                lines_to_remove.add(i)
 
     lines = [line for i, line in enumerate(lines) if i not in lines_to_remove]
     return "\n".join(lines)
