@@ -56,8 +56,16 @@
   <li><a class="dropdown-item" href="#" id="addMessageDashed">Add Message <span style="display:inline-block;width:20px;border-top:2px dashed #333;vertical-align:middle;margin-left:4px"></span></a></li>
   <li><a class="dropdown-item" href="#" id="seq-addActivation">Activate <span style="display:inline-block;width:6px;height:14px;background:#fff;border:1px solid #333;vertical-align:middle;margin-left:4px"></span></a></li>
   <li><a class="dropdown-item" href="#" id="seq-addNote">Add Note &#9998;</a></li>
+  <li><a class="dropdown-item" href="#" id="seq-addGroup">Add Group &#9634;</a></li>
   <li id="seq-deleteActivation-divider" style="display:none"><hr class="dropdown-divider"></li>
   <li id="seq-deleteActivation-item" style="display:none"><a class="dropdown-item" href="#" id="seq-deleteActivation">Delete activation bar</a></li>
+</div>
+
+<div class="dropdown-menu" id="seq-group-type-menu">
+  <li><a class="dropdown-item" href="#" data-group-type="group">group</a></li>
+  <li><a class="dropdown-item" href="#" data-group-type="alt">alt</a></li>
+  <li><a class="dropdown-item" href="#" data-group-type="opt">opt</a></li>
+  <li><a class="dropdown-item" href="#" data-group-type="loop">loop</a></li>
 </div>
 
 <div class="dropdown-menu" id="activation-end-menu">
@@ -116,4 +124,26 @@
   <li><a class="dropdown-item" href="#" id="editMessage">Edit Message</a></li>
   <li><hr class="dropdown-divider"></li>
   <li><a class="dropdown-item" href="#" id="deleteMessage">Delete Message</a></li>
+</div>
+
+<div class="modal fade" id="seq-group-modalForm" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+      <div class="modal-content shadow">
+          <div class="modal-header">
+              <h5 class="modal-title">Add Group</h5>
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                  <span aria-hidden="true">&times;</span>
+              </button>
+          </div>
+          <div class="modal-body">
+              <div class="form-group">
+                  <label for="seq-group-label-text" class="col-form-label">Label:</label>
+                  <textarea class="form-control" id="seq-group-label-text"></textarea>
+              </div>
+          </div>
+          <div class="modal-footer">
+              <button id="seq-submit-group" type="button" class="btn btn-primary" onclick="submitGroup()">Submit</button>
+          </div>
+      </div>
+  </div>
 </div>

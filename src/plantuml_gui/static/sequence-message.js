@@ -135,6 +135,13 @@ function cancelMessageAddMode() {
     hideGhostArrow();
 }
 
+function isSequenceAddMode() {
+    return isAddMessageActive ||
+        (typeof isActivationAddMode === 'function' && isActivationAddMode()) ||
+        (typeof isGroupAddMode === 'function' && isGroupAddMode()) ||
+        (typeof isNoteAddMode === 'function' && isNoteAddMode());
+}
+
 // --- Background context menu (right-click on diagram) ---
 
 function backgroundContextMenu(e, svgElement) {
@@ -144,8 +151,7 @@ function backgroundContextMenu(e, svgElement) {
     const cx = transformed.x;
     const cy = transformed.y;
 
-    if (isAddMessageActive) return;
-    if (isActivationAddMode()) return;
+    if (isSequenceAddMode()) return;
 
     const lifeline = findNearestLifeline(cx, cy, participantLifelines);
 
@@ -217,6 +223,9 @@ function setupLifelineInteraction() {
         } else if (isActivationAddMode()) {
             handleActivationMouseMove(svgContainer, y);
             hideIndicatorCircle();
+        } else if (isGroupAddMode()) {
+            handleGroupMouseMove(svgContainer, y);
+            hideIndicatorCircle();
         } else {
             hideGhostArrow();
             const lifeline = findNearestLifeline(x, y, participantLifelines);
@@ -243,6 +252,14 @@ function setupLifelineInteraction() {
             return;
         }
 
+        // Group-add mode: click confirms the range from the locked right-click Y.
+        if (isGroupAddMode()) {
+            const transformed = svgPointFromEvent(e, svgContainer);
+            e.stopPropagation();
+            handleGroupClick(e, transformed.y);
+            return;
+        }
+
         if (!isAddMessageActive || !messageOrigin) return;
 
         const transformed = svgPointFromEvent(e, svgContainer);
@@ -258,6 +275,7 @@ function setupLifelineInteraction() {
 
         cancelMessageAddMode();
 
+        messageEditMode = false;
         $('#participant-modalForm .modal-title').text(
             'Add message from ' + originName + ' to ' + dest.name);
         $('#participant-message-text').val("");

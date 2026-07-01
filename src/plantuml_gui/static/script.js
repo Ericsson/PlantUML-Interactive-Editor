@@ -522,7 +522,8 @@ function addSequenceEventListeners() {
             'message-menu',
             'seq-note-placement-menu',
             'seq-note-menu',
-            'activation-end-menu'
+            'activation-end-menu',
+            'seq-group-type-menu'
         ];
 
         menuIds.forEach(function(id) {

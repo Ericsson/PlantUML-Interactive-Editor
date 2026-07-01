@@ -79,3 +79,10 @@ but adding them to the PlantUML code should still work.
   - Nested activations supported (overlapping bars stack)
   - activate/deactivate/destroy lines inserted at the correct vertical position based on click Y-coordinate
   - Delete an activation bar (right-click the bar → Delete activation bar); removes the matched activate + deactivate/destroy pair, leaving nested bars intact
+- Group blocks
+  - Add group from lifeline context menu (right-click → Add Group → choose type)
+  - Supported types: group, alt, opt, loop
+  - Two-click gesture to select message range (with live ghost box preview)
+  - Ghost box snaps to message positions with padding and can grow/shrink freely
+  - Range selection works in both directions (first click can be above or below second click)
+  - Label entered via modal dialog after selecting the range

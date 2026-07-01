@@ -254,8 +254,18 @@ class Diagram:
         """Assign indexes in the puml code to corresponding message"""
         lines = puml.splitlines()
 
-        # Find all lines that represent messages (lines with '->')
-        message_lines = [i for i, line in enumerate(lines) if "->" in line]
+        def is_message_line(line: str) -> bool:
+            # A real message line is "sender -> receiver: text", so the
+            # arrow always precedes the colon. Notes/group labels can
+            # contain "->" in their free text, but only after (or without)
+            # a colon, since they aren't built with that arrow-then-colon
+            # shape.
+            arrow_pos = line.find("->")
+            colon_pos = line.find(":")
+            return arrow_pos != -1 and colon_pos != -1 and arrow_pos < colon_pos
+
+        # Find all lines that represent messages (lines with '->' before ':')
+        message_lines = [i for i, line in enumerate(lines) if is_message_line(line)]
 
         # Messages are already in occuring order
         for i, line_index in enumerate(message_lines):

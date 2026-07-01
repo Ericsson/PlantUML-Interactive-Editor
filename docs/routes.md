@@ -138,3 +138,7 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /getSeqNoteText** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"text": note_text}`.
 - **POST /editSeqNote** — Input: `plantuml`, `svg`, `svgelement`, `text`. Returns: JSON `{"plantuml": modified_puml}`.
 - **POST /deleteSeqNote** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"plantuml": modified_puml}`.
+
+## Sequence Diagram (Groups)
+
+- **POST /addGroup** — Input: `plantuml`, `groupType` ('group'/'alt'/'opt'/'loop'), `label`, `startMessageIndex` (int), `endMessageIndex` (int). Returns: JSON `{"plantuml": modified_puml}`. Inserts a `<groupType> <label>` line before the message at the earlier index and an `end` line after the message at the later index. Indexes are puml line numbers obtained from `/getMessagePositions`. The range is normalized so the order of start/end does not matter. Returns 400 with `{"error": message}` if the group type is invalid.

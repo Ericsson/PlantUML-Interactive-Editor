@@ -34,6 +34,7 @@ Enterprise developers and technical teams (primarily at Ericsson and similar com
 - Participants (add left/right, rename, delete with cascade)
 - Add messages between participants
 - Activation bars (activate, deactivate, destroy participants)
+- Group blocks (group, alt, opt, loop)
 
 ## Business Objectives
 
