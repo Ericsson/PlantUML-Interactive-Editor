@@ -7,7 +7,7 @@ let selectedGroupType = '';
 let ghostGroupBox = null;
 
 // Padding above/below messages for the ghost box
-const GROUP_BOX_PADDING = 10;
+const GROUP_BOX_PADDING = 25;
 
 // --- Ghost box rendering ---
 
