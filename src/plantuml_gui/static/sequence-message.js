@@ -252,7 +252,7 @@ function setupLifelineInteraction() {
             return;
         }
 
-        // Group-add mode: first click sets start, second click locks the range.
+        // Group-add mode: click confirms the range from the locked right-click Y.
         if (isGroupAddMode()) {
             const transformed = svgPointFromEvent(e, svgContainer);
             e.stopPropagation();

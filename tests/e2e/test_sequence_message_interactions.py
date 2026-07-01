@@ -156,3 +156,176 @@ class TestSequenceMessageInteractions:
         assert result["strokeWidth"] == "2"
         assert result["menuDisplay"] == "block"
         assert result["lastClickedChanged"] is True
+
+
+class TestSequenceGroupLockedY:
+    def test_group_type_selection_immediately_locks_start_and_shows_ghost(
+        self, app_url, page
+    ):
+        result = page.evaluate("""() => {
+            groupOperationEventListeners();
+            document.getElementById('colb').innerHTML =
+                '<svg viewBox="0 0 300 200"><g></g></svg>';
+            messagePositions = [
+                {cy: 40, index: 3, text: 'm1'},
+                {cy: 80, index: 4, text: 'm2'},
+                {cy: 120, index: 5, text: 'm3'}
+            ];
+            firstClickCoordinates = [100, 76];
+            messageOrigin = {cx: 100, y: 76, name: 'Alice'};
+            cancelGroupAddMode();
+
+            document.querySelector('#seq-group-type-menu [data-group-type="loop"]')
+                .dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+
+            return {
+                active: isAddGroupActive,
+                origin: groupOrigin,
+                type: selectedGroupType,
+                ghostAttached: Boolean(ghostGroupBox && ghostGroupBox.parentNode),
+                ghostY: ghostGroupBox && ghostGroupBox.getAttribute('y'),
+                ghostHeight: ghostGroupBox && ghostGroupBox.getAttribute('height')
+            };
+        }""")
+
+        assert result["active"] is True
+        assert result["origin"] == {"startMessageIndex": 4, "startCy": 80}
+        assert result["type"] == "loop"
+        assert result["ghostAttached"] is True
+        assert result["ghostY"] == "70"
+        assert result["ghostHeight"] == "20"
+
+    def test_group_mousemove_keeps_start_locked_and_updates_current_end(
+        self, app_url, page
+    ):
+        result = page.evaluate("""() => {
+            document.getElementById('colb').innerHTML =
+                '<svg viewBox="0 0 300 200"><g></g></svg>';
+            const svg = document.querySelector('#colb svg');
+            messagePositions = [
+                {cy: 40, index: 3, text: 'm1'},
+                {cy: 80, index: 4, text: 'm2'},
+                {cy: 120, index: 5, text: 'm3'}
+            ];
+            firstClickCoordinates = [100, 76];
+            messageOrigin = {cx: 100, y: 76, name: 'Alice'};
+            cancelGroupAddMode();
+            startGroupAddModeFromContext('alt');
+
+            handleGroupMouseMove(svg, 122);
+            const expanded = {
+                origin: groupOrigin,
+                y: ghostGroupBox.getAttribute('y'),
+                height: ghostGroupBox.getAttribute('height')
+            };
+
+            handleGroupMouseMove(svg, 42);
+            const shrunkBack = {
+                origin: groupOrigin,
+                y: ghostGroupBox.getAttribute('y'),
+                height: ghostGroupBox.getAttribute('height')
+            };
+            cancelGroupAddMode();
+            return {expanded, shrunkBack};
+        }""")
+
+        assert result["expanded"]["origin"] == {"startMessageIndex": 4, "startCy": 80}
+        assert result["expanded"]["y"] == "70"
+        assert result["expanded"]["height"] == "60"
+        assert result["shrunkBack"]["origin"] == {"startMessageIndex": 4, "startCy": 80}
+        assert result["shrunkBack"]["y"] == "30"
+        assert result["shrunkBack"]["height"] == "60"
+
+    def test_group_click_confirms_current_range_and_opens_label_modal(
+        self, app_url, page
+    ):
+        result = page.evaluate("""() => {
+            document.getElementById('colb').innerHTML =
+                '<svg viewBox="0 0 300 200"><g></g></svg>';
+            messagePositions = [
+                {cy: 40, index: 3, text: 'm1'},
+                {cy: 80, index: 4, text: 'm2'},
+                {cy: 120, index: 5, text: 'm3'}
+            ];
+            firstClickCoordinates = [100, 76];
+            messageOrigin = {cx: 100, y: 76, name: 'Alice'};
+            cancelGroupAddMode();
+            startGroupAddModeFromContext('alt');
+
+            handleGroupClick(new MouseEvent('click'), 122);
+            const submit = document.getElementById('seq-submit-group');
+            const state = {
+                active: isAddGroupActive,
+                origin: groupOrigin,
+                ghostAttached: Boolean(ghostGroupBox && ghostGroupBox.parentNode),
+                title: document.querySelector('#seq-group-modalForm .modal-title').textContent,
+                startIndex: submit.dataset.startIndex,
+                endIndex: submit.dataset.endIndex,
+                type: selectedGroupType
+            };
+            $('#seq-group-modalForm').modal('hide');
+            selectedGroupType = '';
+            return state;
+        }""")
+
+        assert result["active"] is False
+        assert result["origin"] is None
+        assert result["ghostAttached"] is False
+        assert result["title"] == "Add alt"
+        assert result["startIndex"] == "4"
+        assert result["endIndex"] == "5"
+        assert result["type"] == "alt"
+
+    def test_escape_clears_group_add_mode_and_ghost(self, app_url, page):
+        result = page.evaluate("""() => {
+            groupOperationEventListeners();
+            document.getElementById('colb').innerHTML =
+                '<svg viewBox="0 0 300 200"><g></g></svg>';
+            messagePositions = [{cy: 80, index: 4, text: 'm2'}];
+            firstClickCoordinates = [100, 76];
+            messageOrigin = {cx: 100, y: 76, name: 'Alice'};
+            cancelGroupAddMode();
+            startGroupAddModeFromContext('group');
+
+            document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
+
+            return {
+                active: isAddGroupActive,
+                origin: groupOrigin,
+                type: selectedGroupType,
+                ghostAttached: Boolean(ghostGroupBox && ghostGroupBox.parentNode)
+            };
+        }""")
+
+        assert result["active"] is False
+        assert result["origin"] is None
+        assert result["type"] == ""
+        assert result["ghostAttached"] is False
+
+    def test_group_type_selection_without_context_does_not_enter_add_mode(
+        self, app_url, page
+    ):
+        result = page.evaluate("""() => {
+            document.getElementById('colb').innerHTML =
+                '<svg viewBox="0 0 300 200"><g></g></svg>';
+            messagePositions = [{cy: 80, index: 4, text: 'm2'}];
+            firstClickCoordinates = null;
+            messageOrigin = null;
+            cancelGroupAddMode();
+
+            const started = startGroupAddModeFromContext('opt');
+
+            return {
+                started: started,
+                active: isAddGroupActive,
+                origin: groupOrigin,
+                type: selectedGroupType,
+                ghostAttached: Boolean(ghostGroupBox && ghostGroupBox.parentNode)
+            };
+        }""")
+
+        assert result["started"] is False
+        assert result["active"] is False
+        assert result["origin"] is None
+        assert result["type"] == ""
+        assert result["ghostAttached"] is False

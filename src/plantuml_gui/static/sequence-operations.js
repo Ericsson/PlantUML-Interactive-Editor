@@ -545,13 +545,9 @@ function groupOperationEventListeners() {
         var item = e.target.closest('[data-group-type]');
         if (!item) return;
         e.preventDefault();
-        selectedGroupType = item.getAttribute('data-group-type');
         document.getElementById('seq-group-type-menu').style.display = 'none';
 
-        // Enter group-add mode — first click will set the start anchor
-        isAddGroupActive = true;
-        groupOrigin = null;
-        hideIndicatorCircle();
+        startGroupAddModeFromContext(item.getAttribute('data-group-type'));
     });
 
     // Escape cancels group-add mode

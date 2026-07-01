@@ -68,6 +68,38 @@ function cancelGroupAddMode() {
     hideGhostGroupBox();
 }
 
+function getLiveGroupSvg() {
+    if (typeof getLiveSequenceSvg === 'function') {
+        return getLiveSequenceSvg();
+    }
+    const element = document.getElementById('colb');
+    return element ? element.querySelector('svg') : null;
+}
+
+function startGroupAddModeFromContext(groupType) {
+    cancelGroupAddMode();
+
+    if (messagePositions.length === 0) return false;
+    if (!messageOrigin || !firstClickCoordinates) return false;
+
+    const startMsg = findNearestMessage(firstClickCoordinates[1]);
+    if (!startMsg) return false;
+
+    selectedGroupType = groupType;
+    groupOrigin = {
+        startMessageIndex: startMsg.index,
+        startCy: startMsg.cy
+    };
+    isAddGroupActive = true;
+    hideIndicatorCircle();
+
+    const svgContainer = getLiveGroupSvg();
+    if (svgContainer) {
+        showGhostGroupBox(svgContainer, startMsg.cy, startMsg.cy);
+    }
+    return true;
+}
+
 // --- Coordinator hooks (called from setupLifelineInteraction in sequence-message.js) ---
 
 function handleGroupMouseMove(svgContainer, y) {
@@ -81,19 +113,9 @@ function handleGroupMouseMove(svgContainer, y) {
 }
 
 function handleGroupClick(e, y) {
-    if (!groupOrigin) {
-        // First click: set the start anchor
-        const startMsg = findNearestMessage(y);
-        if (!startMsg) return;
+    if (!groupOrigin) return;
 
-        groupOrigin = {
-            startMessageIndex: startMsg.index,
-            startCy: startMsg.cy
-        };
-        return;
-    }
-
-    // Second click: lock the range and show label modal
+    // Confirm the locked-start range and show the label modal.
     const endMsg = findNearestMessage(y);
     if (!endMsg) return;
 
