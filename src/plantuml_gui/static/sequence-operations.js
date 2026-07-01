@@ -232,7 +232,7 @@ function sequenceEventListeners() {
 
 // Called on every render when diagram type is sequence
 async function setHandlersForSequenceDiagram(pumlcontent, element) {
-    fetchSvgFromPlantUml().then((svgContent) => {
+    fetchSvgFromPlantUml().then(async (svgContent) => {
         element.innerHTML = svgContent;
         const svgContainer = element.querySelector('svg');
         const svg = element.querySelector('g');
@@ -242,7 +242,7 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
         }
 
         extractLifelinePositions();
-        fetchMessagePositions();
+        await fetchMessagePositions();
         cancelMessageAddMode();
         cancelActivationAddMode();
 
