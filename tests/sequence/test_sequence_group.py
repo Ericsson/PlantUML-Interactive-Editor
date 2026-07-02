@@ -24,9 +24,42 @@
 
 """Tests for sequence diagram group blocks (group, alt, opt, loop)."""
 
+import re
+
 import pytest
 from flask import json
-from plantuml_gui.sequence.group import VALID_GROUP_TYPES, add_group
+from plantuml_gui.sequence.group import (
+    VALID_GROUP_TYPES,
+    add_group,
+    delete_group,
+    get_group_label,
+    index_of_clicked_group,
+    rename_group,
+)
+from plantuml_gui.shared.render import _create_svg_from_uml
+from pyquery import PyQuery as Pq
+
+
+def extract_g_inner(svg_string):
+    """Extract the innerHTML of the <g> element from full SVG."""
+    match = re.search(r"<g>(.*?)</g>", svg_string, re.DOTALL)
+    if match:
+        return match.group(1)
+    return None
+
+
+def extract_group_rect(svg_string, group_index=0):
+    """Extract the outerHTML of the nth group box rect (fill:none) from SVG."""
+    d = Pq(svg_string)
+    count = 0
+    for rect in d("rect").items():
+        if rect.attr("fill") != "none":
+            continue
+        if count == group_index:
+            return str(rect)
+        count += 1
+    return None
+
 
 THREE_MESSAGE_PUML = """@startuml
 participant alice
@@ -228,3 +261,177 @@ class TestAddGroupRoute:
         assert response.status_code == 400
         data = json.loads(response.data)
         assert "error" in data
+
+
+NESTED_GROUP_PUML = """@startuml
+participant alice
+participant bob
+opt Opt Label
+alice -> bob: m1
+loop Loop Label
+bob -> alice: m2
+end
+end
+group
+alice -> bob: m3
+end
+@enduml"""
+
+
+class TestIndexOfClickedGroup:
+    def test_click_first_group(self):
+        svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
+        svgelement = extract_group_rect(svg, 0)
+        assert svgelement is not None
+        assert index_of_clicked_group(svg, svgelement) == 1
+
+    def test_click_nested_group(self):
+        svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
+        svgelement = extract_group_rect(svg, 1)
+        assert svgelement is not None
+        assert index_of_clicked_group(svg, svgelement) == 2
+
+    def test_click_third_group(self):
+        svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
+        svgelement = extract_group_rect(svg, 2)
+        assert svgelement is not None
+        assert index_of_clicked_group(svg, svgelement) == 3
+
+
+class TestGetGroupLabel:
+    def test_get_outer_label(self):
+        svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
+        svgelement = extract_group_rect(svg, 0)
+        assert get_group_label(NESTED_GROUP_PUML, svg, svgelement) == {
+            "type": "opt",
+            "label": "Opt Label",
+        }
+
+    def test_get_nested_label(self):
+        svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
+        svgelement = extract_group_rect(svg, 1)
+        assert get_group_label(NESTED_GROUP_PUML, svg, svgelement) == {
+            "type": "loop",
+            "label": "Loop Label",
+        }
+
+    def test_get_bare_group_label(self):
+        svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
+        svgelement = extract_group_rect(svg, 2)
+        assert get_group_label(NESTED_GROUP_PUML, svg, svgelement) == {
+            "type": "group",
+            "label": "",
+        }
+
+
+class TestRenameGroup:
+    def test_rename_keeps_keyword(self):
+        svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
+        svgelement = extract_group_rect(svg, 0)
+        result = rename_group(NESTED_GROUP_PUML, svg, svgelement, "New Label")
+        lines = result.splitlines()
+        assert "opt New Label" in lines
+        assert "loop Loop Label" in lines
+        assert "group" in lines
+
+    def test_rename_nested_group(self):
+        svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
+        svgelement = extract_group_rect(svg, 1)
+        result = rename_group(NESTED_GROUP_PUML, svg, svgelement, "New Loop")
+        lines = result.splitlines()
+        assert "loop New Loop" in lines
+        assert "opt Opt Label" in lines
+
+    def test_rename_bare_group_adds_label(self):
+        svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
+        svgelement = extract_group_rect(svg, 2)
+        result = rename_group(NESTED_GROUP_PUML, svg, svgelement, "Now Labeled")
+        assert "group Now Labeled" in result.splitlines()
+
+    def test_rename_to_empty_label(self):
+        svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
+        svgelement = extract_group_rect(svg, 0)
+        result = rename_group(NESTED_GROUP_PUML, svg, svgelement, "")
+        assert "opt" in result.splitlines()
+
+
+class TestDeleteGroup:
+    def test_unwrap_outer_group_keeps_nested_contents(self):
+        svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
+        svgelement = extract_group_rect(svg, 0)
+        result = delete_group(NESTED_GROUP_PUML, svg, svgelement)
+        lines = result.splitlines()
+        assert "opt Opt Label" not in lines
+        # Only the outer opt's own "end" is removed; the loop's "end" remains
+        assert lines.count("end") == 2
+        assert "loop Loop Label" in lines
+        assert "alice -> bob: m1" in lines
+        assert "bob -> alice: m2" in lines
+
+    def test_unwrap_nested_group_keeps_outer_intact(self):
+        svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
+        svgelement = extract_group_rect(svg, 1)
+        result = delete_group(NESTED_GROUP_PUML, svg, svgelement)
+        lines = result.splitlines()
+        assert "loop Loop Label" not in lines
+        assert "opt Opt Label" in lines
+        assert lines.count("end") == 2
+        assert "bob -> alice: m2" in lines
+
+    def test_unwrap_bare_group(self):
+        svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
+        svgelement = extract_group_rect(svg, 2)
+        result = delete_group(NESTED_GROUP_PUML, svg, svgelement)
+        lines = result.splitlines()
+        assert "group" not in lines
+        assert "alice -> bob: m3" in lines
+
+
+class TestGroupRoutes:
+    def test_get_group_label_route(self, client):
+        svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
+        svgelement = extract_group_rect(svg, 0)
+        test_data = {
+            "plantuml": NESTED_GROUP_PUML,
+            "svg": svg,
+            "svgelement": svgelement,
+        }
+        response = client.post(
+            "/getSeqGroupLabel",
+            data=json.dumps(test_data),
+            content_type="application/json",
+        )
+        assert response.get_json() == {"type": "opt", "label": "Opt Label"}
+
+    def test_rename_group_route(self, client):
+        svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
+        svgelement = extract_group_rect(svg, 0)
+        test_data = {
+            "plantuml": NESTED_GROUP_PUML,
+            "svg": svg,
+            "svgelement": svgelement,
+            "label": "Renamed",
+        }
+        response = client.post(
+            "/renameSeqGroup",
+            data=json.dumps(test_data),
+            content_type="application/json",
+        )
+        assert "opt Renamed" in response.get_json()["plantuml"].splitlines()
+
+    def test_delete_group_route(self, client):
+        svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
+        svgelement = extract_group_rect(svg, 2)
+        test_data = {
+            "plantuml": NESTED_GROUP_PUML,
+            "svg": svg,
+            "svgelement": svgelement,
+        }
+        response = client.post(
+            "/deleteSeqGroup",
+            data=json.dumps(test_data),
+            content_type="application/json",
+        )
+        lines = response.get_json()["plantuml"].splitlines()
+        assert "group" not in lines
+        assert "alice -> bob: m3" in lines

@@ -86,3 +86,5 @@ but adding them to the PlantUML code should still work.
   - Ghost box snaps to message positions with padding and can grow/shrink freely
   - Range selection works in both directions (first click can be above or below second click)
   - Label entered via modal dialog after selecting the range
+  - Rename a group's title (right-click the keyword tab or its header text → Rename); the keyword (group/alt/opt/loop) itself is unchanged
+  - Delete a group (right-click the keyword tab or its header text → Delete Group); unwraps the block, removing only the header and matching `end` line and keeping its contents in place

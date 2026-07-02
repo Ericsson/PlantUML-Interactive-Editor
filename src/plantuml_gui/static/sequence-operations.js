@@ -254,6 +254,7 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
         setupParticipantHandlers(svg.querySelectorAll('*'), svg, element);
         setupMessageHandlers(svg.querySelectorAll('*'), svg);
         setupNoteHandlers(svg.querySelectorAll('*'));
+        setupGroupHandlers(svg.querySelectorAll('*'));
 
         toggleLoadingOverlay();
     }).catch((error) => {
@@ -275,6 +276,10 @@ function checkIfMessageElement(svgelement) {
         return true;
     }
     if (tag === 'text' && svgelement.getAttribute('font-size') === '13') {
+        // Exclude bold text: it's a group keyword/label, not a message
+        if (svgelement.getAttribute('font-weight') === 'bold') {
+            return false;
+        }
         // Exclude note text (preceded by a #FEFFDD path)
         let prev = svgelement.previousElementSibling;
         if (prev && prev.tagName.toLowerCase() === 'path' &&
@@ -284,6 +289,74 @@ function checkIfMessageElement(svgelement) {
         return true;
     }
     return false;
+}
+
+// Identifies group block boxes by their PlantUML-specific fill
+function checkIfGroupBox(svgelement) {
+    return (svgelement.tagName.toLowerCase() === 'rect') &&
+        (svgelement.getAttribute('fill') === 'none');
+}
+
+// Identifies the group's keyword/label text (e.g. "alt", "loop", "[Label]")
+function checkIfGroupHeaderText(svgelement) {
+    return (svgelement.tagName.toLowerCase() === 'text') &&
+        (svgelement.getAttribute('font-weight') === 'bold') &&
+        (svgelement.getAttribute('font-size') === '13' || svgelement.getAttribute('font-size') === '11');
+}
+
+// Opens the group context menu, identifying the group by its box rect
+// (the backend matches groups by the box's x/y, regardless of which part
+// of the header - tab or label text - was actually right-clicked).
+function openGroupContextMenu(groupRect, e) {
+    lastclickedsvgelement = groupRect;
+    e.preventDefault();
+    e.stopPropagation();
+    var contextMenu = document.getElementById('seq-group-menu');
+    contextMenu.style.display = 'block';
+    contextMenu.style.left = e.pageX + 'px';
+    contextMenu.style.top = e.pageY + 'px';
+}
+
+// --- Group header handlers (contextmenu on the keyword tab and its label text only) ---
+
+function setupGroupHandlers(svgelements) {
+    // The keyword tab (path) precedes its box (rect), which precedes its
+    // header text (keyword, then an optional bracketed label) in the SVG.
+    let pendingTabPath = null;
+    let currentGroupRect = null;
+    let headerTextsRemaining = 0;
+
+    for (let index = 0; index < svgelements.length; index++) {
+        let svgelement = svgelements[index];
+        const tag = svgelement.tagName.toLowerCase();
+
+        if (tag === 'path' && svgelement.getAttribute('fill') === '#EEEEEE') {
+            pendingTabPath = svgelement;
+            continue;
+        }
+
+        if (checkIfGroupBox(svgelement) && pendingTabPath) {
+            currentGroupRect = svgelement;
+            let tabPath = pendingTabPath;
+            let groupRectForTab = currentGroupRect;
+            tabPath.addEventListener('contextmenu', (e) => openGroupContextMenu(groupRectForTab, e));
+            pendingTabPath = null;
+            headerTextsRemaining = 2; // keyword text + optional bracketed label
+            continue;
+        }
+
+        if (checkIfGroupHeaderText(svgelement)) {
+            if (headerTextsRemaining > 0 && currentGroupRect) {
+                let groupRect = currentGroupRect;
+                svgelement.addEventListener('contextmenu', (e) => openGroupContextMenu(groupRect, e));
+                headerTextsRemaining--;
+            }
+            continue;
+        }
+
+        // Any other element ends this group's clickable header window
+        headerTextsRemaining = 0;
+    }
 }
 
 // --- Message element handlers (hover, contextmenu) ---
@@ -527,7 +600,59 @@ function noteOperationEventListeners() {
 
 // --- Group operation event listeners ---
 
+let groupEditMode = false;
+
 function groupOperationEventListeners() {
+    // "Rename" context menu item: fetch current label and show the group modal
+    document.getElementById('seq-renameGroup').addEventListener('click', async function() {
+        var element = document.getElementById('colb');
+        var svg = element.querySelector('g');
+        try {
+            var plantuml = trimlines(editor.session.getValue());
+            var response = await fetch("getSeqGroupLabel", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    plantuml: plantuml,
+                    svg: svg.innerHTML,
+                    svgelement: lastclickedsvgelement.outerHTML
+                })
+            });
+            var data = await response.json();
+            groupEditMode = true;
+            document.querySelector('#seq-group-modalForm .modal-title').textContent = 'Rename ' + data.type;
+            document.getElementById('seq-group-label-text').value = data.label;
+            $('#seq-group-modalForm').modal('show');
+            $('#seq-group-modalForm').on('shown.bs.modal', function() {
+                $('#seq-group-label-text').trigger('focus');
+            });
+        } catch (error) {
+            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+        }
+    });
+
+    // "Delete Group" context menu item
+    document.getElementById('seq-deleteGroup').addEventListener('click', async function() {
+        var element = document.getElementById('colb');
+        var svg = element.querySelector('g');
+        try {
+            var plantuml = trimlines(editor.session.getValue());
+            var response = await fetch("deleteSeqGroup", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    plantuml: plantuml,
+                    svg: svg.innerHTML,
+                    svgelement: lastclickedsvgelement.outerHTML
+                })
+            });
+            var data = await response.json();
+            setPuml(data.plantuml);
+        } catch (error) {
+            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+        }
+    });
+
     // "Add Group" in sequence-menu shows the type submenu
     document.getElementById('seq-addGroup').addEventListener('click', function(e) {
         e.preventDefault();

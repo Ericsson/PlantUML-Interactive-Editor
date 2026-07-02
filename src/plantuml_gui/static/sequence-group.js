@@ -130,6 +130,7 @@ function handleGroupClick(e, y) {
     groupOrigin = null;
 
     // Show the label modal
+    groupEditMode = false;
     document.querySelector('#seq-group-modalForm .modal-title').textContent =
         'Add ' + selectedGroupType;
     document.getElementById('seq-group-label-text').value = '';
@@ -146,28 +147,45 @@ function handleGroupClick(e, y) {
 // Global function called by onclick on the submit-group button
 async function submitGroup() {
     var label = document.getElementById('seq-group-label-text').value;
-    var submitBtn = document.getElementById('seq-submit-group');
-    var startIndex = parseInt(submitBtn.dataset.startIndex, 10);
-    var endIndex = parseInt(submitBtn.dataset.endIndex, 10);
 
     var element = document.getElementById('colb');
     var svg = element.querySelector('g');
 
     try {
         var plantuml = trimlines(editor.session.getValue());
-        var response = await fetch("addGroup", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                plantuml: plantuml,
-                groupType: selectedGroupType,
-                label: label,
-                startMessageIndex: startIndex,
-                endMessageIndex: endIndex
-            })
-        });
+        var response;
+        if (groupEditMode) {
+            groupEditMode = false;
+            response = await fetch("renameSeqGroup", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    plantuml: plantuml,
+                    svg: svg.innerHTML,
+                    svgelement: lastclickedsvgelement.outerHTML,
+                    label: label
+                })
+            });
+        } else {
+            var submitBtn = document.getElementById('seq-submit-group');
+            var startIndex = parseInt(submitBtn.dataset.startIndex, 10);
+            var endIndex = parseInt(submitBtn.dataset.endIndex, 10);
+            response = await fetch("addGroup", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    plantuml: plantuml,
+                    groupType: selectedGroupType,
+                    label: label,
+                    startMessageIndex: startIndex,
+                    endMessageIndex: endIndex
+                })
+            });
+        }
         var data = await response.json();
         if (data.error) {
             displayErrorMessage(data.error);

@@ -25,7 +25,7 @@
 from flask import Blueprint, jsonify, request
 
 from .activation import add_activation, delete_activation
-from .group import add_group
+from .group import add_group, delete_group, get_group_label, rename_group
 from .message import (
     add_message,
     delete_message,
@@ -241,3 +241,31 @@ def addgroup():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"plantuml": result})
+
+
+@sequence_bp.route("/getSeqGroupLabel", methods=["POST"])
+def getseqgrouplabel():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    return jsonify(get_group_label(puml, svg, svgelement))
+
+
+@sequence_bp.route("/renameSeqGroup", methods=["POST"])
+def renameseqgroup():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    label = data["label"]
+    return jsonify({"plantuml": rename_group(puml, svg, svgelement, label)})
+
+
+@sequence_bp.route("/deleteSeqGroup", methods=["POST"])
+def deleteseqgroup():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    return jsonify({"plantuml": delete_group(puml, svg, svgelement)})

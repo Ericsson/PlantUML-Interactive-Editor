@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### External
 
 - Group blocks for sequence diagrams: right-click a lifeline → Add Group sub-menu to pick group/alt/opt/loop, then click two messages to define the range (ghost box preview), type a label, and the group is created
+- Rename or delete a sequence group block: right-click the keyword tab or its header text → Rename (edits only the title, keeps the keyword) or Delete Group (unwraps the block, keeping its contents)
 - Activation bars for sequence diagrams: right-click a lifeline → Activate, drag down to preview a ghost bar, then left-click and choose Deactivate or Destroy to end it (supports nested activations)
 - Delete an activation bar: right-click the bar → Delete activation bar (removes the matched activate + deactivate/destroy pair)
 - Deleting a participant now also deletes any notes referencing that participant
@@ -26,6 +27,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Added backend logic for sequence group blocks (add_group) wrapping a message range in group/alt/opt/loop...end syntax
 - Added /addGroup backend endpoint for sequence group blocks
+- Added backend logic for sequence group rename and delete (index_of_clicked_group, get_group_label, rename_group, delete_group); delete unwraps a block by removing only its header and matching `end` line, tracking nesting depth to find the block's own closer
+- Added /getSeqGroupLabel, /renameSeqGroup, /deleteSeqGroup backend endpoints for sequence groups (named with a Seq prefix to avoid colliding with the activity diagram's /getGroupLabel-style routes)
+- Group context menu only responds to right-clicks on the keyword tab or its header text, not the rest of the box, so messages/notes inside a group keep their own context menus
+- Fixed group keyword/label text (bold, font-size 13) being misclassified as message text by checkIfMessageElement
+- Fixed seq-group-menu not being hidden by the outside-click handler in addSequenceEventListeners
 - Added backend logic for sequence participant activation bars (add_activation) inserting a matched activate + deactivate/destroy pair around the selected message lines
 - Added /addActivation and /getMessagePositions backend endpoints for sequence activation bars
 - Added delete_activation logic and /deleteActivation endpoint to remove a clicked activation bar's matched activate + close pair (stack-paired, nesting-aware)

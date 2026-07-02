@@ -29,6 +29,10 @@ wraps a range of messages (identified by their puml line indexes) in a
 ``<keyword> <label> ... end`` block.
 """
 
+from typing import Dict
+
+from pyquery import PyQuery as Pq
+
 VALID_GROUP_TYPES = ("group", "alt", "opt", "loop")
 
 
@@ -65,4 +69,94 @@ def add_group(
     lines.insert(end + 1, "end")
     lines.insert(start, f"{group_type} {label}")
 
+    return "\n".join(lines)
+
+
+def index_of_clicked_group(svg: str, svgelement: str) -> int:
+    """Find the 1-based index of the clicked group's box in the SVG.
+
+    Group blocks render a bordered box as a rect with fill "none",
+    which is unique to group boxes (participant rects use #E2E2F0,
+    activation bars use #FFFFFF). Boxes are counted in document order,
+    which matches puml source order, and matched by their x/y position.
+    """
+    clicked = Pq(svgelement)
+    clicked_x = clicked.attr("x")
+    clicked_y = clicked.attr("y")
+
+    d = Pq(svg)
+    count = 0
+    for rect in d("rect").items():
+        if rect.attr("fill") != "none":
+            continue
+        count += 1
+        if rect.attr("x") == clicked_x and rect.attr("y") == clicked_y:
+            return count
+    return -1
+
+
+def _find_group_line_index(puml: str, group_index: int) -> int:
+    """Find the puml line index of the nth group header (1-based)."""
+    lines = puml.splitlines()
+    count = 0
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        first_word = stripped.split(" ", 1)[0] if stripped else ""
+        if first_word in VALID_GROUP_TYPES:
+            count += 1
+            if count == group_index:
+                return i
+    return -1
+
+
+def get_group_label(puml: str, svg: str, svgelement: str) -> Dict[str, str]:
+    """Get the keyword and label text of the clicked group."""
+    idx = index_of_clicked_group(svg, svgelement)
+    line_index = _find_group_line_index(puml, idx)
+    line = puml.splitlines()[line_index].strip()
+    parts = line.split(" ", 1)
+    group_type = parts[0]
+    label = parts[1] if len(parts) > 1 else ""
+    return {"type": group_type, "label": label}
+
+
+def rename_group(puml: str, svg: str, svgelement: str, label: str) -> str:
+    """Rename the clicked group's title, keeping its keyword unchanged."""
+    idx = index_of_clicked_group(svg, svgelement)
+    line_index = _find_group_line_index(puml, idx)
+    lines = puml.splitlines()
+    group_type = lines[line_index].strip().split(" ", 1)[0]
+    lines[line_index] = f"{group_type} {label}" if label else group_type
+    return "\n".join(lines)
+
+
+def delete_group(puml: str, svg: str, svgelement: str) -> str:
+    """Unwrap the clicked group: remove its header and matching 'end' line.
+
+    The block's contents (messages, notes, nested groups) are left in place.
+    Nesting depth is tracked to find this group's own closing 'end' rather
+    than a nested group's.
+    """
+    idx = index_of_clicked_group(svg, svgelement)
+    line_index = _find_group_line_index(puml, idx)
+    lines = puml.splitlines()
+
+    depth = 1
+    end_line = -1
+    for i in range(line_index + 1, len(lines)):
+        stripped = lines[i].strip()
+        first_word = stripped.split(" ", 1)[0] if stripped else ""
+        if first_word in VALID_GROUP_TYPES:
+            depth += 1
+        elif stripped == "end":
+            depth -= 1
+            if depth == 0:
+                end_line = i
+                break
+
+    if end_line == -1:
+        return puml
+
+    del lines[end_line]
+    del lines[line_index]
     return "\n".join(lines)

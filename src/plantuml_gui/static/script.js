@@ -523,7 +523,8 @@ function addSequenceEventListeners() {
             'seq-note-placement-menu',
             'seq-note-menu',
             'activation-end-menu',
-            'seq-group-type-menu'
+            'seq-group-type-menu',
+            'seq-group-menu'
         ];
 
         menuIds.forEach(function(id) {
