@@ -29,7 +29,7 @@ wraps a range of messages (identified by their puml line indexes) in a
 ``<keyword> <label> ... end`` block.
 """
 
-from typing import Dict
+from typing import Dict, List
 
 from pyquery import PyQuery as Pq
 
@@ -109,6 +109,45 @@ def _find_group_line_index(puml: str, group_index: int) -> int:
     return -1
 
 
+def _find_group_end_index(lines: List[str], header_index: int) -> int:
+    """Find the line index of the 'end' closing the group opened at header_index.
+
+    Nesting depth is tracked so nested groups' 'end' lines are skipped.
+    Returns -1 if no matching 'end' exists.
+    """
+    depth = 1
+    for i in range(header_index + 1, len(lines)):
+        stripped = lines[i].strip()
+        first_word = stripped.split(" ", 1)[0] if stripped else ""
+        if first_word in VALID_GROUP_TYPES:
+            depth += 1
+        elif stripped == "end":
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
+
+def get_group_positions(puml: str, svg: str) -> List[Dict[str, int]]:
+    """Return header/end line indexes for each group in SVG document order.
+
+    Group boxes render in document order matching puml source order (see
+    index_of_clicked_group), so the frontend matches groups by ordinal.
+    """
+    lines = puml.splitlines()
+    d = Pq(svg)
+    group_count = sum(1 for rect in d("rect").items() if rect.attr("fill") == "none")
+
+    positions = []
+    for n in range(1, group_count + 1):
+        header_index = _find_group_line_index(puml, n)
+        end_index = (
+            _find_group_end_index(lines, header_index) if header_index != -1 else -1
+        )
+        positions.append({"headerIndex": header_index, "endIndex": end_index})
+    return positions
+
+
 def get_group_label(puml: str, svg: str, svgelement: str) -> Dict[str, str]:
     """Get the keyword and label text of the clicked group."""
     idx = index_of_clicked_group(svg, svgelement)
@@ -141,19 +180,7 @@ def delete_group(puml: str, svg: str, svgelement: str) -> str:
     line_index = _find_group_line_index(puml, idx)
     lines = puml.splitlines()
 
-    depth = 1
-    end_line = -1
-    for i in range(line_index + 1, len(lines)):
-        stripped = lines[i].strip()
-        first_word = stripped.split(" ", 1)[0] if stripped else ""
-        if first_word in VALID_GROUP_TYPES:
-            depth += 1
-        elif stripped == "end":
-            depth -= 1
-            if depth == 0:
-                end_line = i
-                break
-
+    end_line = _find_group_end_index(lines, line_index)
     if end_line == -1:
         return puml
 

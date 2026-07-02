@@ -151,6 +151,7 @@ def get_participant_positions(puml: str, svg: str) -> List[Dict[str, object]]:
                 "cx": participant.cx,
                 "yTop": bounds["yTop"],
                 "yBottom": bounds["yBottom"],
+                "index": participant.index,
             }
         )
     return positions

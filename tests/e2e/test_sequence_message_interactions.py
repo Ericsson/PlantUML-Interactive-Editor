@@ -86,8 +86,10 @@ class TestSequenceMessageInteractions:
         assert result["hoverState"]["strokeWidth"] == "2"
         assert result["menuDisplay"] == "block"
         assert result["lastClickedChanged"] is True
+        # Mouseout restores the original style attribute (stroke-width:1.0),
+        # which the CSSOM serializes as "1"
         assert result["afterMouseout"]["fontWeight"] == ""
-        assert result["afterMouseout"]["strokeWidth"] == ""
+        assert result["afterMouseout"]["strokeWidth"] == "1"
 
     def test_message_add_mode_disables_message_hover_and_context_menu(
         self, app_url, page

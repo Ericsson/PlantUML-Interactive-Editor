@@ -28,6 +28,8 @@ let history = [];
 let historyPointer = -1;
 let editor;
 let colorqueue = [];
+let currentDiagramType = "unknown";
+let lastEditorHoverRow = -1;
 var Range = ace.require("ace/range").Range
 
 async function initeditor() {
@@ -71,6 +73,16 @@ async function initeditor() {
         // Add the changeCursor event listener when the editor is clicked
         cursorChangeListener()
     });
+
+    // Hovering a line in the editor highlights the matching sequence element
+    editor.on('mousemove', function(e) {
+        if (currentDiagramType !== 'sequence') return;
+        const row = e.getDocumentPosition().row;
+        if (row === lastEditorHoverRow) return;
+        lastEditorHoverRow = row;
+        resetSequenceHighlight();
+        highlightSequenceForRow(row);
+    });
     console.log("Editor initialization done.")
 }
 
@@ -105,6 +117,12 @@ function findChangedLines() {
 }
 
 const cursorChangeListener = async function(e) {
+    if (currentDiagramType === 'sequence') {
+        resetSequenceHighlight();
+        highlightSequenceForRow(editor.getCursorPosition().row);
+        return;
+    }
+
     const svg = element.querySelector('g');
     resetHighlight(svg);
 
@@ -626,7 +644,8 @@ async function renderPlantUml() {
         displayErrorMessage(`Error with fetch API: ${error.message}`, error);
     }
 
-    switch (checkDiagramType(pumlcontent)) {
+    currentDiagramType = checkDiagramType(pumlcontent);
+    switch (currentDiagramType) {
         case "activity":
             setHandlersForActivityDiagram(pumlcontent, element);
             break;

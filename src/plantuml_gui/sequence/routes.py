@@ -25,7 +25,13 @@
 from flask import Blueprint, jsonify, request
 
 from .activation import add_activation, delete_activation
-from .group import add_group, delete_group, get_group_label, rename_group
+from .group import (
+    add_group,
+    delete_group,
+    get_group_label,
+    get_group_positions,
+    rename_group,
+)
 from .message import (
     add_message,
     delete_message,
@@ -33,7 +39,7 @@ from .message import (
     get_message_positions,
     get_message_text,
 )
-from .note import add_note, delete_note, edit_note, get_note_text
+from .note import add_note, delete_note, edit_note, get_note_positions, get_note_text
 from .participant import (
     add_participant,
     delete_participant,
@@ -169,6 +175,22 @@ def getmessagepositions():
     puml = data["plantuml"]
     svg = data["svg"]
     return jsonify({"positions": get_message_positions(puml, svg)})
+
+
+@sequence_bp.route("/getSeqNotePositions", methods=["POST"])
+def getseqnotepositions():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    return jsonify({"positions": get_note_positions(puml, svg)})
+
+
+@sequence_bp.route("/getSeqGroupPositions", methods=["POST"])
+def getseqgrouppositions():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    return jsonify({"positions": get_group_positions(puml, svg)})
 
 
 @sequence_bp.route("/addNote", methods=["POST"])

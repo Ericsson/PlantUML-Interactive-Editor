@@ -3,6 +3,13 @@ let currentContextMenuHandler = null;
 let participantLifelines = [];
 const LIFELINE_TOLERANCE = 15;
 
+// Note/group positions fetched from backend (refreshed each render)
+let notePositions = []; // [{cy, index}, ...]
+let groupPositions = []; // [{headerIndex, endIndex}, ...]
+
+// Elements highlighted from the editor side, with how to restore them
+let sequenceHighlighted = []; // [{el, kind, old}, ...]
+
 // --- Utilities ---
 
 // Convert mouse event screen coordinates to SVG coordinate space
@@ -30,6 +37,176 @@ async function extractLifelinePositions() {
         participantLifelines = data.positions;
     } catch (error) {
         displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+    }
+}
+
+// Fetch note positions from backend (called once per render)
+async function fetchNotePositions() {
+    notePositions = [];
+    const element = document.getElementById('colb');
+    const svg = element.querySelector('g');
+    if (!svg) return;
+    try {
+        const plantuml = trimlines(editor.session.getValue());
+        const response = await fetch("getSeqNotePositions", {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({plantuml: plantuml, svg: svg.innerHTML})
+        });
+        const data = await response.json();
+        notePositions = data.positions;
+    } catch (error) {
+        notePositions = [];
+    }
+}
+
+// Fetch group positions from backend (called once per render)
+async function fetchGroupPositions() {
+    groupPositions = [];
+    const element = document.getElementById('colb');
+    const svg = element.querySelector('g');
+    if (!svg) return;
+    try {
+        const plantuml = trimlines(editor.session.getValue());
+        const response = await fetch("getSeqGroupPositions", {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({plantuml: plantuml, svg: svg.innerHTML})
+        });
+        const data = await response.json();
+        groupPositions = data.positions;
+    } catch (error) {
+        groupPositions = [];
+    }
+}
+
+// Vertical position of a message SVG element, comparable to messagePositions cy
+function messageElementCy(svgelement) {
+    const tag = svgelement.tagName.toLowerCase();
+    if (tag === 'line') {
+        return parseFloat(svgelement.getAttribute('y1'));
+    }
+    if (tag === 'text') {
+        return parseFloat(svgelement.getAttribute('y'));
+    }
+    if (tag === 'polygon') {
+        const points = (svgelement.getAttribute('points') || '').trim().split(/[\s,]+/);
+        let sum = 0;
+        let count = 0;
+        for (let i = 1; i < points.length; i += 2) {
+            sum += parseFloat(points[i]);
+            count++;
+        }
+        return count > 0 ? sum / count : 0;
+    }
+    return 0;
+}
+
+// --- Editor -> diagram highlighting ---
+
+// Restore the literal style attribute. Mutating el.style re-serializes the
+// attribute and loses the exact "stroke-width:1.0" string that the element
+// classifiers (e.g. checkIfMessageElement) match on, so unhighlighting must
+// put back the original attribute rather than clear style properties.
+function restoreStyleAttribute(el, old) {
+    if (old) {
+        el.setAttribute('style', old);
+    } else {
+        el.removeAttribute('style');
+    }
+}
+
+function resetSequenceHighlight() {
+    for (const entry of sequenceHighlighted) {
+        if (entry.kind === 'message' || entry.kind === 'group') {
+            restoreStyleAttribute(entry.el, entry.old);
+        } else { // participant or note fill
+            entry.el.setAttribute('fill', entry.old);
+        }
+    }
+    sequenceHighlighted = [];
+}
+
+// Highlight the diagram element(s) defined on the given editor row
+function highlightSequenceForRow(row) {
+    if (isSequenceAddMode()) return;
+    const element = document.getElementById('colb');
+    const svg = element ? element.querySelector('g') : null;
+    if (!svg) return;
+    const svgelements = svg.querySelectorAll('*');
+
+    const message = messagePositions.find(m => m.index === row);
+    if (message) {
+        // Assign each message element to its nearest message (same rule as
+        // hover in the other direction) so tolerances never overlap neighbors.
+        for (const el of svgelements) {
+            if (!checkIfMessageElement(el)) continue;
+            const nearest = findNearestMessage(messageElementCy(el));
+            if (nearest && nearest.index === row) {
+                const old = el.getAttribute('style');
+                el.style.fontWeight = 'bold';
+                el.style.strokeWidth = '2.0';
+                sequenceHighlighted.push({el: el, kind: 'message', old: old});
+            }
+        }
+        return;
+    }
+
+    const participant = participantLifelines.find(p => p.index === row);
+    if (participant) {
+        for (let i = 0; i < svgelements.length; i++) {
+            if (!checkIfParticipant(svgelements, i)) continue;
+            const el = svgelements[i];
+            const cx = parseFloat(el.getAttribute('x')) + parseFloat(el.getAttribute('width')) / 2;
+            if (Math.abs(cx - participant.cx) <= 1) {
+                sequenceHighlighted.push({el: el, kind: 'participant', old: el.getAttribute('fill')});
+                el.setAttribute('fill', '#d8d8d8');
+            }
+        }
+        return;
+    }
+
+    const noteOrdinal = notePositions.findIndex(n => n.index === row);
+    if (noteOrdinal !== -1) {
+        // Each note renders two #FEFFDD paths (body + fold) in document order
+        let pathCount = 0;
+        for (const el of svgelements) {
+            if (el.tagName.toLowerCase() !== 'path' || el.getAttribute('fill') !== '#FEFFDD') continue;
+            if (Math.floor(pathCount / 2) === noteOrdinal) {
+                sequenceHighlighted.push({el: el, kind: 'note', old: el.getAttribute('fill')});
+                el.setAttribute('fill', '#d8d8d8');
+            }
+            pathCount++;
+        }
+        return;
+    }
+
+    const groupOrdinal = groupPositions.findIndex(g => g.headerIndex === row || g.endIndex === row);
+    if (groupOrdinal !== -1) {
+        // Group boxes (rect fill "none") appear in document order matching
+        // puml source order; the #EEEEEE tab path precedes its box.
+        let boxCount = 0;
+        let lastTabPath = null;
+        for (const el of svgelements) {
+            if (el.tagName.toLowerCase() === 'path' && el.getAttribute('fill') === '#EEEEEE') {
+                lastTabPath = el;
+                continue;
+            }
+            if (!checkIfGroupBox(el)) continue;
+            if (boxCount === groupOrdinal) {
+                const oldBox = el.getAttribute('style');
+                el.style.strokeWidth = '2.0';
+                sequenceHighlighted.push({el: el, kind: 'group', old: oldBox});
+                if (lastTabPath) {
+                    const oldTab = lastTabPath.getAttribute('style');
+                    lastTabPath.style.strokeWidth = '2.0';
+                    sequenceHighlighted.push({el: lastTabPath, kind: 'group', old: oldTab});
+                }
+                break;
+            }
+            boxCount++;
+            lastTabPath = null;
+        }
     }
 }
 
@@ -199,11 +376,18 @@ function setupParticipantHandlers(svgelements, svg, element) {
         svgelement.addEventListener('mouseover', function() {
             const svg = element.querySelector('g');
             resetHighlight(svg);
-            rectcolor = svgelement.getAttribute('fill');
+            // If already highlighted from the editor side, keep the original fill
+            const highlighted = sequenceHighlighted.find(h => h.el === svgelement);
+            rectcolor = highlighted ? highlighted.old : svgelement.getAttribute('fill');
             svgelement.setAttribute('fill', '#d8d8d8');
+            const cx = parseFloat(svgelement.getAttribute('x')) + parseFloat(svgelement.getAttribute('width')) / 2;
+            const lifeline = participantLifelines.find(p => Math.abs(p.cx - cx) <= 1);
+            if (lifeline && lifeline.index >= 0) setEditorMarkers(lifeline.index);
         });
 
         svgelement.addEventListener('mouseout', function() {
+            clearMarkers();
+            if (sequenceHighlighted.some(h => h.el === svgelement)) return;
             svgelement.setAttribute('fill', rectcolor);
         });
 
@@ -235,6 +419,7 @@ function sequenceEventListeners() {
 async function setHandlersForSequenceDiagram(pumlcontent, element) {
     fetchSvgFromPlantUml().then(async (svgContent) => {
         element.innerHTML = svgContent;
+        sequenceHighlighted = []; // old SVG is gone; drop stale references
         const svgContainer = element.querySelector('svg');
         const svg = element.querySelector('g');
         if (!svg) {
@@ -242,8 +427,10 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
             return;
         }
 
-        extractLifelinePositions();
+        await extractLifelinePositions();
         await fetchMessagePositions();
+        await fetchNotePositions();
+        await fetchGroupPositions();
         cancelMessageAddMode();
         cancelActivationAddMode();
         cancelGroupAddMode();
@@ -325,6 +512,21 @@ function setupGroupHandlers(svgelements) {
     let pendingTabPath = null;
     let currentGroupRect = null;
     let headerTextsRemaining = 0;
+    // Group boxes appear in document order matching puml source order
+    let groupOrdinal = -1;
+
+    function addGroupHoverMarkers(el, ordinal) {
+        el.addEventListener('mouseover', function() {
+            if (isSequenceAddMode()) return;
+            const group = groupPositions[ordinal];
+            if (group && group.headerIndex >= 0) {
+                getmarker([group.headerIndex, group.endIndex >= 0 ? group.endIndex : group.headerIndex]);
+            }
+        });
+        el.addEventListener('mouseout', function() {
+            clearMarkers();
+        });
+    }
 
     for (let index = 0; index < svgelements.length; index++) {
         let svgelement = svgelements[index];
@@ -335,13 +537,17 @@ function setupGroupHandlers(svgelements) {
             continue;
         }
 
-        if (checkIfGroupBox(svgelement) && pendingTabPath) {
-            currentGroupRect = svgelement;
-            let tabPath = pendingTabPath;
-            let groupRectForTab = currentGroupRect;
-            tabPath.addEventListener('contextmenu', (e) => openGroupContextMenu(groupRectForTab, e));
-            pendingTabPath = null;
-            headerTextsRemaining = 2; // keyword text + optional bracketed label
+        if (checkIfGroupBox(svgelement)) {
+            groupOrdinal++;
+            if (pendingTabPath) {
+                currentGroupRect = svgelement;
+                let tabPath = pendingTabPath;
+                let groupRectForTab = currentGroupRect;
+                tabPath.addEventListener('contextmenu', (e) => openGroupContextMenu(groupRectForTab, e));
+                addGroupHoverMarkers(tabPath, groupOrdinal);
+                pendingTabPath = null;
+                headerTextsRemaining = 2; // keyword text + optional bracketed label
+            }
             continue;
         }
 
@@ -349,6 +555,7 @@ function setupGroupHandlers(svgelements) {
             if (headerTextsRemaining > 0 && currentGroupRect) {
                 let groupRect = currentGroupRect;
                 svgelement.addEventListener('contextmenu', (e) => openGroupContextMenu(groupRect, e));
+                addGroupHoverMarkers(svgelement, groupOrdinal);
                 headerTextsRemaining--;
             }
             continue;
@@ -366,15 +573,25 @@ function setupMessageHandlers(svgelements, svg) {
         let svgelement = svgelements[index];
         if (!checkIfMessageElement(svgelement)) continue;
 
+        let originalstyle; // undefined while no hover is in progress
         svgelement.addEventListener('mouseover', function() {
             if (isSequenceAddMode()) return;
+            // If already highlighted from the editor side, keep the original style
+            const highlighted = sequenceHighlighted.find(h => h.el === svgelement);
+            originalstyle = highlighted ? highlighted.old : svgelement.getAttribute('style');
             svgelement.style.fontWeight = 'bold';
             svgelement.style.strokeWidth = '2.0';
+            const nearest = findNearestMessage(messageElementCy(svgelement));
+            if (nearest) setEditorMarkers(nearest.index);
         });
 
         svgelement.addEventListener('mouseout', function() {
-            svgelement.style.fontWeight = '';
-            svgelement.style.strokeWidth = '';
+            clearMarkers();
+            if (originalstyle === undefined) return;
+            // Keep styles if the element is highlighted from the editor side
+            if (sequenceHighlighted.some(h => h.el === svgelement)) return;
+            restoreStyleAttribute(svgelement, originalstyle);
+            originalstyle = undefined;
         });
 
         svgelement.addEventListener('contextmenu', function(e) {
@@ -450,12 +667,17 @@ function messageOperationEventListeners() {
 // --- Note element handlers ---
 
 function setupNoteHandlers(svgelements) {
+    // Each note renders two #FEFFDD paths (body + fold) in document order
+    let notePathCount = 0;
     for (let index = 0; index < svgelements.length; index++) {
         let svgelement = svgelements[index];
         const tag = svgelement.tagName.toLowerCase();
 
         // Note body paths have fill #FEFFDD
         if (tag === 'path' && svgelement.getAttribute('fill') === '#FEFFDD') {
+            const noteOrdinal = Math.floor(notePathCount / 2);
+            notePathCount++;
+
             svgelement.addEventListener('contextmenu', function(e) {
                 lastclickedsvgelement = svgelement;
                 e.preventDefault();
@@ -464,6 +686,22 @@ function setupNoteHandlers(svgelements) {
                 contextMenu.style.display = 'block';
                 contextMenu.style.left = e.pageX + 'px';
                 contextMenu.style.top = e.pageY + 'px';
+            });
+
+            let notecolor = "";
+            svgelement.addEventListener('mouseover', function() {
+                if (isSequenceAddMode()) return;
+                const highlighted = sequenceHighlighted.find(h => h.el === svgelement);
+                notecolor = highlighted ? highlighted.old : svgelement.getAttribute('fill');
+                svgelement.setAttribute('fill', '#d8d8d8');
+                const note = notePositions[noteOrdinal];
+                if (note && note.index >= 0) setEditorMarkers(note.index);
+            });
+
+            svgelement.addEventListener('mouseout', function() {
+                clearMarkers();
+                if (sequenceHighlighted.some(h => h.el === svgelement)) return;
+                svgelement.setAttribute('fill', notecolor);
             });
         }
 

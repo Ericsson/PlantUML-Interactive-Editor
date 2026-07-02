@@ -435,3 +435,39 @@ class TestGroupRoutes:
         lines = response.get_json()["plantuml"].splitlines()
         assert "group" not in lines
         assert "alice -> bob: m3" in lines
+
+
+class TestGetGroupPositions:
+    # NESTED_GROUP_PUML line indexes:
+    #   3: opt Opt Label ... 8: end (closes opt)
+    #   5: loop Loop Label ... 7: end (closes loop)
+    #   9: group ... 11: end
+    def test_nested_groups_get_correct_bounds(self):
+        from plantuml_gui.sequence.group import get_group_positions
+
+        svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
+        positions = get_group_positions(NESTED_GROUP_PUML, svg)
+        assert positions == [
+            {"headerIndex": 3, "endIndex": 8},
+            {"headerIndex": 5, "endIndex": 7},
+            {"headerIndex": 9, "endIndex": 11},
+        ]
+
+    def test_no_groups_returns_empty(self):
+        from plantuml_gui.sequence.group import get_group_positions
+
+        svg = extract_g_inner(_create_svg_from_uml(THREE_MESSAGE_PUML))
+        assert get_group_positions(THREE_MESSAGE_PUML, svg) == []
+
+    def test_route_returns_positions(self, client):
+        svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
+        with client:
+            response = client.post(
+                "/getSeqGroupPositions",
+                data=json.dumps({"plantuml": NESTED_GROUP_PUML, "svg": svg}),
+                content_type="application/json",
+            )
+            assert response.status_code == 200
+            positions = response.get_json()["positions"]
+            assert len(positions) == 3
+            assert positions[0] == {"headerIndex": 3, "endIndex": 8}
