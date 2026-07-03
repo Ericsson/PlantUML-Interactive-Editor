@@ -228,6 +228,7 @@ function sequenceEventListeners() {
     messageOperationEventListeners();
     noteOperationEventListeners();
     activationEventListeners();
+    groupOperationEventListeners();
 }
 
 // Called on every render when diagram type is sequence
@@ -245,12 +246,15 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
         await fetchMessagePositions();
         cancelMessageAddMode();
         cancelActivationAddMode();
+        cancelGroupAddMode();
+        cancelNoteAddMode();
 
         handleContextMenuBackground(svgContainer);
         setupLifelineInteraction();
         setupParticipantHandlers(svg.querySelectorAll('*'), svg, element);
         setupMessageHandlers(svg.querySelectorAll('*'), svg);
         setupNoteHandlers(svg.querySelectorAll('*'));
+        setupGroupHandlers(svg.querySelectorAll('*'));
 
         toggleLoadingOverlay();
     }).catch((error) => {
@@ -272,6 +276,10 @@ function checkIfMessageElement(svgelement) {
         return true;
     }
     if (tag === 'text' && svgelement.getAttribute('font-size') === '13') {
+        // Exclude bold text: it's a group keyword/label, not a message
+        if (svgelement.getAttribute('font-weight') === 'bold') {
+            return false;
+        }
         // Exclude note text (preceded by a #FEFFDD path)
         let prev = svgelement.previousElementSibling;
         if (prev && prev.tagName.toLowerCase() === 'path' &&
@@ -283,6 +291,74 @@ function checkIfMessageElement(svgelement) {
     return false;
 }
 
+// Identifies group block boxes by their PlantUML-specific fill
+function checkIfGroupBox(svgelement) {
+    return (svgelement.tagName.toLowerCase() === 'rect') &&
+        (svgelement.getAttribute('fill') === 'none');
+}
+
+// Identifies the group's keyword/label text (e.g. "alt", "loop", "[Label]")
+function checkIfGroupHeaderText(svgelement) {
+    return (svgelement.tagName.toLowerCase() === 'text') &&
+        (svgelement.getAttribute('font-weight') === 'bold') &&
+        (svgelement.getAttribute('font-size') === '13' || svgelement.getAttribute('font-size') === '11');
+}
+
+// Opens the group context menu, identifying the group by its box rect
+// (the backend matches groups by the box's x/y, regardless of which part
+// of the header - tab or label text - was actually right-clicked).
+function openGroupContextMenu(groupRect, e) {
+    lastclickedsvgelement = groupRect;
+    e.preventDefault();
+    e.stopPropagation();
+    var contextMenu = document.getElementById('seq-group-menu');
+    contextMenu.style.display = 'block';
+    contextMenu.style.left = e.pageX + 'px';
+    contextMenu.style.top = e.pageY + 'px';
+}
+
+// --- Group header handlers (contextmenu on the keyword tab and its label text only) ---
+
+function setupGroupHandlers(svgelements) {
+    // The keyword tab (path) precedes its box (rect), which precedes its
+    // header text (keyword, then an optional bracketed label) in the SVG.
+    let pendingTabPath = null;
+    let currentGroupRect = null;
+    let headerTextsRemaining = 0;
+
+    for (let index = 0; index < svgelements.length; index++) {
+        let svgelement = svgelements[index];
+        const tag = svgelement.tagName.toLowerCase();
+
+        if (tag === 'path' && svgelement.getAttribute('fill') === '#EEEEEE') {
+            pendingTabPath = svgelement;
+            continue;
+        }
+
+        if (checkIfGroupBox(svgelement) && pendingTabPath) {
+            currentGroupRect = svgelement;
+            let tabPath = pendingTabPath;
+            let groupRectForTab = currentGroupRect;
+            tabPath.addEventListener('contextmenu', (e) => openGroupContextMenu(groupRectForTab, e));
+            pendingTabPath = null;
+            headerTextsRemaining = 2; // keyword text + optional bracketed label
+            continue;
+        }
+
+        if (checkIfGroupHeaderText(svgelement)) {
+            if (headerTextsRemaining > 0 && currentGroupRect) {
+                let groupRect = currentGroupRect;
+                svgelement.addEventListener('contextmenu', (e) => openGroupContextMenu(groupRect, e));
+                headerTextsRemaining--;
+            }
+            continue;
+        }
+
+        // Any other element ends this group's clickable header window
+        headerTextsRemaining = 0;
+    }
+}
+
 // --- Message element handlers (hover, contextmenu) ---
 
 function setupMessageHandlers(svgelements, svg) {
@@ -291,6 +367,7 @@ function setupMessageHandlers(svgelements, svg) {
         if (!checkIfMessageElement(svgelement)) continue;
 
         svgelement.addEventListener('mouseover', function() {
+            if (isSequenceAddMode()) return;
             svgelement.style.fontWeight = 'bold';
             svgelement.style.strokeWidth = '2.0';
         });
@@ -301,9 +378,11 @@ function setupMessageHandlers(svgelements, svg) {
         });
 
         svgelement.addEventListener('contextmenu', function(e) {
-            lastclickedsvgelement = svgelement;
             e.preventDefault();
             e.stopPropagation();
+            if (isSequenceAddMode()) return;
+
+            lastclickedsvgelement = svgelement;
             var contextMenu = document.getElementById('message-menu');
             contextMenu.style.display = 'block';
             contextMenu.style.left = e.pageX + 'px';
@@ -403,12 +482,22 @@ function setupNoteHandlers(svgelements) {
 
 let notePlacement = '';
 let noteEditMode = false;
+let isAddNoteActive = false;
+
+function isNoteAddMode() {
+    return isAddNoteActive;
+}
+
+function cancelNoteAddMode() {
+    isAddNoteActive = false;
+}
 
 function noteOperationEventListeners() {
     // "Add Note" in sequence-menu shows the placement menu
     document.getElementById('seq-addNote').addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
+        isAddNoteActive = true;
         var seqMenu = document.getElementById('sequence-menu');
         var placementMenu = document.getElementById('seq-note-placement-menu');
         placementMenu.style.display = 'block';
@@ -444,6 +533,7 @@ function noteOperationEventListeners() {
         }
 
         noteEditMode = false;
+        isAddNoteActive = true;
         document.querySelector('#seq-note-modalForm .modal-title').textContent = 'Add Note';
         document.getElementById('seq-note-text').value = '';
         $('#seq-note-modalForm').modal('show');
@@ -469,6 +559,7 @@ function noteOperationEventListeners() {
             });
             var text = (await response.json()).text;
             noteEditMode = true;
+            isAddNoteActive = false;
             document.querySelector('#seq-note-modalForm .modal-title').textContent = 'Edit Note';
             document.getElementById('seq-note-text').value = text;
             document.getElementById('seq-note-second-participant-group').style.display = 'none';
@@ -499,6 +590,98 @@ function noteOperationEventListeners() {
             displayErrorMessage(`Error with fetch API: ${error.message}`, error);
         }
     });
+
+    $('#seq-note-modalForm').on('hidden.bs.modal', function() {
+        if (!noteEditMode) {
+            cancelNoteAddMode();
+        }
+    });
+}
+
+// --- Group operation event listeners ---
+
+let groupEditMode = false;
+
+function groupOperationEventListeners() {
+    // "Rename" context menu item: fetch current label and show the group modal
+    document.getElementById('seq-renameGroup').addEventListener('click', async function() {
+        var element = document.getElementById('colb');
+        var svg = element.querySelector('g');
+        try {
+            var plantuml = trimlines(editor.session.getValue());
+            var response = await fetch("getSeqGroupLabel", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    plantuml: plantuml,
+                    svg: svg.innerHTML,
+                    svgelement: lastclickedsvgelement.outerHTML
+                })
+            });
+            var data = await response.json();
+            groupEditMode = true;
+            document.querySelector('#seq-group-modalForm .modal-title').textContent = 'Rename ' + data.type;
+            document.getElementById('seq-group-label-text').value = data.label;
+            $('#seq-group-modalForm').modal('show');
+            $('#seq-group-modalForm').on('shown.bs.modal', function() {
+                $('#seq-group-label-text').trigger('focus');
+            });
+        } catch (error) {
+            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+        }
+    });
+
+    // "Delete Group" context menu item
+    document.getElementById('seq-deleteGroup').addEventListener('click', async function() {
+        var element = document.getElementById('colb');
+        var svg = element.querySelector('g');
+        try {
+            var plantuml = trimlines(editor.session.getValue());
+            var response = await fetch("deleteSeqGroup", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    plantuml: plantuml,
+                    svg: svg.innerHTML,
+                    svgelement: lastclickedsvgelement.outerHTML
+                })
+            });
+            var data = await response.json();
+            setPuml(data.plantuml);
+        } catch (error) {
+            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+        }
+    });
+
+    // "Add Group" in sequence-menu shows the type submenu
+    document.getElementById('seq-addGroup').addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var seqMenu = document.getElementById('sequence-menu');
+        var typeMenu = document.getElementById('seq-group-type-menu');
+        typeMenu.style.display = 'block';
+        typeMenu.style.left = seqMenu.style.left;
+        typeMenu.style.top = seqMenu.style.top;
+        seqMenu.style.display = 'none';
+    });
+
+    // Type submenu items enter group-add mode
+    document.getElementById('seq-group-type-menu').addEventListener('click', function(e) {
+        var item = e.target.closest('[data-group-type]');
+        if (!item) return;
+        e.preventDefault();
+        document.getElementById('seq-group-type-menu').style.display = 'none';
+
+        startGroupAddModeFromContext(item.getAttribute('data-group-type'));
+    });
+
+    // Escape cancels group-add mode
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && isAddGroupActive) {
+            cancelGroupAddMode();
+        }
+    });
+
 }
 
 // Global function called by onclick on the submit-note button
@@ -545,6 +728,7 @@ async function submitNote() {
         }
         var data = await response.json();
         $('#seq-note-modalForm').modal('hide');
+        cancelNoteAddMode();
         setPuml(data.plantuml);
     } catch (error) {
         displayErrorMessage(`Error with fetch API: ${error.message}`, error);
