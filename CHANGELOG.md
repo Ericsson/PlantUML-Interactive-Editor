@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### External
 
+- Fixed multi-line note text producing invalid PlantUML for sequence diagrams (newlines are now escaped as `\n` in the generated code)
 - Bidirectional hover highlighting for sequence diagrams: hovering a message, participant, note, or group box in the diagram highlights the matching line(s) in the editor, and hovering or moving the cursor to a line in the editor highlights the matching element in the diagram
 - Group blocks for sequence diagrams: right-click a lifeline → Add Group sub-menu to pick group/alt/opt/loop, then click two messages to define the range (ghost box preview), type a label, and the group is created
 - Rename or delete a sequence group block: right-click the keyword tab or its header text → Rename (edits only the title, keeps the keyword) or Delete Group (unwraps the block, keeping its contents)
