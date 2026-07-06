@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### External
 
+- Bidirectional hover highlighting for sequence diagrams: hovering a message, participant, note, or group box in the diagram highlights the matching line(s) in the editor, and hovering or moving the cursor to a line in the editor highlights the matching element in the diagram
 - Group blocks for sequence diagrams: right-click a lifeline → Add Group sub-menu to pick group/alt/opt/loop, then click two messages to define the range (ghost box preview), type a label, and the group is created
 - Rename or delete a sequence group block: right-click the keyword tab or its header text → Rename (edits only the title, keeps the keyword) or Delete Group (unwraps the block, keeping its contents)
 - Activation bars for sequence diagrams: right-click a lifeline → Activate, drag down to preview a ghost bar, then left-click and choose Deactivate or Destroy to end it (supports nested activations)
@@ -25,6 +26,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Internal
 
+- Added /getSeqNotePositions and /getSeqGroupPositions backend endpoints (get_note_positions, get_group_positions) providing note/group line-index tables for hover highlighting, mirroring the existing /getMessagePositions and /getParticipantPositions pattern
+- Added highlightSequenceForRow/resetSequenceHighlight (sequence-operations.js) to resolve editor-row hover/cursor changes to diagram elements client-side, plus the sequenceHighlighted bookkeeping so it can coexist with diagram-side hover highlighting without clobbering restored styles
+- Fixed get_group_positions double-counting group boxes when PlantUML's rendering environment causes its invisible per-group layout rect to also carry a literal fill="none" attribute; now pairs each box with its preceding keyword-tab path instead of counting all fill="none" rects
 - Added backend logic for sequence group blocks (add_group) wrapping a message range in group/alt/opt/loop...end syntax
 - Added /addGroup backend endpoint for sequence group blocks
 - Added backend logic for sequence group rename and delete (index_of_clicked_group, get_group_label, rename_group, delete_group); delete unwraps a block by removing only its header and matching `end` line, tracking nesting depth to find the block's own closer

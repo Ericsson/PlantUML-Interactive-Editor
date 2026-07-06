@@ -70,6 +70,7 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 - **getSeqNoteText:** `{plantuml, svg, svgelement}`; returns `{"text": note_text}` — fetches current note text for the edit modal
 - **editSeqNote:** `{plantuml, svg, svgelement, text}`; returns `{"plantuml": updated_puml}` — replaces the note text
 - **deleteSeqNote:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}` — removes the note line from puml
+- **getSeqNotePositions:** `{plantuml, svg}`; returns `{"positions": [{cy, index}, ...]}` — one entry per note (SVG Y, puml line index). Fetched each render into `notePositions`; used to highlight the matching note when the editor cursor/hover lands on its line
 - **getMessagePositions:** `{plantuml, svg}`; returns `{"positions": [{cy, index, text}, ...]}` — one entry per message (SVG Y, puml line index, label). Fetched each render into `messagePositions`; the activation gesture snaps to the nearest message and sends its line index.
 - **addActivation:** `{plantuml, participant, startMessageIndex, endMessageIndex, endType}`; returns `{"plantuml": updated_puml}` — inserts a matched `activate` line after the message at `startMessageIndex` and a closing `deactivate`/`destroy` line after the message at `endMessageIndex`; `endType` is 'deactivate' or 'destroy' (defaults to 'deactivate')
 - **deleteActivation:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}` — `svgelement` is the right-clicked activation-bar rect; removes that bar's `activate` line and its paired `deactivate`/`destroy` line (handles nested bars)
@@ -77,6 +78,7 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 - **getSeqGroupLabel:** `{plantuml, svg, svgelement}`; returns `{"type": keyword, "label": label_text}` — `svgelement` is the clicked group's box rect (`fill="none"`); fetches the current title for the rename modal
 - **renameSeqGroup:** `{plantuml, svg, svgelement, label}`; returns `{"plantuml": updated_puml}` — replaces only the text after the keyword on the header line
 - **deleteSeqGroup:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}` — unwraps the group: removes the header and its matching `end` line, keeping the contents in place
+- **getSeqGroupPositions:** `{plantuml, svg}`; returns `{"positions": [{headerIndex, endIndex}, ...]}` — one entry per group. Fetched each render into `groupPositions`; used to highlight the matching group box when the editor cursor/hover lands on its header or `end` line
 
 ## script.js Requests
 
@@ -93,6 +95,15 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 For activity diagrams, the frontend captures `lastclickedsvgelement` on right-click (the actual SVG DOM element). Its `outerHTML` is sent as `svgelement`. The backend reconstructs the element's geometric identity (x/y for rects, points for polygons, cx/cy for ellipses) to match it against the parsed SVG.
 
 For sequence diagrams, the frontend computes `cx` from the clicked rect's x + width/2. For messages, the frontend fetches participant positions from `/getParticipantPositions` on each render and uses them for hover detection (±15px tolerance from lifeline cx). It sends the lifeline cx and cursor y as `[x, y]` coordinates. The y-coordinate determines insertion position between existing messages.
+
+## Editor <-> Diagram Hover Highlighting (Sequence Diagrams)
+
+Each render, the frontend fetches four position tables into module-level arrays: `messagePositions`, `participantLifelines`, `notePositions`, `groupPositions` (via `/getMessagePositions`, `/getParticipantPositions`, `/getSeqNotePositions`, `/getSeqGroupPositions`). No further backend round-trip is needed for highlighting itself — both directions are resolved client-side against these cached tables:
+
+- **Diagram → editor**: hovering an SVG element looks up its puml line index from the matching table and calls `setEditorMarkers`/`getmarker` to paint that line.
+- **Editor → diagram**: moving the cursor or mouse over a line in the editor (`highlightSequenceForRow` in `sequence-operations.js`) checks the four tables for that row, then finds the matching SVG element(s) by counting shapes in document order (e.g. the Nth `#FEFFDD` note path, the Nth group box immediately following its `#EEEEEE` tab) and highlights them directly — no fetch involved.
+
+Highlights applied by the editor→diagram direction are tracked in `sequenceHighlighted` (`{el, kind, old}`) so the original style/fill can be restored exactly, and so that hovering the same element from the diagram side doesn't clobber the recorded original value.
 
 ## Response Handling
 

@@ -138,6 +138,7 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /getSeqNoteText** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"text": note_text}`.
 - **POST /editSeqNote** — Input: `plantuml`, `svg`, `svgelement`, `text`. Returns: JSON `{"plantuml": modified_puml}`.
 - **POST /deleteSeqNote** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"plantuml": modified_puml}`.
+- **POST /getSeqNotePositions** — Input: `plantuml`, `svg`. Returns: JSON `{"positions": [{cy, index}, ...]}`. Called once per render so the frontend can highlight the matching note when the editor cursor/hover is on its line.
 
 ## Sequence Diagram (Groups)
 
@@ -145,3 +146,4 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /getSeqGroupLabel** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"type": keyword, "label": label_text}`. `svgelement` is the clicked group's box rect (`fill="none"`); named with a `Seq` prefix to avoid colliding with the activity diagram's `/getGroupText`-style routes.
 - **POST /renameSeqGroup** — Input: `plantuml`, `svg`, `svgelement`, `label`. Returns: JSON `{"plantuml": modified_puml}`. Replaces only the text after the keyword on the header line; the keyword itself is never changed.
 - **POST /deleteSeqGroup** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"plantuml": modified_puml}`. Unwraps the block: removes the header line and its matching `end` line (nesting-depth tracked), leaving the block's contents in place.
+- **POST /getSeqGroupPositions** — Input: `plantuml`, `svg`. Returns: JSON `{"positions": [{headerIndex, endIndex}, ...]}`. Called once per render so the frontend can highlight the matching group box when the editor cursor/hover is on its header or `end` line.

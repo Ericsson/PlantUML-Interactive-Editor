@@ -70,7 +70,7 @@
 │   │   ├── test_if.py
 │   │   ├── test_if_statements.py
 │   │   ├── test_merge.py
-│   │   ├── test_note.py
+│   │   ├── test_activity_note.py
 │   │   ├── test_repeat_while.py
 │   │   ├── test_switch.py
 │   │   ├── test_title.py
@@ -81,11 +81,17 @@
 │   │   ├── test_participant.py
 │   │   ├── test_message.py
 │   │   ├── test_activation.py
-│   │   └── test_sequence_group.py
+│   │   ├── test_sequence_group.py
+│   │   └── test_sequence_note.py
 │   └── e2e/                # Playwright end-to-end tests
 │       ├── conftest.py     # Live server fixture
 │       ├── test_app_loads.py  # App loads correctly
-│       └── test_js_logic.py   # JS function logic tests
+│       ├── test_js_logic.py   # JS function logic tests
+│       ├── test_ribbon.py     # Toolbar ribbon UI tests
+│       ├── test_sequence_activation.py       # Activation bar e2e tests
+│       ├── test_sequence_hover_highlight.py  # Editor <-> diagram hover highlighting e2e tests
+│       ├── test_sequence_message_interactions.py # Message add/edit/delete e2e tests
+│       └── test_sequence_participant.py      # Participant add/rename/delete e2e tests
 └── .kiro/steering/         # Kiro steering files
 ```
 
