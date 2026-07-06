@@ -128,6 +128,38 @@ def _find_group_end_index(lines: List[str], header_index: int) -> int:
     return -1
 
 
+def _count_group_boxes(svg: str) -> int:
+    """Count real group boxes, skipping PlantUML's invisible duplicate rect.
+
+    Alongside the visible bordered box (rect fill="none") that follows each
+    group's keyword tab (path fill="#EEEEEE"), PlantUML also emits an
+    invisible bounding rect earlier in the document for layout purposes.
+    That rect is only reliably distinguished from the real box by document
+    order - depending on the rendering environment, it can end up with the
+    same literal fill="none" attribute, so a plain count of such rects can
+    double-count groups. Pairing on "immediately follows its tab path" (the
+    same rule the frontend uses in setupGroupHandlers) avoids that.
+    """
+    d = Pq(svg)
+    count = 0
+    pending_tab = False
+    for el in d.children().items():
+        tag = el[0].tag
+        if not isinstance(tag, str):
+            pending_tab = False
+            continue
+        if tag == "path" and el.attr("fill") == "#EEEEEE":
+            pending_tab = True
+            continue
+        if tag == "rect" and el.attr("fill") == "none":
+            if pending_tab:
+                count += 1
+            pending_tab = False
+            continue
+        pending_tab = False
+    return count
+
+
 def get_group_positions(puml: str, svg: str) -> List[Dict[str, int]]:
     """Return header/end line indexes for each group in SVG document order.
 
@@ -135,8 +167,7 @@ def get_group_positions(puml: str, svg: str) -> List[Dict[str, int]]:
     index_of_clicked_group), so the frontend matches groups by ordinal.
     """
     lines = puml.splitlines()
-    d = Pq(svg)
-    group_count = sum(1 for rect in d("rect").items() if rect.attr("fill") == "none")
+    group_count = _count_group_boxes(svg)
 
     positions = []
     for n in range(1, group_count + 1):
