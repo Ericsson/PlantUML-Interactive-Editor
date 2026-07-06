@@ -150,6 +150,12 @@ class TestGetMessageText:
         svgelement = extract_message_element(svg, 0, "polygon")
         assert get_message_text(puml, svg, svgelement) == "Think"
 
+    def test_message_unescapes_newlines(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Line1\\nLine2\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_message_element(svg, 0, "polygon")
+        assert get_message_text(puml, svg, svgelement) == "Line1\nLine2"
+
 
 class TestEditMessageText:
     def test_edit_normal_message(self):
@@ -182,6 +188,14 @@ class TestEditMessageText:
         svgelement = extract_message_element(svg, 0, "polygon")
         result = edit_message_text(puml, svg, svgelement, "Still dashed")
         expected = "@startuml\nparticipant Alice\nparticipant Bob\nAlice --> Bob: Still dashed\n@enduml"
+        assert result == expected
+
+    def test_edit_message_multiline_text_is_escaped(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_message_element(svg, 0, "polygon")
+        result = edit_message_text(puml, svg, svgelement, "Line1\nLine2")
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Line1\\nLine2\n@enduml"
         assert result == expected
 
 
@@ -252,6 +266,25 @@ class TestMessageRoutes:
             content_type="application/json",
         )
         expected = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Goodbye\n@enduml"
+        assert response.get_json()["plantuml"] == expected
+
+    def test_edit_message_multiline_text(self, client):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_message_element(svg, 0, "polygon")
+        response = client.post(
+            "/editMessageText",
+            data=json.dumps(
+                {
+                    "plantuml": puml,
+                    "svg": svg,
+                    "svgelement": svgelement,
+                    "text": "Line1\nLine2",
+                }
+            ),
+            content_type="application/json",
+        )
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Line1\\nLine2\n@enduml"
         assert response.get_json()["plantuml"] == expected
 
     def test_delete_message(self, client):

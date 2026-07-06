@@ -27,7 +27,7 @@ from typing import Dict, List
 from pyquery import PyQuery as Pq
 
 from .classes import Diagram, Participant
-from .util import find_insertion_index
+from .util import escape_multiline_text, find_insertion_index, unescape_multiline_text
 
 
 def _find_closest_participant(
@@ -64,6 +64,7 @@ def add_message(
 
     lines = puml.splitlines()
     insert_at = find_insertion_index(diagram.messages, svg, puml, first_y, lines)
+    message = escape_multiline_text(message)
     lines.insert(insert_at, f"{sender.name} {arrow_type} {reciever.name}: {message}")
     return "\n".join(lines)
 
@@ -137,7 +138,8 @@ def get_message_text(puml: str, svg: str, svgelement: str) -> str:
     message = diagram.messages[idx - 1]
     line = puml.splitlines()[message.index]
     colon_pos = line.find(": ")
-    return line[colon_pos + 2 :] if colon_pos != -1 else ""
+    text = line[colon_pos + 2 :] if colon_pos != -1 else ""
+    return unescape_multiline_text(text)
 
 
 def edit_message_text(puml: str, svg: str, svgelement: str, text: str) -> str:
@@ -150,7 +152,7 @@ def edit_message_text(puml: str, svg: str, svgelement: str, text: str) -> str:
     # Replace text after ": "
     colon_pos = line.find(": ")
     if colon_pos != -1:
-        lines[message.index] = line[: colon_pos + 2] + text
+        lines[message.index] = line[: colon_pos + 2] + escape_multiline_text(text)
     return "\n".join(lines)
 
 
@@ -178,5 +180,7 @@ def get_message_positions(puml: str, svg: str) -> List[Dict[str, object]]:
     for msg in diagram.messages:
         colon_pos = lines[msg.index].find(": ")
         text = lines[msg.index][colon_pos + 2 :] if colon_pos != -1 else ""
-        positions.append({"cy": msg.cy, "index": msg.index, "text": text})
+        positions.append(
+            {"cy": msg.cy, "index": msg.index, "text": unescape_multiline_text(text)}
+        )
     return positions
