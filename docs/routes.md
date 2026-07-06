@@ -127,6 +127,8 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /deleteMessage** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"plantuml": modified_puml}`.
 - **POST /getMessagePositions** — Input: `plantuml`, `svg`. Returns: JSON `{"positions": [{cy, index, text}, ...]}` — one entry per message with its SVG Y-coordinate, puml line index, and label. Called once per render so the frontend can snap activation-bar endpoints to the nearest message.
 
+`message`/`text` may contain real newlines (multi-line textarea input); since a message is a single-line puml statement, `addMessage`/`editMessageText` escape newlines to a literal `\n`, and `getMessageText`/`getMessagePositions` unescape `\n` back to real newlines.
+
 ## Sequence Diagram (Activation Bars)
 
 - **POST /addActivation** — Input: `plantuml`, `participant`, `startMessageIndex` (int), `endMessageIndex` (int), `endType` ('deactivate'/'destroy'). Returns: JSON `{"plantuml": modified_puml}`. Inserts a matched `activate <participant>` line just after the message at `startMessageIndex` and a closing `deactivate <participant>` (or `destroy <participant>`) line just after the message at `endMessageIndex`. The indexes are puml line numbers; the frontend obtains them from `/getMessagePositions`. `endType` defaults to 'deactivate' for any value other than 'destroy'.
@@ -139,6 +141,8 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /editSeqNote** — Input: `plantuml`, `svg`, `svgelement`, `text`. Returns: JSON `{"plantuml": modified_puml}`.
 - **POST /deleteSeqNote** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"plantuml": modified_puml}`.
 - **POST /getSeqNotePositions** — Input: `plantuml`, `svg`. Returns: JSON `{"positions": [{cy, index}, ...]}`. Called once per render so the frontend can highlight the matching note when the editor cursor/hover is on its line.
+
+`text` may contain real newlines (multi-line textarea input); since a note is a single-line puml statement, `addNote`/`editSeqNote` escape newlines to a literal `\n`, and `getSeqNoteText` unescapes `\n` back to real newlines.
 
 ## Sequence Diagram (Groups)
 

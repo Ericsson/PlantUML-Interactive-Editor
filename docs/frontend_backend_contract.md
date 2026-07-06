@@ -80,6 +80,8 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 - **deleteSeqGroup:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}` — unwraps the group: removes the header and its matching `end` line, keeping the contents in place
 - **getSeqGroupPositions:** `{plantuml, svg}`; returns `{"positions": [{headerIndex, endIndex}, ...]}` — one entry per group. Fetched each render into `groupPositions`; used to highlight the matching group box when the editor cursor/hover lands on its header or `end` line
 
+Message and note `text`/`message` fields may contain real newlines (the textareas allow multi-line input via Enter). Since messages and notes are single-line puml statements, `add_message`/`add_note`/`edit_message_text`/`edit_note` escape real newlines to a literal `\n` before writing the line (`escape_multiline_text` in `sequence/util.py`), and `get_message_text`/`get_note_text`/`get_message_positions` unescape `\n` back to real newlines before returning text to the frontend (`unescape_multiline_text`).
+
 ## script.js Requests
 
 `script.js` handles core operations:

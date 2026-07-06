@@ -20,7 +20,7 @@
 │   │   ├── activation.py   # Activation bar logic (activate + deactivate/destroy pair)
 │   │   ├── group.py        # Group block logic (group, alt, opt, loop)
 │   │   ├── note.py         # Note logic (add, edit, delete notes)
-│   │   └── util.py         # Shared utilities (insertion index, note position extraction)
+│   │   └── util.py         # Shared utilities (insertion index, note position extraction, multi-line text escaping)
 │   ├── activity/           # Activity diagram package
 │   │   ├── routes.py       # All activity routes (~64 endpoints)
 │   │   ├── classes.py      # RectElement, PolyElement, Ellipse, SvgChunk, TextElement
