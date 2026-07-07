@@ -18,6 +18,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Delete an activation bar: right-click the bar → Delete activation bar (removes the matched activate + deactivate/destroy pair)
 ### Internal
 
+- Fixed off-by-one bug in `_nth_ellipse_row` (`activity/positions.py`): `lines[index - 1]` at index 0 wrapped to the last line in Python, silently skipping a `start` on the first line whenever the last line began with "note"; guarded with `index > 0`
+
 ## [0.30] - 2026-07-03
 
 ### External

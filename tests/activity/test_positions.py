@@ -178,3 +178,43 @@ class TestGetActivityPositions:
             assert positions["activities"][0] == [5]
             assert positions["whiles"] == [[12, 14]]
             assert positions["groups"] == [[19, 21]]
+
+
+class TestNthEllipseRow:
+    """Unit tests for the _nth_ellipse_row helper, including the index-0 edge
+    case where Python's negative-index wrap (lines[-1]) would previously cause
+    the first line to be skipped when the last line starts with 'note'."""
+
+    def test_start_on_first_line_is_found(self):
+        """start at index 0 must be returned as row 0, not silently skipped."""
+        from plantuml_gui.activity.positions import _nth_ellipse_row
+
+        lines = ["start", ":do thing;", "stop"]
+        assert _nth_ellipse_row(lines, 1) == 0
+
+    def test_start_on_first_line_not_skipped_when_last_line_starts_with_note(self):
+        """Regression: lines[-1] wrap made index-0 look note-preceded when the
+        last line of the file started with 'note'."""
+        from plantuml_gui.activity.positions import _nth_ellipse_row
+
+        lines = ["start", ":do thing;", "stop", "note something"]
+        # 'start' is at index 0; last line starts with 'note', which would
+        # previously make the guard fire and skip 'start'.
+        assert _nth_ellipse_row(lines, 1) == 0
+
+    def test_ellipse_after_note_keyword_is_skipped(self):
+        """An ellipse keyword immediately following a 'note' line is skipped,
+        matching get_index_ellipse behaviour."""
+        from plantuml_gui.activity.positions import _nth_ellipse_row
+
+        lines = ["start", "note right", "end", ":activity;", "stop"]
+        # 'end' at index 2 is preceded by 'note right' → should be skipped.
+        # Only 'start' (index 0) and 'stop' (index 4) count.
+        assert _nth_ellipse_row(lines, 1) == 0
+        assert _nth_ellipse_row(lines, 2) == 4
+
+    def test_returns_minus_one_when_not_enough_ellipses(self):
+        from plantuml_gui.activity.positions import _nth_ellipse_row
+
+        lines = ["start", ":do thing;", "stop"]
+        assert _nth_ellipse_row(lines, 3) == -1

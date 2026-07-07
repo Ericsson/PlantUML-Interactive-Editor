@@ -137,10 +137,15 @@ def _nth_ellipse_row(lines: List[str], count: int) -> int:
     """Row of the nth start/stop/end line, mirroring get_index_ellipse's
     counting (including its skip of lines preceded by a note keyword) but
     returning the matched row itself rather than the insertion point below it.
+
+    The note-keyword guard uses ``index > 0`` to avoid the Python
+    ``lines[-1]`` wrap that would otherwise cause line 0 to be skipped
+    whenever the last line of the diagram happens to start with "note".
     """
     for index, line in enumerate(lines):
         clean_line = line.strip()
-        if not lines[index - 1].startswith("note"):
+        preceded_by_note = index > 0 and lines[index - 1].startswith("note")
+        if not preceded_by_note:
             if clean_line in ["stop", "start", "end"]:
                 count -= 1
                 if count == 0:
