@@ -197,7 +197,10 @@ class TestActivationFlow:
                 "@startuml\\nparticipant Alice\\nparticipant Bob\\n"
                 + "Alice -> Bob: m1\\nBob -> Alice: m2\\nAlice -> Bob: m3\\n@enduml");
         }""")
-        page.wait_for_timeout(5000)
+        # Wait until the sequence render has populated all three message
+        # positions (not just a fixed timeout, which races against the initial
+        # demo render on slow CI machines).
+        page.wait_for_function("() => messagePositions.length === 3", timeout=15000)
 
         # First bar around the first message, driven by the fetched positions.
         page.evaluate("""() => {
@@ -208,7 +211,8 @@ class TestActivationFlow:
             activationEndMessage = {index: m.index, cy: m.cy};
             submitActivation('deactivate');
         }""")
-        page.wait_for_timeout(5000)
+        # Wait until the first bar has rendered and positions are refreshed.
+        page.wait_for_function("() => messagePositions.length === 3", timeout=15000)
 
         # After the bar rendered, positions must still resolve (no 500).
         msg_count = page.evaluate("() => messagePositions.length")
@@ -223,7 +227,10 @@ class TestActivationFlow:
             activationEndMessage = {index: m.index, cy: m.cy};
             submitActivation('deactivate');
         }""")
-        page.wait_for_timeout(5000)
+        page.wait_for_function(
+            "() => editor.session.getValue().split('\\n').filter(l => l.trim() === 'activate Bob').length === 2",
+            timeout=15000,
+        )
 
         lines = page.evaluate(
             "() => editor.session.getValue().split('\\n').map(l => l.trim())"
