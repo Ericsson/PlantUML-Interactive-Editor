@@ -1815,7 +1815,7 @@ function resetActivityHighlight() {
 async function setHandlersForActivityDiagram(pumlcontent, element) {
     removeBackgroundMenuListener();
 
-    fetchSvgFromPlantUml().then((svgContent) => {
+    fetchSvgFromPlantUml().then(async (svgContent) => {
         element.innerHTML = svgContent;
         activityHoverTargets = newActivityHoverTargets();
         activityHighlighted = []; // old DOM discarded with innerHTML
@@ -2430,7 +2430,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
         }
         // After the walk so the svg sent reflects its mutations (e.g. the
         // pointer-events flags note counting depends on)
-        fetchActivityPositions(pumlcontent, svg);
+        await fetchActivityPositions(pumlcontent, svg);
         toggleLoadingOverlay()
 
     }).catch((error) => {

@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Internal
 
 - Fixed off-by-one bug in `_nth_ellipse_row` (`activity/positions.py`): `lines[index - 1]` at index 0 wrapped to the last line in Python, silently skipping a `start` on the first line whenever the last line began with "note"; guarded with `index > 0`
+- Fixed race condition in `setHandlersForActivityDiagram` (`activity.js`): `fetchActivityPositions` was called without `await`, so the loading overlay could disappear before `activityRowMap` was populated, causing editor-to-diagram hover highlighting to silently do nothing until the fetch completed
 
 ## [0.30] - 2026-07-03
 
