@@ -28,6 +28,7 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /breakActivity** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
 - **POST /checkBackward** — Input: `plantuml`, `svg`, `svgelement`. Returns: result text.
 - **POST /getActivityLine** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": [start, end]}`.
+- **POST /getActivityPositions** — Input: `plantuml`, `svg`. Returns: JSON with per-type row lists (`activities`, `polys`, `whiles`, `notes`, `groups`, `ellipses`, `connectors`, `merges`, `arrows` — each a list of row-index lists in SVG document order — plus `title`, a single row list). Called once per render so the frontend can highlight the matching diagram element when the editor cursor/hover lands on a line.
 - **POST /addArrowLabel** — Input: `plantuml`, `svg`, `where`, `svgelement`. Returns: modified puml.
 
 ## If Statements

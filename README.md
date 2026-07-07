@@ -21,7 +21,7 @@ With PlantUML Interactive Editor, you can:
 - Delete the text of a title, note or group/partition to delete the element
 - To share a diagram, just copy the URL in the address bar
 - Hover over elements to see the corresponding line highlighted in the editor
-- Clicking on, or hovering over, a line in the editor highlights the corresponding element in the diagram (activity, message, participant, note, or group, depending on diagram type)
+- Clicking on, or hovering over, a line in the editor highlights the corresponding element in the diagram — all element types in both activity and sequence diagrams
 
 ## Detailed list of supported and unsupported features
 

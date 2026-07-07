@@ -374,8 +374,6 @@ function setupParticipantHandlers(svgelements, svg, element) {
 
         let rectcolor = "";
         svgelement.addEventListener('mouseover', function() {
-            const svg = element.querySelector('g');
-            resetHighlight(svg);
             // If already highlighted from the editor side, keep the original fill
             const highlighted = sequenceHighlighted.find(h => h.el === svgelement);
             rectcolor = highlighted ? highlighted.old : svgelement.getAttribute('fill');

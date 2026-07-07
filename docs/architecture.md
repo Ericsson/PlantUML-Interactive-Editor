@@ -36,6 +36,7 @@ Modules:
 - `arrow.py` — Arrow/connection handling
 - `connector.py` — Connector elements (small labeled circles)
 - `merge.py` — Merge points
+- `positions.py` — Editor-row positions for every activity element (powers editor→diagram hover highlighting; reuses the other modules' line finders)
 - `add.py` — Element creation logic (inserts new puml lines for a given element type)
 - `participant.py` — Sequence diagram participants and messages
 
@@ -45,7 +46,7 @@ Modules:
 - `templates/partials/activity_menus.html` — All activity diagram context menus and modal dialogs.
 - `templates/partials/sequence_menus.html` — Sequence diagram context menus and modal dialogs.
 - `static/script.js` — Core logic: editor initialization (Ace with PlantUML syntax mode), rendering (calls `/render` and `/encode`), URL hash management, undo/redo history, diagram type detection, indentation, panning/zooming, and utility functions.
-- `static/activity.js` — Event listeners and fetch calls for all activity diagram interactions (edit, delete, add, detach, context menus for activities, if-statements, ellipses, forks, notes, groups, merges, whiles, connectors, arrows).
+- `static/activity.js` — Event listeners and fetch calls for all activity diagram interactions (edit, delete, add, detach, context menus for activities, if-statements, ellipses, forks, notes, groups, merges, whiles, connectors, arrows). Also owns the editor→diagram hover highlighting: hoverable elements are registered per type during handler setup, joined by ordinal with the row tables from `/getActivityPositions`, and highlighted/restored by `highlightActivityForRow`/`resetActivityHighlight`.
 - `static/sequence.js` — Event listeners for sequence diagram interactions (add/edit/delete participants, add messages with two-click coordinate capture).
 
 ## Summary

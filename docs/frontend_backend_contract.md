@@ -34,6 +34,10 @@ These three fields together give the backend everything it needs to identify wha
 
 Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteActivity, getText, getActivityLine
 
+**Pattern 3 — Whole-diagram queries (no `svgelement`):**
+
+- getActivityPositions: `{plantuml, svg}`; returns per-type row lists (see below) — fetched once per render for editor→diagram hover highlighting
+
 **Pattern 2 — Operations with extra parameters:**
 
 - editText: adds `newname` (new activity text)
@@ -104,6 +108,16 @@ Each render, the frontend fetches four position tables into module-level arrays:
 - **Editor → diagram**: moving the cursor or mouse over a line in the editor (`highlightSequenceForRow` in `sequence-operations.js`) checks the four tables for that row, then finds the matching SVG element(s) by counting shapes in document order (e.g. the Nth `#FEFFDD` note path, the Nth group box immediately following its `#EEEEEE` tab) and highlights them directly — no fetch involved.
 
 Highlights applied by the editor→diagram direction are tracked in `sequenceHighlighted` (`{el, kind, old}`) so the original style/fill can be restored exactly, and so that hovering the same element from the diagram side doesn't clobber the recorded original value.
+
+## Editor <-> Diagram Hover Highlighting (Activity Diagrams)
+
+The diagram→editor direction uses the per-element `get*Line` routes (fetched on mouseover, as before). The editor→diagram direction mirrors the sequence design with a single per-render fetch:
+
+- **getActivityPositions:** `{plantuml, svg}`; returns `{"activities": [[rows]...], "polys": [[rows]...], "whiles": [[rows]...], "notes": [[rows]...], "groups": [[rows]...], "ellipses": [[rows]...], "connectors": [[rows]...], "merges": [[rows]...], "arrows": [[rows]...], "title": [rows]}` — for each element type, the puml line indexes owned by the nth element of that type in SVG document order. Range types (activities, notes, arrows, title) list every row of the block; structural types list only their keyword rows (e.g. a group lists its header and closing line, an if lists `if`/`else`/`endif`).
+
+During the handler-setup walk over the SVG, `activity.js` registers each hoverable element into `activityHoverTargets` per type, in the same document order the backend counts — the ordinal-alignment invariant the existing `get*Line` routes already rely on. `buildActivityRowMap` joins the two by ordinal into `activityRowMap` (editor row → elements). Fork rows come from the client-side `labelForks` data instead of the backend, and the walk mirrors two backend counting quirks: the first ellipse of an `end` marker's concentric pair is skipped, as are note-path candidates flagged `pointer-events: none`.
+
+`highlightActivityForRow(row)` highlights every registered element owning that row: shapes get a fill (`#d8d8d8`; `#818181` for start/stop, `#c2c2c2` for connectors, `#e5e5e5` for the title box) while label texts (partition labels, arrow labels) get `font-weight: bold`, matching the sequence convention for text. Applied highlights are tracked in `activityHighlighted` (`{el, attr, old}`) and restored exactly by `resetActivityHighlight()`; elements already showing the highlight value (e.g. a diagram-side hover in progress) are skipped so the true original is never overwritten.
 
 ## Response Handling
 

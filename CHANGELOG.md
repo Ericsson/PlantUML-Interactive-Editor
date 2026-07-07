@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### External
 
+- Editor-to-diagram hover highlighting for activity diagrams: hovering or moving the cursor to a line in the editor highlights the matching diagram element for all element types (activities, if/switch/repeat and while statements, notes, partitions, start/stop, connectors, merge markers, arrow labels, forks, title), matching the sequence diagram behavior
+- Label texts (partition labels, arrow labels) are highlighted in bold instead of grey, both from the editor side and when hovered in the diagram, matching how sequence diagrams bold message text
+- Fixed activity boxes after a `repeat` block without a `backward:` line highlighting the wrong editor line on hover
 - Bidirectional hover highlighting for sequence diagrams: hovering a message, participant, note, or group box in the diagram highlights the matching line(s) in the editor, and hovering or moving the cursor to a line in the editor highlights the matching element in the diagram
 - Group blocks for sequence diagrams: right-click a lifeline → Add Group sub-menu to pick group/alt/opt/loop, then click two messages to define the range (ghost box preview), type a label, and the group is created
 - Rename or delete a sequence group block: right-click the keyword tab or its header text → Rename (edits only the title, keeps the keyword) or Delete Group (unwraps the block, keeping its contents)
@@ -26,6 +29,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Internal
 
+- Added /getActivityPositions backend endpoint (activity/positions.py) returning, per element type, the puml rows owned by each element in SVG document order; reuses the existing per-type line finders and counts elements with the same rules as the per-element get*Line routes so frontend registration order matches by ordinal
+- Added activityHoverTargets registration in the setHandlersForSvg walk plus buildActivityRowMap/highlightActivityForRow/resetActivityHighlight (activity.js) to resolve editor rows to diagram elements client-side; replaces the old text-matching highlightActivity/resetHighlight/colorqueue mechanism (which only handled plain activity boxes and mismatched on duplicate text)
+- Fixed _activity_indices reserving a phantom index slot for a repeat block's backward box even when no backward line exists, which shifted the element-to-line mapping of every activity after the block
+- Removed a leftover resetHighlight call from the sequence participant mouseover handler that could corrupt participant fills restored from the editor-highlight bookkeeping
 - Added /getSeqNotePositions and /getSeqGroupPositions backend endpoints (get_note_positions, get_group_positions) providing note/group line-index tables for hover highlighting, mirroring the existing /getMessagePositions and /getParticipantPositions pattern
 - Added highlightSequenceForRow/resetSequenceHighlight (sequence-operations.js) to resolve editor-row hover/cursor changes to diagram elements client-side, plus the sequenceHighlighted bookkeeping so it can coexist with diagram-side hover highlighting without clobbering restored styles
 - Fixed get_group_positions double-counting group boxes when PlantUML's rendering environment causes its invisible per-group layout rect to also carry a literal fill="none" attribute; now pairs each box with its preceding keyword-tab path instead of counting all fill="none" rects

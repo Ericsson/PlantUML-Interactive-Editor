@@ -1676,11 +1676,150 @@ function arrowLabelEventListeners() {
 
 }
 
+// --- Editor -> diagram highlighting ---
+// Hover targets registered during the setHandlersForSvg walk, in SVG document
+// order per type. The backend's getActivityPositions counts elements of each
+// type in the same document order, so entries match by ordinal - the same
+// invariant the per-element get*Line endpoints rely on.
+let activityHoverTargets = null;
+let activityRowMap = new Map(); // editor row -> [{target, color}, ...]
+let activityHighlighted = []; // [{el, old}, ...] fills to restore
+
+function newActivityHoverTargets() {
+    return {
+        activities: [],
+        polys: [],
+        whiles: [],
+        notes: [],
+        groups: [],
+        ellipses: [],
+        connectors: [],
+        merges: [],
+        arrows: [], // each entry is the array of label text elements of one arrow
+        forks: [], // each entry is {el, row}; rows come from labelForks, not the backend
+        title: []
+    };
+}
+
+async function fetchActivityPositions(pumlcontent, svg) {
+    activityRowMap = new Map();
+    try {
+        const response = await fetch("getActivityPositions", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                'plantuml': pumlcontent,
+                'svg': svg.innerHTML
+            })
+        });
+        buildActivityRowMap(await response.json());
+    } catch (error) {
+        activityRowMap = new Map(); // hover highlighting silently unavailable
+    }
+}
+
+// Fill highlights match what each type's diagram-side mouseover uses;
+// label texts (groups, arrows) turn bold like sequence messages do.
+const FILL_HIGHLIGHT = {
+    attr: 'fill',
+    value: '#d8d8d8'
+};
+const BOLD_HIGHLIGHT = {
+    attr: 'font-weight',
+    value: 'bold'
+};
+
+function buildActivityRowMap(positions) {
+    activityRowMap = new Map();
+    const register = (row, target, highlight) => {
+        if (row < 0) return;
+        if (!activityRowMap.has(row)) {
+            activityRowMap.set(row, []);
+        }
+        activityRowMap.get(row).push({
+            target: target,
+            attr: highlight.attr,
+            value: highlight.value
+        });
+    };
+    const add = (rowsPerElement, targets, highlight) => {
+        for (let i = 0; i < targets.length && i < rowsPerElement.length; i++) {
+            for (const row of rowsPerElement[i]) {
+                register(row, targets[i], highlight);
+            }
+        }
+    };
+    add(positions.activities, activityHoverTargets.activities, FILL_HIGHLIGHT);
+    add(positions.polys, activityHoverTargets.polys, FILL_HIGHLIGHT);
+    add(positions.whiles, activityHoverTargets.whiles, FILL_HIGHLIGHT);
+    add(positions.notes, activityHoverTargets.notes, FILL_HIGHLIGHT);
+    add(positions.merges, activityHoverTargets.merges, FILL_HIGHLIGHT);
+    add(positions.groups, activityHoverTargets.groups, BOLD_HIGHLIGHT);
+    add(positions.arrows, activityHoverTargets.arrows, BOLD_HIGHLIGHT);
+    add(positions.ellipses, activityHoverTargets.ellipses, {
+        attr: 'fill',
+        value: '#818181'
+    });
+    add(positions.connectors, activityHoverTargets.connectors, {
+        attr: 'fill',
+        value: '#c2c2c2'
+    });
+    if (activityHoverTargets.title.length > 0) {
+        add([positions.title], activityHoverTargets.title, {
+            attr: 'fill',
+            value: '#e5e5e5'
+        });
+    }
+    for (const fork of activityHoverTargets.forks) {
+        register(fork.row, fork.el, FILL_HIGHLIGHT);
+    }
+}
+
+function highlightActivityForRow(row) {
+    const entries = activityRowMap.get(row);
+    if (!entries) {
+        return;
+    }
+    for (const entry of entries) {
+        const els = Array.isArray(entry.target) ? entry.target : [entry.target];
+        for (const el of els) {
+            const old = el.getAttribute(entry.attr);
+            // Already showing the highlight value (diagram hover in progress or
+            // registered twice for this row): saving it would corrupt the restore.
+            if (old === entry.value) {
+                continue;
+            }
+            activityHighlighted.push({
+                el: el,
+                attr: entry.attr,
+                old: old
+            });
+            el.setAttribute(entry.attr, entry.value);
+        }
+    }
+}
+
+function resetActivityHighlight() {
+    for (const entry of activityHighlighted) {
+        if (entry.old === null) {
+            entry.el.removeAttribute(entry.attr);
+        } else {
+            entry.el.setAttribute(entry.attr, entry.old);
+        }
+    }
+    activityHighlighted = [];
+}
+
 async function setHandlersForActivityDiagram(pumlcontent, element) {
     removeBackgroundMenuListener();
 
     fetchSvgFromPlantUml().then((svgContent) => {
         element.innerHTML = svgContent;
+        activityHoverTargets = newActivityHoverTargets();
+        activityHighlighted = []; // old DOM discarded with innerHTML
+        activityRowMap = new Map();
         const svg = element.querySelector('g');
         if (!svg) {
             toggleLoadingOverlay()
@@ -1700,6 +1839,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
                 svgelement.style.pointerEvents = 'none';
             }
             if (checkIfActivity(svgelements, index)) {
+                activityHoverTargets.activities.push(svgelement);
                 svgelement.addEventListener('dblclick', async () => {
                     lastclickedsvgelement = svgelement;
                     try {
@@ -1732,7 +1872,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
                 let rectcolor = ""
                 svgelement.addEventListener('mouseover', function() {
                     const svg = element.querySelector('g');
-                    resetHighlight(svg);
+                    resetActivityHighlight();
 
                     processActivityLine(pumlcontent, svg, svgelement)
                     rectcolor = svgelement.getAttribute('fill')
@@ -1746,6 +1886,10 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
 
             if (checkIfFork(svgelements, index)) {
                 let forkobj = forkqueue.shift();
+                activityHoverTargets.forks.push({
+                    el: svgelement,
+                    row: forkobj.index
+                });
                 svgelement.setAttribute('fline', forkobj.index)
                 if (forkobj.line == "top") {
                     svgelement.addEventListener('contextmenu', function(e) {
@@ -1779,6 +1923,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
             }
 
             if (checkIfWhile(svgelements, index)) {
+                activityHoverTargets.whiles.push(svgelement);
                 svgelement.addEventListener('dblclick', async () => {
                     lastclickedsvgelement = svgelement;
                     try {
@@ -1834,6 +1979,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
             }
 
             if (checkIfCorrectPoly(svgelements, index) && !checkIfWhile(svgelements, index) && !checkIfMergePoly(svgelements, index)) { // checks if its an actual if polygon with text or and endif
+                activityHoverTargets.polys.push(svgelement);
                 svgelement.addEventListener('dblclick', async () => {
                     lastclickedsvgelement = svgelement;
                     try {
@@ -1888,6 +2034,11 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
             }
 
             if (checkIfNote(svgelements, index)) {
+                // Mirror the backend's note_count skip rule: paths flagged
+                // pointer-events none (connector glyphs) are not notes
+                if (svgelement.style.pointerEvents !== 'none') {
+                    activityHoverTargets.notes.push(svgelement);
+                }
                 svgelement.addEventListener('dblclick', async () => {
                     lastclickedsvgelement = svgelement;
                     try {
@@ -1938,6 +2089,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
             }
 
             if (checkIfMergePoly(svgelements, index)) {
+                activityHoverTargets.merges.push(svgelement);
                 svgelement.addEventListener('contextmenu', function(e) {
                     lastclickedsvgelement = svgelement
                     e.preventDefault()
@@ -1961,6 +2113,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
             }
 
             if (checkIfGroup(svgelements, index)) {
+                activityHoverTargets.groups.push(svgelement);
                 //svgelement.setAttribute('fill', 'transparent') // on click works poorly if fill is 'none'
                 svgelement.addEventListener('dblclick', async () => {
                     lastclickedsvgelement = svgelements[index - 2];
@@ -2000,20 +2153,35 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
                     contextMenu.style.top = e.pageY + 'px';
                 });
 
-                let rectcolor = ""
+                let groupweight = null
                 svgelement.addEventListener('mouseenter', function() {
                     processGroupLine(pumlcontent, svg, svgelements[index - 2])
-                    rectcolor = svgelement.getAttribute('fill')
-                    svgelement.setAttribute('fill', '#d8d8d8')
+                    groupweight = svgelement.getAttribute('font-weight')
+                    svgelement.setAttribute('font-weight', 'bold')
                 });
 
                 svgelement.addEventListener('mouseleave', function() {
-                    svgelement.setAttribute('fill', rectcolor)
+                    if (groupweight === null) {
+                        svgelement.removeAttribute('font-weight')
+                    } else {
+                        svgelement.setAttribute('font-weight', groupweight)
+                    }
                 });
             }
 
 
             if (checkIfEllipse(svgelements, index)) {
+                // Mirror svgtochunklistellipse: an "end" marker draws two
+                // concentric ellipses; the backend skips the first of the
+                // pair, so registration must too
+                const nextEllipse = svgelements[index + 1];
+                const isFirstOfEndPair = nextEllipse &&
+                    nextEllipse.tagName.toLowerCase() === 'ellipse' &&
+                    nextEllipse.getAttribute('cx') === svgelement.getAttribute('cx') &&
+                    nextEllipse.getAttribute('cy') === svgelement.getAttribute('cy');
+                if (!isFirstOfEndPair) {
+                    activityHoverTargets.ellipses.push(svgelement);
+                }
                 if (svgelement.getAttribute('fill') === 'none') {
                     svgelement.setAttribute('fill', 'transparent'); // changes background from none to make it clickable
                 }
@@ -2040,6 +2208,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
             }
 
             if (checkIfConnector(svgelements, index)) {
+                activityHoverTargets.connectors.push(svgelement);
                 svgelement.addEventListener('dblclick', async () => {
                     lastclickedsvgelement = svgelement;
                     try {
@@ -2093,7 +2262,10 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
 
             if (checkIfArrowLabel(svgelements, index)) {
                 let arrow = svgelements[index - 1]
+                let arrowLabelTexts = [];
+                activityHoverTargets.arrows.push(arrowLabelTexts);
                 while (index < svgelements.length && svgelements[index].tagName.toLowerCase() === 'text') {
+                    arrowLabelTexts.push(svgelements[index]);
                     svgelements[index].addEventListener('dblclick', async () => {
                         lastclickedsvgelement = arrow;
 
@@ -2157,16 +2329,20 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
                         contextMenu.style.top = e.pageY + 'px';
                     });
 
-                    let rectcolor = ""
+                    let arrowweight = null
                     let svgelement = svgelements[index]
                     svgelement.addEventListener('mouseenter', function() {
                         processArrowLine(pumlcontent, svg, arrow)
-                        rectcolor = svgelement.getAttribute('fill')
-                        svgelement.setAttribute('fill', '#d8d8d8')
+                        arrowweight = svgelement.getAttribute('font-weight')
+                        svgelement.setAttribute('font-weight', 'bold')
                     });
 
                     svgelement.addEventListener('mouseleave', function() {
-                        svgelement.setAttribute('fill', rectcolor)
+                        if (arrowweight === null) {
+                            svgelement.removeAttribute('font-weight')
+                        } else {
+                            svgelement.setAttribute('font-weight', arrowweight)
+                        }
                     });
 
                     index++
@@ -2195,6 +2371,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
 
 
             if (checkIfTitleRect(svgelements, index)) {
+                activityHoverTargets.title.push(svgelement);
                 svgelement.setAttribute('fill', 'transparent')
                 svgelement.setAttribute('style', '"stroke:#00000000;stroke-width:1.0;fill:transparent;"')
 
@@ -2251,6 +2428,9 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
             }
             index++
         }
+        // After the walk so the svg sent reflects its mutations (e.g. the
+        // pointer-events flags note counting depends on)
+        fetchActivityPositions(pumlcontent, svg);
         toggleLoadingOverlay()
 
     }).catch((error) => {
@@ -2885,43 +3065,4 @@ async function processTitleLine(pumlcontent) {
         displayErrorMessage(`Error with fetch API: ${error.message}`, error);
     }
 
-}
-
-function highlightActivity(svg, text) {
-    const rects = svg.getElementsByTagName("rect");
-
-    for (let i = 0; i < rects.length; i++) {
-        const rect = rects[i];
-
-        // Check if this is an "activity" rect using the check function
-        if (checkIfActivity(rects, i)) {
-            let combinedText = "";
-            let nextSibling = rect.nextElementSibling;
-
-            // Collect all subsequent nodes that are either <text> or <a> elements
-            while (nextSibling && (nextSibling.tagName === "text" || nextSibling.tagName === "a")) {
-                if (nextSibling.tagName === "text") {
-                    // If it's a text node, simply collect its text content
-                    combinedText += nextSibling.textContent + "\n";
-                } else if (nextSibling.tagName === "a") {
-                    // If it's an <a> tag, collect the link href and text content
-                    const href = nextSibling.getAttribute("href");
-                    const linkTextElement = nextSibling.querySelector("text");
-                    if (linkTextElement) {
-                        const linkText = linkTextElement.textContent;
-                        combinedText += `[[${href} ${linkText}]]`;
-                    }
-                }
-
-                // Move to the next sibling element
-                nextSibling = nextSibling.nextElementSibling;
-            }
-
-            // Compare the normalized text
-            if (combinedText.replace(/\s+/g, "") === text.replace(/\s+/g, "")) {
-                colorqueue.push(rect.getAttribute('fill'));
-                rect.setAttribute('fill', "#d8d8d8");
-            }
-        }
-    }
 }

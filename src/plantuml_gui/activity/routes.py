@@ -92,6 +92,7 @@ from .note import (
     get_note_text,
     note_toggle,
 )
+from .positions import get_activity_positions
 from .title import (
     add_title,
     delete_title,
@@ -208,6 +209,14 @@ def getactivityline():
     lines = puml.splitlines()
     result = find_text_bounds(lines, count)
     return jsonify({"result": result})  # int is not accepted by flask
+
+
+@activity_bp.route("/getActivityPositions", methods=["POST"])
+def getactivitypositions():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    return jsonify(get_activity_positions(puml, svg))
 
 
 @activity_bp.route("/addArrowLabel", methods=["POST"])
