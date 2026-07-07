@@ -136,17 +136,35 @@ class TestActivationAddMode:
 
 
 class TestActivationFlow:
-    def _load_diagram(self, page):
-        page.evaluate("""() => {
-            editor.session.setValue(
-                "@startuml\\nparticipant Alice\\nparticipant Bob\\n"
-                + "Alice -> Bob: hello\\n@enduml");
-        }""")
-        page.wait_for_timeout(5000)
+    # The page renders its default demo once on load; that late async render
+    # can clobber #colb after our setValue. Re-render until the sequence
+    # diagram is stably present (messagePositions populated for the expected
+    # message count), matching the approach used in TestDeleteActivationFlow.
+    _PUML_1MSG = (
+        "@startuml\\nparticipant Alice\\nparticipant Bob\\n"
+        "Alice -> Bob: hello\\n@enduml"
+    )
+    _PUML_3MSG = (
+        "@startuml\\nparticipant Alice\\nparticipant Bob\\n"
+        "Alice -> Bob: m1\\nBob -> Alice: m2\\nAlice -> Bob: m3\\n@enduml"
+    )
+
+    def _load_sequence(self, page, puml, expected_messages, retries=12, wait_ms=2500):
+        """Set the diagram and retry until messagePositions has the expected count."""
+        for _ in range(retries):
+            page.evaluate(f"() => editor.session.setValue('{puml}')")
+            page.wait_for_timeout(wait_ms)
+            count = page.evaluate("() => messagePositions.length")
+            if count == expected_messages:
+                return
+        raise AssertionError(
+            f"messagePositions never reached {expected_messages} "
+            f"(last value: {page.evaluate('() => messagePositions.length')})"
+        )
 
     def test_deactivate_flow_updates_puml(self, app_url, page):
         """A full activate -> deactivate gesture adds a balanced pair to the puml."""
-        self._load_diagram(page)
+        self._load_sequence(page, self._PUML_1MSG, expected_messages=1)
         names = page.evaluate("() => participantLifelines.map(l => l.name)")
         assert names == ["Alice", "Bob"]
 
@@ -167,7 +185,7 @@ class TestActivationFlow:
 
     def test_destroy_flow_updates_puml(self, app_url, page):
         """A full activate -> destroy gesture adds activate + destroy to the puml."""
-        self._load_diagram(page)
+        self._load_sequence(page, self._PUML_1MSG, expected_messages=1)
 
         page.evaluate("""() => {
             const bob = participantLifelines[1];
@@ -191,16 +209,7 @@ class TestActivationFlow:
         500 (activation rect mistaken for a participant). Verify message
         positions still resolve and a second balanced bar is added.
         """
-        # Three messages so positions are unambiguous.
-        page.evaluate("""() => {
-            editor.session.setValue(
-                "@startuml\\nparticipant Alice\\nparticipant Bob\\n"
-                + "Alice -> Bob: m1\\nBob -> Alice: m2\\nAlice -> Bob: m3\\n@enduml");
-        }""")
-        # Wait until the sequence render has populated all three message
-        # positions (not just a fixed timeout, which races against the initial
-        # demo render on slow CI machines).
-        page.wait_for_function("() => messagePositions.length === 3", timeout=15000)
+        self._load_sequence(page, self._PUML_3MSG, expected_messages=3)
 
         # First bar around the first message, driven by the fetched positions.
         page.evaluate("""() => {
