@@ -16,16 +16,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Rename or delete a sequence group block: right-click the keyword tab or its header text → Rename (edits only the title, keeps the keyword) or Delete Group (unwraps the block, keeping its contents)
 - Activation bars for sequence diagrams: right-click a lifeline → Activate, drag down to preview a ghost bar, then left-click and choose Deactivate or Destroy to end it (supports nested activations)
 - Delete an activation bar: right-click the bar → Delete activation bar (removes the matched activate + deactivate/destroy pair)
+### Internal
+
+## [0.30] - 2026-07-03
+
+### External
+
+- Added group blocks for sequence diagrams (group, alt, opt, loop) with visual two-click range selection
+- Added rename and delete for sequence group blocks (delete unwraps the block, keeping its contents)
+- Added activation bars for sequence diagrams with visual ghost-bar preview (supports nested activations)
+- Added delete activation bar
+- Added notes for sequence diagrams with placement options (over, left of, right of, spanning participants)
+- Added edit and delete for sequence messages via right-click context menu
+- Added visual hover-based "Add Message" interaction with ghost arrow preview and arrow style choice (solid/dashed)
+- Added self-message support (send message to same participant)
 - Deleting a participant now also deletes any notes referencing that participant
-- Fixed note left/right placement incorrectly attaching to a message at the same Y when the click was outside the message's horizontal span
-- Fixed note left/right near a self-message incorrectly using message-attached syntax instead of participant syntax
-- Add note to sequence diagram: right-click lifeline blue circle → Add Note sub-menu with placement options (over, left of, right of, spanning participants)
-- Edit message text: right-click a message arrow/line to open Edit Message dialog
-- Delete message: right-click a message arrow/line to delete it
-- Visual hover-based "Add Message" interaction for sequence diagrams: hover near a participant lifeline to see an indicator box, right-click for "Add Message" context menu, then use ghost arrow preview to select destination
-- Self-messages supported (send message to same participant)
-- Add message context menu offers solid arrow (->) or dashed arrow (-->) choice
-- Fixed empty context menu appearing when right-clicking away from lifelines
+- Fixed note placement incorrectly attaching to a message when clicking outside its horizontal span
+- Fixed note near a self-message incorrectly using message-attached syntax
 
 ### Internal
 
@@ -41,18 +48,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added backend logic for sequence group rename and delete (index_of_clicked_group, get_group_label, rename_group, delete_group); delete unwraps a block by removing only its header and matching `end` line, tracking nesting depth to find the block's own closer
 - Added /getSeqGroupLabel, /renameSeqGroup, /deleteSeqGroup backend endpoints for sequence groups (named with a Seq prefix to avoid colliding with the activity diagram's /getGroupLabel-style routes)
 - Group context menu only responds to right-clicks on the keyword tab or its header text, not the rest of the box, so messages/notes inside a group keep their own context menus
+- Added backend logic and endpoints for sequence group blocks: /addGroup, /getSeqGroupLabel, /renameSeqGroup, /deleteSeqGroup (Seq prefix avoids collision with activity diagram routes)
+- Group delete unwraps a block by removing its header and matching `end` line, tracking nesting depth
+- Group context menu only responds to right-clicks on the keyword tab or header text, preserving inner element context menus
 - Fixed group keyword/label text (bold, font-size 13) being misclassified as message text by checkIfMessageElement
 - Fixed seq-group-menu not being hidden by the outside-click handler in addSequenceEventListeners
-- Added backend logic for sequence participant activation bars (add_activation) inserting a matched activate + deactivate/destroy pair around the selected message lines
-- Added /addActivation and /getMessagePositions backend endpoints for sequence activation bars
-- Added delete_activation logic and /deleteActivation endpoint to remove a clicked activation bar's matched activate + close pair (stack-paired, nesting-aware)
-- Made sequence diagram parsing ignore activation-bar rects so message/participant parsing keeps working once a bar exists
+- Added backend logic and endpoints for activation bars: /addActivation, /getMessagePositions, /deleteActivation
+- Activation delete uses stack-paired nesting-aware matching
+- Made sequence diagram parsing ignore activation-bar rects so message/participant parsing keeps working
 - Cache-busting hash now covers all static JS files, not just script.js
-- Added backend logic for sequence note add, edit, and delete (add_note, index_of_clicked_note, get_note_text, edit_note, delete_note)
-- Added /addNote, /getSeqNoteText, /editSeqNote, /deleteSeqNote backend endpoints for sequence notes
-- Added backend logic for sequence message edit and delete (index_of_clicked_message, get_message_text, edit_message_text, delete_message)
-- Add message now uses y-based insertion to place new messages between existing ones based on click position
-- Added /getParticipantPositions backend endpoint for lifeline position and name extraction
+- Added backend logic and endpoints for sequence notes: /addNote, /getSeqNoteText, /editSeqNote, /deleteSeqNote
+- Added backend logic and endpoints for sequence messages: edit_message_text, delete_message
+- Add message uses y-based insertion to place new messages between existing ones based on click position
+- Added /getParticipantPositions endpoint for lifeline position and name extraction
 - Fixed reflected XSS in sequence routes by returning `jsonify` instead of raw strings
 - Fixed stored XSS in `edit_participant_name` by escaping user input with `html.escape` before writing to puml
 
