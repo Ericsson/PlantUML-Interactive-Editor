@@ -268,3 +268,35 @@ class TestEditorToActivityHighlight:
 
         assert result["during"] == ["#d8d8d8", "#d8d8d8"]
         assert result["after"] == ["#F1F1F1", "#F1F1F1"]
+
+    def test_leaving_editor_clears_lingering_highlight(self, app_url, page):
+        # Activity used to clear a lingering editor-side highlight in each
+        # element's diagram-side mouseover; that was removed as redundant, so
+        # clearing now relies on the shared editor mouseleave handler (leaving
+        # the editor resets the highlight for the active diagram type).
+        result = page.evaluate(
+            """() => {"""
+            + SETUP_HELPERS
+            + """
+            freshTargets();
+            const rect = svgRect('#F1F1F1');
+            activityHoverTargets.activities.push(rect);
+            const positions = emptyPositions();
+            positions.activities = [[3]];
+            buildActivityRowMap(positions);
+
+            const previousType = currentDiagramType;
+            currentDiagramType = 'activity';
+            highlightActivityForRow(3);
+            const whileHovering = rect.getAttribute('fill');
+
+            editor.container.dispatchEvent(new MouseEvent('mouseleave', {bubbles: true}));
+            const afterLeaving = rect.getAttribute('fill');
+            currentDiagramType = previousType;
+            return {whileHovering, afterLeaving, count: activityHighlighted.length};
+        }"""
+        )
+
+        assert result["whileHovering"] == "#d8d8d8"
+        assert result["afterLeaving"] == "#F1F1F1"
+        assert result["count"] == 0

@@ -123,3 +123,49 @@ function findActiveHighlight(active, el) {
     }
     return null;
 }
+
+// --- Editor-side dispatch ---
+// Routes an editor hover/cursor row to the active diagram's highlight, so the
+// mousemove, mouseleave and cursor-change paths all funnel through one place.
+// Relies on currentDiagramType and the per-diagram highlight/reset functions
+// defined in script.js, activity.js and sequence-operations.js.
+
+let lastEditorHoverRow = -1;
+
+// Clear the editor-side highlight for whichever diagram type is active.
+function resetEditorHighlight() {
+    if (currentDiagramType === 'sequence') {
+        resetSequenceHighlight();
+    } else if (currentDiagramType === 'activity') {
+        resetActivityHighlight();
+    }
+}
+
+// Highlight the diagram element(s) owning the given editor row.
+function highlightEditorRow(row) {
+    if (currentDiagramType === 'sequence') {
+        highlightSequenceForRow(row);
+    } else if (currentDiagramType === 'activity') {
+        highlightActivityForRow(row);
+    }
+}
+
+// Wire the editor's hover and leave listeners (called once from initeditor).
+// Hovering a line highlights the matching diagram element; leaving the editor
+// clears it so it does not linger on the diagram (the sequence diagram-side
+// hover preserves highlights and never resets). lastEditorHoverRow is reset on
+// leave so re-entering on the same row re-highlights.
+function initEditorHoverHighlighting(editor) {
+    editor.on('mousemove', function(e) {
+        if (currentDiagramType !== 'sequence' && currentDiagramType !== 'activity') return;
+        const row = e.getDocumentPosition().row;
+        if (row === lastEditorHoverRow) return;
+        lastEditorHoverRow = row;
+        resetEditorHighlight();
+        highlightEditorRow(row);
+    });
+    editor.container.addEventListener('mouseleave', function() {
+        lastEditorHoverRow = -1;
+        resetEditorHighlight();
+    });
+}

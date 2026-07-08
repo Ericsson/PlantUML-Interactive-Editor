@@ -1831,8 +1831,6 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
                 let rectcolor = ""
                 svgelement.addEventListener('mouseover', function() {
                     const svg = element.querySelector('g');
-                    resetActivityHighlight();
-
                     processActivityLine(pumlcontent, svg, svgelement)
                     rectcolor = svgelement.getAttribute('fill')
                     svgelement.setAttribute('fill', '#d8d8d8')

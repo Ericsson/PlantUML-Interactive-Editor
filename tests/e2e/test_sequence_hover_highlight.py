@@ -494,3 +494,42 @@ class TestEditorToSvgHighlight:
         )
 
         assert result["highlighted"] is True
+
+    def test_leaving_editor_clears_lingering_highlight(self, app_url, page):
+        # Hovering an editor row highlights the matching element; when the
+        # pointer then leaves the editor (mouseleave on the Ace container) the
+        # highlight must be cleared so it does not linger on the diagram. The
+        # sequence diagram-side hover preserves highlights and never resets, so
+        # this relies on the editor mouseleave handler in script.js.
+        result = page.evaluate(
+            """() => {"""
+            + HOVER_MARKER_HELPERS
+            + """
+            resetAddModes();
+            currentDiagramType = 'sequence';
+            messagePositions = [{cy: 40, index: 3, text: 'm1'}];
+            participantLifelines = [];
+            notePositions = [];
+            groupPositions = [];
+            sequenceHighlighted = [];
+            const colb = document.getElementById('colb');
+            colb.innerHTML = '<svg><g>' +
+                '<line style="stroke:#181818;stroke-width:1.0;" x1="25" x2="76" y1="40" y2="40"></line>' +
+                '</g></svg>';
+            const message = colb.querySelector('line');
+            sequenceRowMap = new Map();
+            setupMessageHandlers([message], colb.querySelector('g'));
+
+            highlightSequenceForRow(3);
+            const whileHovering = message.style.fontWeight === 'bold';
+
+            editor.container.dispatchEvent(new MouseEvent('mouseleave', {bubbles: true}));
+            const afterLeaving = message.style.fontWeight === 'bold';
+            currentDiagramType = 'unknown';
+            return {whileHovering, afterLeaving, count: sequenceHighlighted.length};
+        }"""
+        )
+
+        assert result["whileHovering"] is True
+        assert result["afterLeaving"] is False
+        assert result["count"] == 0

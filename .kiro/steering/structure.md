@@ -45,7 +45,7 @@
 │   └── static/             # Frontend assets
 │       ├── script.js       # Main activity diagram JS
 │       ├── activity.js     # Activity-specific interactions
-│       ├── hover-highlight.js # Shared editor->diagram hover-highlight core (row map + highlight styles), used by activity.js and sequence-operations.js
+│       ├── hover-highlight.js # Shared editor->diagram hover-highlight core (row map, highlight styles, and editor hover/cursor dispatch), used by activity.js and sequence-operations.js
 │       ├── sequence-message.js  # Sequence add-message interaction (hover, ghost arrow, modal)
 │       ├── sequence-activation.js # Sequence activation-bar interaction (ghost bar, two-click)
 │       ├── sequence-group.js    # Sequence group-block interaction (ghost box, two-click, modal)

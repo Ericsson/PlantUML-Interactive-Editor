@@ -28,7 +28,6 @@ let history = [];
 let historyPointer = -1;
 let editor;
 let currentDiagramType = "unknown";
-let lastEditorHoverRow = -1;
 var Range = ace.require("ace/range").Range
 
 async function initeditor() {
@@ -73,20 +72,8 @@ async function initeditor() {
         cursorChangeListener()
     });
 
-    // Hovering a line in the editor highlights the matching diagram element
-    editor.on('mousemove', function(e) {
-        if (currentDiagramType !== 'sequence' && currentDiagramType !== 'activity') return;
-        const row = e.getDocumentPosition().row;
-        if (row === lastEditorHoverRow) return;
-        lastEditorHoverRow = row;
-        if (currentDiagramType === 'sequence') {
-            resetSequenceHighlight();
-            highlightSequenceForRow(row);
-        } else {
-            resetActivityHighlight();
-            highlightActivityForRow(row);
-        }
-    });
+    // Editor hover/leave -> diagram highlight dispatch (see hover-highlight.js)
+    initEditorHoverHighlighting(editor);
     console.log("Editor initialization done.")
 }
 
@@ -121,13 +108,8 @@ function findChangedLines() {
 }
 
 const cursorChangeListener = async function(e) {
-    if (currentDiagramType === 'sequence') {
-        resetSequenceHighlight();
-        highlightSequenceForRow(editor.getCursorPosition().row);
-    } else if (currentDiagramType === 'activity') {
-        resetActivityHighlight();
-        highlightActivityForRow(editor.getCursorPosition().row);
-    }
+    resetEditorHighlight();
+    highlightEditorRow(editor.getCursorPosition().row);
 };
 
 function initialize() {
