@@ -33,8 +33,6 @@ from .activity import (
     detach_activity,
     edit_activity,
     find_full_bounds,
-    find_text_bounds,
-    index_of_clicked_activity,
     svgchunktotext,
     svgtochunklist,
 )
@@ -43,7 +41,6 @@ from .arrow import (
     check_for_duplicate_arrow,
     delete_arrow,
     edit_arrow,
-    get_arrow_line,
     get_arrow_type,
     svgtoarrowtext,
 )
@@ -52,7 +49,6 @@ from .connector import (
     delete_connector,
     detach_connector,
     edit_connector_char,
-    find_index_connector,
     get_connector_char,
     get_index_connector,
     svgtochunklistconnector,
@@ -70,7 +66,7 @@ from .fork import (
     fork_toggle2,
     svgtochunklistfork,
 )
-from .group import delete_group, edit_group, get_group_line, get_group_text
+from .group import delete_group, edit_group, get_group_text
 from .if_statements import (
     add_backwards,
     check_if_repeat_has_backward,
@@ -78,7 +74,6 @@ from .if_statements import (
     deleteif,
     detach_if,
     edittextinternalif2,
-    get_if_line,
     get_line_for_adding_into_if,
     polychunktotext,
     svgtochunklistpolygon,
@@ -88,7 +83,6 @@ from .merge import get_index_merge
 from .note import (
     delete_note,
     edit_note,
-    get_note_line,
     get_note_text,
     note_toggle,
 )
@@ -97,7 +91,6 @@ from .title import (
     add_title,
     delete_title,
     edit_title_text,
-    find_title_bounds,
     get_title_text,
 )
 from .whilepoly import (
@@ -105,7 +98,6 @@ from .whilepoly import (
     editwhile,
     find_index_break,
     find_index_loop,
-    get_while_line,
     whiletotext,
 )
 
@@ -196,19 +188,6 @@ def checkbackward():
     clickedelement = data["svgelement"]
     clickedelement = RectElement.from_svg(clickedelement)
     return check_backward(puml, svg, clickedelement)
-
-
-@activity_bp.route("/getActivityLine", methods=["POST"])
-def getactivityline():
-    data = request.get_json()
-    puml = data["plantuml"]
-    svg = data["svg"]
-    clickedelement = data["svgelement"]
-    clickedelement = RectElement.from_svg(clickedelement)
-    count = index_of_clicked_activity(svg, clickedelement)
-    lines = puml.splitlines()
-    result = find_text_bounds(lines, count)
-    return jsonify({"result": result})  # int is not accepted by flask
 
 
 @activity_bp.route("/getActivityPositions", methods=["POST"])
@@ -316,18 +295,6 @@ def switchagain():
     return switch_again(puml, svgchunklist, clickedelement)
 
 
-@activity_bp.route("/getIfLine", methods=["POST"])
-def getifline():
-    data = request.get_json()
-    puml = data["plantuml"]
-    svg = data["svg"]
-    clickedelement = data["svgelement"]
-    clickedelement = PolyElement.from_svg(clickedelement)
-    svgchunklist = svgtochunklistpolygon(svg)
-    result = get_if_line(puml, svgchunklist, clickedelement)
-    return jsonify({"result": result})  # int is not accepted by flask
-
-
 @activity_bp.route("/addToIf", methods=["POST"])
 def addtoif():
     data = request.get_json()
@@ -377,18 +344,6 @@ def deleteellipse():
     return delete_ellipse_element(puml, svgchunklist, clickedelement)
 
 
-@activity_bp.route("/getEllipseLine", methods=["POST"])
-def getellipseline():
-    data = request.get_json()
-    puml = data["plantuml"]
-    svg = data["svg"]
-    clickedelement = data["svgelement"]
-    clickedelement = Ellipse.from_svg(clickedelement)
-    svgchunklist = svgtochunklistellipse(svg)
-    result = get_index_ellipse(puml, svgchunklist, clickedelement, "where")
-    return jsonify({"result": result})  # int is not accepted by flask
-
-
 @activity_bp.route("/addTitle", methods=["POST"])
 def addtitle():
     data = request.get_json()
@@ -409,15 +364,6 @@ def edittitle():
     puml = data["plantuml"]
     title = data["title"]
     return edit_title_text(puml, title)
-
-
-@activity_bp.route("/getTitleLine", methods=["POST"])
-def gettitle():
-    data = request.get_json()
-    puml = data["plantuml"]
-    lines = puml.splitlines()
-    result = find_title_bounds(lines)
-    return jsonify({"result": result})
 
 
 @activity_bp.route("/deleteTitle", methods=["POST"])
@@ -522,16 +468,6 @@ def notetoggle():
     return note_toggle(puml, svg, clickedelement)
 
 
-@activity_bp.route("/getNoteLine", methods=["POST"])
-def getnoteline():
-    data = request.get_json()
-    puml = data["plantuml"]
-    svg = data["svg"]
-    clickedelement = data["svgelement"]
-    result = get_note_line(puml, svg, clickedelement)
-    return jsonify({"result": result})  # int is not accepted by flask
-
-
 @activity_bp.route("/getGroupText", methods=["POST"])
 def getgrouptext():
     data = request.get_json()
@@ -539,16 +475,6 @@ def getgrouptext():
     svg = data["svg"]
     clickedelement = data["svgelement"]
     return get_group_text(puml, svg, clickedelement)
-
-
-@activity_bp.route("/getGroupLine", methods=["POST"])
-def getgroupline():
-    data = request.get_json()
-    puml = data["plantuml"]
-    svg = data["svg"]
-    clickedelement = data["svgelement"]
-    result = get_group_line(puml, svg, clickedelement)
-    return jsonify({"result": result})  # int is not accepted by flask
 
 
 @activity_bp.route("/editGroup", methods=["POST"])
@@ -568,16 +494,6 @@ def deletegroup():
     svg = data["svg"]
     clickedelement = data["svgelement"]
     return delete_group(puml, svg, clickedelement)
-
-
-@activity_bp.route("/getMergeLine", methods=["POST"])
-def getmergeline():
-    data = request.get_json()
-    puml = data["plantuml"]
-    svg = data["svg"]
-    clickedelement = data["svgelement"]
-    result = get_index_merge(puml, svg, clickedelement)
-    return jsonify({"result": result})  # int is not accepted by flask
 
 
 @activity_bp.route("/addToMerge", methods=["POST"])
@@ -646,18 +562,6 @@ def addactivitywhile():
     return add(puml, index, type)
 
 
-@activity_bp.route("/getWhileLine", methods=["POST"])
-def getwhileline():
-    data = request.get_json()
-    puml = data["plantuml"]
-    svg = data["svg"]
-    clickedelement = data["svgelement"]
-    clickedelement = PolyElement.from_svg(clickedelement)
-    svgchunklist = svgtochunklistpolygon(svg)
-    result = get_while_line(puml, svgchunklist, clickedelement)
-    return jsonify({"result": result})  # int is not accepted by flask
-
-
 @activity_bp.route("/editCharConnector", methods=["POST"])
 def editcharconnector():
     data = request.get_json()
@@ -690,18 +594,6 @@ def connectordelete():
     clickedelement = Ellipse.from_svg(clickedsvg)
     svgchunklist = svgtochunklistconnector(svg)
     return delete_connector(puml, svgchunklist, clickedelement)
-
-
-@activity_bp.route("/getConnectorLine", methods=["POST"])
-def getconnectorline():
-    data = request.get_json()
-    puml = data["plantuml"]
-    svg = data["svg"]
-    clickedsvg = data["svgelement"]
-    clickedelement = Ellipse.from_svg(clickedsvg)
-    svgchunklist = svgtochunklistconnector(svg)
-    result = find_index_connector(puml, svgchunklist, clickedelement)
-    return jsonify({"result": result})  # int is not accepted by flask
 
 
 @activity_bp.route("/detachConnector", methods=["POST"])
@@ -765,13 +657,3 @@ def editarrow():
     text = data["text"]
     clickedelement = data["svgelement"]
     return edit_arrow(puml, svg, text, clickedelement)
-
-
-@activity_bp.route("/getArrowLine", methods=["POST"])
-def getarrowline():
-    data = request.get_json()
-    puml = data["plantuml"]
-    svg = data["svg"]
-    clickedelement = data["svgelement"]
-    result = get_arrow_line(puml, svg, clickedelement)
-    return jsonify({"result": result})  # int is not accepted by flask

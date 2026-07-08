@@ -32,7 +32,7 @@ These three fields together give the backend everything it needs to identify wha
 }
 ```
 
-Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteActivity, getText, getActivityLine
+Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteActivity, getText
 
 **Pattern 3 — Whole-diagram queries (no `svgelement`):**
 

@@ -116,31 +116,6 @@ endtitle
 @enduml"""
             assert response.data.decode("utf-8") == expected_result
 
-    def test_gettitleline(self, client):
-        test_data = {
-            "plantuml": """@startuml
-title
-Placeholder Title
-Hello
-endtitle
-:Activity 1;
-@enduml"""
-        }
-        with client:
-            response = client.post(
-                "/getTitleLine",
-                data=json.dumps(test_data),
-                content_type="application/json",
-            )
-            response_json = json.loads(response.data.decode("utf-8"))
-            result_value = response_json.get("result")
-
-            # Expected value
-            expected_result = [1, 4]
-
-            # Assert the result value is as expected
-            assert result_value == expected_result
-
     def test_deletetitle(self, client):
         test_data = {
             "plantuml": """@startuml

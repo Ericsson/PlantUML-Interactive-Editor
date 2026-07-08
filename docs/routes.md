@@ -27,7 +27,6 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /detachActivity** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
 - **POST /breakActivity** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
 - **POST /checkBackward** — Input: `plantuml`, `svg`, `svgelement`. Returns: result text.
-- **POST /getActivityLine** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": [start, end]}`.
 - **POST /getActivityPositions** — Input: `plantuml`, `svg`. Returns: JSON with per-type row lists (`activities`, `polys`, `whiles`, `notes`, `groups`, `ellipses`, `connectors`, `merges`, `arrows` — each a list of row-index lists in SVG document order — plus `title`, a single row list). Called once per render so the frontend can highlight the matching diagram element when the editor cursor/hover lands on a line.
 - **POST /addArrowLabel** — Input: `plantuml`, `svg`, `where`, `svgelement`. Returns: modified puml.
 
@@ -40,7 +39,6 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /getTextPoly** — Input: `plantuml`, `svg`, `svgelement`. Returns: polygon text content.
 - **POST /delIf** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
 - **POST /switchAgain** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
-- **POST /getIfLine** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": int}`.
 - **POST /addToIf** — Input: `plantuml`, `svg`, `svgelement`, `where`, `type`. Returns: modified puml.
 - **POST /detachIf** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
 
@@ -48,14 +46,12 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 
 - **POST /addToEllipse** — Input: `plantuml`, `svg`, `where`, `type`, `svgelement`. Returns: modified puml.
 - **POST /deleteEllipse** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
-- **POST /getEllipseLine** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": int}`.
 
 ## Title
 
 - **POST /addTitle** — Input: `plantuml`. Returns: modified puml.
 - **POST /getTextTitle** — Input: `plantuml`. Returns: title text.
 - **POST /editTitle** — Input: `plantuml`, `title`. Returns: modified puml.
-- **POST /getTitleLine** — Input: `plantuml`. Returns: JSON `{"result": [start, end]}`.
 - **POST /deleteTitle** — Input: `plantuml`. Returns: modified puml.
 
 ## Fork
@@ -73,18 +69,15 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /editNote** — Input: `plantuml`, `svg`, `text`, `svgelement`. Returns: modified puml.
 - **POST /deleteNote** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
 - **POST /noteToggle** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
-- **POST /getNoteLine** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": int}`.
 
 ## Group
 
 - **POST /getGroupText** — Input: `plantuml`, `svg`, `svgelement`. Returns: group text.
-- **POST /getGroupLine** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": int}`.
 - **POST /editGroup** — Input: `plantuml`, `svg`, `svgelement`, `text`. Returns: modified puml.
 - **POST /deleteGroup** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
 
 ## Merge
 
-- **POST /getMergeLine** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": int}`.
 - **POST /addToMerge** — Input: `plantuml`, `svg`, `svgelement`, `type`. Returns: modified puml.
 
 ## While
@@ -93,14 +86,12 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /editTextWhile** — Input: `plantuml`, `svg`, `svgelement`, `whilestatement`, `break`, `loop`. Returns: modified puml.
 - **POST /delWhile** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
 - **POST /addToWhile** — Input: `plantuml`, `svg`, `svgelement`, `type`, `where`. Returns: modified puml.
-- **POST /getWhileLine** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": int}`.
 
 ## Connector
 
 - **POST /editCharConnector** — Input: `plantuml`, `svg`, `text`, `svgelement`. Returns: modified puml.
 - **POST /getCharConnector** — Input: `plantuml`, `svg`, `svgelement`. Returns: connector character.
 - **POST /connectorDelete** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
-- **POST /getConnectorLine** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": int}`.
 - **POST /detachConnector** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
 - **POST /addToConnector** — Input: `plantuml`, `svg`, `svgelement`, `where`, `type`. Returns: modified puml.
 
@@ -110,7 +101,6 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /checkDuplicateArrow** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": bool, "type": str}`.
 - **POST /getArrowText** — Input: `svg`, `svgelement`. Returns: arrow text.
 - **POST /editArrow** — Input: `plantuml`, `svg`, `text`, `svgelement`. Returns: modified puml.
-- **POST /getArrowLine** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": int}`.
 
 ## Sequence Diagram (Participants)
 
