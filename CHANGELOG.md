@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Fixed off-by-one bug in `_nth_ellipse_row` (`activity/positions.py`): `lines[index - 1]` at index 0 wrapped to the last line in Python, silently skipping a `start` on the first line whenever the last line began with "note"; guarded with `index > 0`
 - Fixed race condition in `setHandlersForActivityDiagram` (`activity.js`): `fetchActivityPositions` was called without `await`, so the loading overlay could disappear before `activityRowMap` was populated, causing editor-to-diagram hover highlighting to silently do nothing until the fetch completed
 - Fixed `test_second_bar_uses_refreshed_message_positions` becoming flaky on slow CI: replaced fixed `wait_for_timeout` calls with `wait_for_function` conditions that wait until `messagePositions` is populated and the puml is updated, matching the approach already used in `TestDeleteActivationFlow`
+- Fixed sequence group-box counting mismatch between backend and frontend (`sequence-operations.js`): `get_group_positions` counts only real boxes (those following their `#EEEEEE` tab path, via `_count_group_boxes`), but `setupGroupHandlers` and `highlightSequenceForRow` still advanced their ordinal on every `fill="none"` rect, so PlantUML's invisible layout rect could shift the ordinal and highlight the wrong group; both frontend counters now apply the same tab-pairing rule
 
 ## [0.30] - 2026-07-03
 

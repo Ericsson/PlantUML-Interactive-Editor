@@ -193,15 +193,17 @@ function highlightSequenceForRow(row) {
                 continue;
             }
             if (!checkIfGroupBox(el)) continue;
+            // Skip PlantUML's invisible layout rect (fill="none" with no
+            // preceding tab path). Only real boxes advance the ordinal, matching
+            // the backend get_group_positions / _count_group_boxes count.
+            if (!lastTabPath) continue;
             if (boxCount === groupOrdinal) {
                 const oldBox = el.getAttribute('style');
                 el.style.strokeWidth = '2.0';
                 sequenceHighlighted.push({el: el, kind: 'group', old: oldBox});
-                if (lastTabPath) {
-                    const oldTab = lastTabPath.getAttribute('style');
-                    lastTabPath.style.strokeWidth = '2.0';
-                    sequenceHighlighted.push({el: lastTabPath, kind: 'group', old: oldTab});
-                }
+                const oldTab = lastTabPath.getAttribute('style');
+                lastTabPath.style.strokeWidth = '2.0';
+                sequenceHighlighted.push({el: lastTabPath, kind: 'group', old: oldTab});
                 break;
             }
             boxCount++;
@@ -536,8 +538,14 @@ function setupGroupHandlers(svgelements) {
         }
 
         if (checkIfGroupBox(svgelement)) {
-            groupOrdinal++;
+            // Only a real box - one immediately following its #EEEEEE tab path -
+            // advances the ordinal. PlantUML also emits an invisible layout rect
+            // with fill="none" but no preceding tab; it must not shift the
+            // ordinal, or lookups into groupPositions (built by the backend's
+            // _count_group_boxes, which applies this same tab-pairing rule)
+            // misalign.
             if (pendingTabPath) {
+                groupOrdinal++;
                 currentGroupRect = svgelement;
                 let tabPath = pendingTabPath;
                 let groupRectForTab = currentGroupRect;
