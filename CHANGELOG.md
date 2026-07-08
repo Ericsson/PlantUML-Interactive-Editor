@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Label texts (partition labels, arrow labels) are highlighted in bold instead of grey, both from the editor side and when hovered in the diagram, matching how sequence diagrams bold message text
 - Fixed activity boxes after a `repeat` block without a `backward:` line highlighting the wrong editor line on hover
 - Fixed the editor-to-diagram highlight lingering on a sequence diagram element after the pointer left the editor: leaving the editor now clears the editor-side highlight
+- Fixed the editor line staying highlighted after hovering an activity diagram element and moving away: the diagram-to-editor hover marker is now cleared when the pointer leaves a diagram element
 - Bidirectional hover highlighting for sequence diagrams: hovering a message, participant, note, or group box in the diagram highlights the matching line(s) in the editor, and hovering or moving the cursor to a line in the editor highlights the matching element in the diagram
 - Group blocks for sequence diagrams: right-click a lifeline → Add Group sub-menu to pick group/alt/opt/loop, then click two messages to define the range (ghost box preview), type a label, and the group is created
 - Rename or delete a sequence group block: right-click the keyword tab or its header text → Rename (edits only the title, keeps the keyword) or Delete Group (unwraps the block, keeping its contents)

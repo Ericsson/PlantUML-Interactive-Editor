@@ -1784,6 +1784,11 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
             toggleLoadingOverlay()
             return
         }
+        // Clear the editor hover marker when the pointer leaves a diagram
+        // element (mouseout bubbles from the elements up to this <g>), so the
+        // last hovered element's line doesn't stay highlighted in the editor.
+        // The <g> is recreated on every render, so this listener doesn't stack.
+        svg.addEventListener('mouseout', clearMarkers);
         const svgelements = svg.querySelectorAll('*');
 
         let onlytextelements = true

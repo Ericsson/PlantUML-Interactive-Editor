@@ -300,3 +300,45 @@ class TestEditorToActivityHighlight:
         assert result["whileHovering"] == "#d8d8d8"
         assert result["afterLeaving"] == "#F1F1F1"
         assert result["count"] == 0
+
+
+class TestActivityToEditorMarkers:
+    """Diagram->editor markers: hovering a diagram element marks its editor
+    line, and leaving the element clears the marker (so the last hovered
+    element does not stay highlighted in the editor)."""
+
+    _PUML = "@startuml\\nstart\\n:Hello;\\nstop\\n@enduml"
+
+    def _load_activity(self, page, retries=12, wait_ms=1500):
+        # The page renders its demo once on load; that late async render can
+        # clobber #colb after our setValue, so retry until the activity diagram
+        # is stably rendered (matches the retry approach in the sequence tests).
+        for _ in range(retries):
+            page.evaluate(f"() => editor.session.setValue('{self._PUML}')")
+            page.wait_for_timeout(wait_ms)
+            ok = page.evaluate(
+                "() => currentDiagramType === 'activity' "
+                "&& !!document.querySelector('#colb g')"
+            )
+            if ok:
+                return
+        raise AssertionError("activity diagram did not render")
+
+    def test_leaving_diagram_element_clears_editor_marker(self, app_url, page):
+        self._load_activity(page)
+        result = page.evaluate(
+            """() => {
+            const g = document.querySelector('#colb g');
+            // Simulate the "hover" marker a diagram-element mouseover sets.
+            setEditorMarkers(2);
+            const countHover = () => Object.values(editor.session.getMarkers())
+                .filter(m => m.clazz === 'hover').length;
+            const before = countHover();
+            g.dispatchEvent(new MouseEvent('mouseout', {bubbles: true}));
+            const after = countHover();
+            return {before, after};
+        }"""
+        )
+
+        assert result["before"] >= 1
+        assert result["after"] == 0
