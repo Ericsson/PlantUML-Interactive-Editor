@@ -124,6 +124,22 @@ function findActiveHighlight(active, el) {
     return null;
 }
 
+// --- Diagram -> editor direction ---
+// Inverse of the row map: which editor rows a diagram element owns. Built during
+// the same registration pass so a diagram-side hover can mark the editor line(s)
+// from cached data instead of a per-hover backend fetch.
+function registerElementRows(elementRows, el, row) {
+    if (row < 0) return;
+    if (!elementRows.has(el)) elementRows.set(el, []);
+    elementRows.get(el).push(row);
+}
+
+// Mark the editor line(s) for a hovered diagram element (no-op if it owns none).
+function markEditorForElement(elementRows, el) {
+    const rows = elementRows.get(el);
+    if (rows && rows.length) setEditorMarkers(rows);
+}
+
 // --- Positions fetch ---
 
 // POST the current puml + rendered SVG to a positions endpoint and return the

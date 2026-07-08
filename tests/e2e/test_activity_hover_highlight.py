@@ -312,13 +312,18 @@ class TestActivityToEditorMarkers:
     def _load_activity(self, page, retries=12, wait_ms=1500):
         # The page renders its demo once on load; that late async render can
         # clobber #colb after our setValue, so retry until the activity diagram
-        # is stably rendered (matches the retry approach in the sequence tests).
+        # is stably rendered. Require the hover targets to be populated AND
+        # consistent with the row map (the first activity is a key in
+        # activityElementRows) so we don't sample mid-way through a re-render.
         for _ in range(retries):
             page.evaluate(f"() => editor.session.setValue('{self._PUML}')")
             page.wait_for_timeout(wait_ms)
             ok = page.evaluate(
-                "() => currentDiagramType === 'activity' "
-                "&& !!document.querySelector('#colb g')"
+                "() => currentDiagramType === 'activity'"
+                " && !!document.querySelector('#colb g')"
+                " && activityHoverTargets"
+                " && activityHoverTargets.activities.length === 1"
+                " && activityElementRows.has(activityHoverTargets.activities[0])"
             )
             if ok:
                 return
@@ -342,3 +347,33 @@ class TestActivityToEditorMarkers:
 
         assert result["before"] >= 1
         assert result["after"] == 0
+
+    def test_hovering_element_marks_its_editor_line(self, app_url, page):
+        # Diagram->editor now uses the cached per-render positions (no per-hover
+        # fetch), so hovering an element must mark exactly the editor line(s) it
+        # owns. Puml is start(1) / :Hello;(2) / stop(3), 0-based rows.
+        self._load_activity(page)
+        result = page.evaluate(
+            """() => {
+            const markedRows = (el) => {
+                clearMarkers();
+                // handlers use mouseover (most) or mouseenter (group/arrow);
+                // dispatch both so this works regardless of the element type.
+                el.dispatchEvent(new MouseEvent('mouseover', {bubbles: true}));
+                el.dispatchEvent(new MouseEvent('mouseenter', {bubbles: true}));
+                return Object.values(editor.session.getMarkers())
+                    .filter(m => m.clazz === 'hover')
+                    .map(m => m.range.start.row)
+                    .sort((a, b) => a - b);
+            };
+            return {
+                activity: markedRows(activityHoverTargets.activities[0]),
+                start: markedRows(activityHoverTargets.ellipses[0]),
+                stop: markedRows(activityHoverTargets.ellipses[1])
+            };
+        }"""
+        )
+
+        assert result["activity"] == [2]  # :Hello;
+        assert result["start"] == [1]  # start
+        assert result["stop"] == [3]  # stop
