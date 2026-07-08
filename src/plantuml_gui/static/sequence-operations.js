@@ -8,22 +8,29 @@ let notePositions = []; // [{cy, index}, ...]
 let groupPositions = []; // [{headerIndex, endIndex}, ...]
 
 // Elements highlighted from the editor side, with how to restore them
-let sequenceHighlighted = []; // [{el, kind, old}, ...]
+let sequenceHighlighted = []; // [{el, style, token}, ...] (see hover-highlight.js)
 
 // Editor-row -> diagram elements to highlight, built once per render during the
 // setup walk (mirrors the activity diagram's activityRowMap). Lets
 // highlightSequenceForRow be a map lookup instead of re-walking the whole SVG
 // and re-deriving each element's ordinal on every hover.
-let sequenceRowMap = new Map(); // Map<row, [{el, kind}, ...]>
+let sequenceRowMap = new Map(); // Map<row, [{el, style}, ...]> (see hover-highlight.js)
+
+// Highlight treatment per sequence element type (see hover-highlight.js).
+// Participants and notes recolor their fill; messages bold and thicken and group
+// boxes/tabs thicken, both via style properties that restore the literal style
+// attribute the element classifiers match on.
+const SEQ_HIGHLIGHTS = {
+    participant: attributeHighlight('fill', '#d8d8d8'),
+    note: attributeHighlight('fill', '#d8d8d8'),
+    message: stylePropertyHighlight({fontWeight: 'bold', strokeWidth: '2.0'}),
+    group: stylePropertyHighlight({strokeWidth: '2.0'})
+};
 
 // Register a diagram element to highlight when the given editor row is hovered.
-// kind selects how it is highlighted and restored (see highlightSequenceForRow
-// and resetSequenceHighlight): 'message' and 'group' toggle the style attribute,
-// 'participant' and 'note' toggle the fill attribute.
+// kind picks the element's highlight treatment from SEQ_HIGHLIGHTS.
 function registerSequenceRow(row, el, kind) {
-    if (row < 0) return;
-    if (!sequenceRowMap.has(row)) sequenceRowMap.set(row, []);
-    sequenceRowMap.get(row).push({el: el, kind: kind});
+    registerHoverRow(sequenceRowMap, row, el, SEQ_HIGHLIGHTS[kind]);
 }
 
 // --- Utilities ---
@@ -120,10 +127,11 @@ function messageElementCy(svgelement) {
 
 // --- Editor -> diagram highlighting ---
 
-// Restore the literal style attribute. Mutating el.style re-serializes the
-// attribute and loses the exact "stroke-width:1.0" string that the element
-// classifiers (e.g. checkIfMessageElement) match on, so unhighlighting must
-// put back the original attribute rather than clear style properties.
+// Restore the literal style attribute (used by the message diagram-side
+// mouseout). Mutating el.style re-serializes the attribute and loses the exact
+// "stroke-width:1.0" string that the element classifiers (e.g.
+// checkIfMessageElement) match on, so unhighlighting must put back the original
+// attribute rather than clear style properties.
 function restoreStyleAttribute(el, old) {
     if (old) {
         el.setAttribute('style', old);
@@ -133,37 +141,15 @@ function restoreStyleAttribute(el, old) {
 }
 
 function resetSequenceHighlight() {
-    for (const entry of sequenceHighlighted) {
-        if (entry.kind === 'message' || entry.kind === 'group') {
-            restoreStyleAttribute(entry.el, entry.old);
-        } else { // participant or note fill
-            entry.el.setAttribute('fill', entry.old);
-        }
-    }
-    sequenceHighlighted = [];
+    sequenceHighlighted = clearHoverHighlight(sequenceHighlighted);
 }
 
 // Highlight the diagram element(s) registered for the given editor row.
 // The element->row mapping is precomputed in sequenceRowMap during the render
-// walk, so this is a lookup plus a per-kind style toggle; resetSequenceHighlight
-// undoes it using the recorded kind/old value.
+// walk, so this is a shared map lookup; resetSequenceHighlight undoes it.
 function highlightSequenceForRow(row) {
     if (isSequenceAddMode()) return;
-    const entries = sequenceRowMap.get(row);
-    if (!entries) return;
-    for (const {el, kind} of entries) {
-        if (kind === 'message') {
-            sequenceHighlighted.push({el: el, kind: kind, old: el.getAttribute('style')});
-            el.style.fontWeight = 'bold';
-            el.style.strokeWidth = '2.0';
-        } else if (kind === 'group') {
-            sequenceHighlighted.push({el: el, kind: kind, old: el.getAttribute('style')});
-            el.style.strokeWidth = '2.0';
-        } else { // 'participant' or 'note' fill
-            sequenceHighlighted.push({el: el, kind: kind, old: el.getAttribute('fill')});
-            el.setAttribute('fill', '#d8d8d8');
-        }
-    }
+    highlightHoverRow(sequenceRowMap, row, sequenceHighlighted);
 }
 
 // --- Background context menu management ---
@@ -336,8 +322,8 @@ function setupParticipantHandlers(svgelements, svg, element) {
         let rectcolor = "";
         svgelement.addEventListener('mouseover', function() {
             // If already highlighted from the editor side, keep the original fill
-            const highlighted = sequenceHighlighted.find(h => h.el === svgelement);
-            rectcolor = highlighted ? highlighted.old : svgelement.getAttribute('fill');
+            const highlighted = findActiveHighlight(sequenceHighlighted, svgelement);
+            rectcolor = highlighted ? highlighted.token.old : svgelement.getAttribute('fill');
             svgelement.setAttribute('fill', '#d8d8d8');
             const cx = parseFloat(svgelement.getAttribute('x')) + parseFloat(svgelement.getAttribute('width')) / 2;
             const lifeline = participantLifelines.find(p => Math.abs(p.cx - cx) <= 1);
@@ -346,7 +332,7 @@ function setupParticipantHandlers(svgelements, svg, element) {
 
         svgelement.addEventListener('mouseout', function() {
             clearMarkers();
-            if (sequenceHighlighted.some(h => h.el === svgelement)) return;
+            if (findActiveHighlight(sequenceHighlighted, svgelement)) return;
             svgelement.setAttribute('fill', rectcolor);
         });
 
@@ -559,8 +545,8 @@ function setupMessageHandlers(svgelements, svg) {
         svgelement.addEventListener('mouseover', function() {
             if (isSequenceAddMode()) return;
             // If already highlighted from the editor side, keep the original style
-            const highlighted = sequenceHighlighted.find(h => h.el === svgelement);
-            originalstyle = highlighted ? highlighted.old : svgelement.getAttribute('style');
+            const highlighted = findActiveHighlight(sequenceHighlighted, svgelement);
+            originalstyle = highlighted ? highlighted.token.old : svgelement.getAttribute('style');
             svgelement.style.fontWeight = 'bold';
             svgelement.style.strokeWidth = '2.0';
             const nearest = findNearestMessage(messageElementCy(svgelement));
@@ -571,7 +557,7 @@ function setupMessageHandlers(svgelements, svg) {
             clearMarkers();
             if (originalstyle === undefined) return;
             // Keep styles if the element is highlighted from the editor side
-            if (sequenceHighlighted.some(h => h.el === svgelement)) return;
+            if (findActiveHighlight(sequenceHighlighted, svgelement)) return;
             restoreStyleAttribute(svgelement, originalstyle);
             originalstyle = undefined;
         });
@@ -678,8 +664,8 @@ function setupNoteHandlers(svgelements) {
             let notecolor = "";
             svgelement.addEventListener('mouseover', function() {
                 if (isSequenceAddMode()) return;
-                const highlighted = sequenceHighlighted.find(h => h.el === svgelement);
-                notecolor = highlighted ? highlighted.old : svgelement.getAttribute('fill');
+                const highlighted = findActiveHighlight(sequenceHighlighted, svgelement);
+                notecolor = highlighted ? highlighted.token.old : svgelement.getAttribute('fill');
                 svgelement.setAttribute('fill', '#d8d8d8');
                 const note = notePositions[noteOrdinal];
                 if (note && note.index >= 0) setEditorMarkers(note.index);
@@ -687,7 +673,7 @@ function setupNoteHandlers(svgelements) {
 
             svgelement.addEventListener('mouseout', function() {
                 clearMarkers();
-                if (sequenceHighlighted.some(h => h.el === svgelement)) return;
+                if (findActiveHighlight(sequenceHighlighted, svgelement)) return;
                 svgelement.setAttribute('fill', notecolor);
             });
         }

@@ -1682,8 +1682,8 @@ function arrowLabelEventListeners() {
 // type in the same document order, so entries match by ordinal - the same
 // invariant the per-element get*Line endpoints rely on.
 let activityHoverTargets = null;
-let activityRowMap = new Map(); // editor row -> [{target, color}, ...]
-let activityHighlighted = []; // [{el, old}, ...] fills to restore
+let activityRowMap = new Map(); // editor row -> [{el, style}, ...] (see hover-highlight.js)
+let activityHighlighted = []; // [{el, style, token}, ...] active highlights to restore
 
 function newActivityHoverTargets() {
     return {
@@ -1720,34 +1720,29 @@ async function fetchActivityPositions(pumlcontent, svg) {
     }
 }
 
-// Fill highlights match what each type's diagram-side mouseover uses;
-// label texts (groups, arrows) turn bold like sequence messages do.
-const FILL_HIGHLIGHT = {
-    attr: 'fill',
-    value: '#d8d8d8'
-};
-const BOLD_HIGHLIGHT = {
-    attr: 'font-weight',
-    value: 'bold'
-};
+// Highlight treatments per element type (see hover-highlight.js). Fills match
+// what each type's diagram-side mouseover uses; label texts (groups, arrows)
+// turn bold like sequence messages do.
+const FILL_HIGHLIGHT = attributeHighlight('fill', '#d8d8d8');
+const BOLD_HIGHLIGHT = attributeHighlight('font-weight', 'bold');
+const ELLIPSE_HIGHLIGHT = attributeHighlight('fill', '#818181');
+const CONNECTOR_HIGHLIGHT = attributeHighlight('fill', '#c2c2c2');
+const TITLE_HIGHLIGHT = attributeHighlight('fill', '#e5e5e5');
 
 function buildActivityRowMap(positions) {
     activityRowMap = new Map();
-    const register = (row, target, highlight) => {
-        if (row < 0) return;
-        if (!activityRowMap.has(row)) {
-            activityRowMap.set(row, []);
+    // An arrow's target is an array of its label text elements; register each
+    // element separately so the shared row map holds one element per entry.
+    const register = (row, target, style) => {
+        const els = Array.isArray(target) ? target : [target];
+        for (const el of els) {
+            registerHoverRow(activityRowMap, row, el, style);
         }
-        activityRowMap.get(row).push({
-            target: target,
-            attr: highlight.attr,
-            value: highlight.value
-        });
     };
-    const add = (rowsPerElement, targets, highlight) => {
+    const add = (rowsPerElement, targets, style) => {
         for (let i = 0; i < targets.length && i < rowsPerElement.length; i++) {
             for (const row of rowsPerElement[i]) {
-                register(row, targets[i], highlight);
+                register(row, targets[i], style);
             }
         }
     };
@@ -1758,19 +1753,10 @@ function buildActivityRowMap(positions) {
     add(positions.merges, activityHoverTargets.merges, FILL_HIGHLIGHT);
     add(positions.groups, activityHoverTargets.groups, BOLD_HIGHLIGHT);
     add(positions.arrows, activityHoverTargets.arrows, BOLD_HIGHLIGHT);
-    add(positions.ellipses, activityHoverTargets.ellipses, {
-        attr: 'fill',
-        value: '#818181'
-    });
-    add(positions.connectors, activityHoverTargets.connectors, {
-        attr: 'fill',
-        value: '#c2c2c2'
-    });
+    add(positions.ellipses, activityHoverTargets.ellipses, ELLIPSE_HIGHLIGHT);
+    add(positions.connectors, activityHoverTargets.connectors, CONNECTOR_HIGHLIGHT);
     if (activityHoverTargets.title.length > 0) {
-        add([positions.title], activityHoverTargets.title, {
-            attr: 'fill',
-            value: '#e5e5e5'
-        });
+        add([positions.title], activityHoverTargets.title, TITLE_HIGHLIGHT);
     }
     for (const fork of activityHoverTargets.forks) {
         register(fork.row, fork.el, FILL_HIGHLIGHT);
@@ -1778,38 +1764,11 @@ function buildActivityRowMap(positions) {
 }
 
 function highlightActivityForRow(row) {
-    const entries = activityRowMap.get(row);
-    if (!entries) {
-        return;
-    }
-    for (const entry of entries) {
-        const els = Array.isArray(entry.target) ? entry.target : [entry.target];
-        for (const el of els) {
-            const old = el.getAttribute(entry.attr);
-            // Already showing the highlight value (diagram hover in progress or
-            // registered twice for this row): saving it would corrupt the restore.
-            if (old === entry.value) {
-                continue;
-            }
-            activityHighlighted.push({
-                el: el,
-                attr: entry.attr,
-                old: old
-            });
-            el.setAttribute(entry.attr, entry.value);
-        }
-    }
+    highlightHoverRow(activityRowMap, row, activityHighlighted);
 }
 
 function resetActivityHighlight() {
-    for (const entry of activityHighlighted) {
-        if (entry.old === null) {
-            entry.el.removeAttribute(entry.attr);
-        } else {
-            entry.el.setAttribute(entry.attr, entry.old);
-        }
-    }
-    activityHighlighted = [];
+    activityHighlighted = clearHoverHighlight(activityHighlighted);
 }
 
 async function setHandlersForActivityDiagram(pumlcontent, element) {
