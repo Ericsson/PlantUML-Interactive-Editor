@@ -1701,23 +1701,10 @@ function newActivityHoverTargets() {
     };
 }
 
-async function fetchActivityPositions(pumlcontent, svg) {
+async function fetchActivityPositions() {
+    const data = await fetchDiagramData("getActivityPositions");
     activityRowMap = new Map();
-    try {
-        const response = await fetch("getActivityPositions", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                'plantuml': pumlcontent,
-                'svg': svg.innerHTML
-            })
-        });
-        buildActivityRowMap(await response.json());
-    } catch (error) {
-        activityRowMap = new Map(); // hover highlighting silently unavailable
-    }
+    if (data) buildActivityRowMap(data);
 }
 
 // Highlight treatments per element type (see hover-highlight.js). Fills match
@@ -2392,7 +2379,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
         }
         // After the walk so the svg sent reflects its mutations (e.g. the
         // pointer-events flags note counting depends on)
-        await fetchActivityPositions(pumlcontent, svg);
+        await fetchActivityPositions();
         toggleLoadingOverlay()
 
     }).catch((error) => {

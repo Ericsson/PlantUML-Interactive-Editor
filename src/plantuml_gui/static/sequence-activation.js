@@ -14,24 +14,8 @@ const ACTIVATION_BAR_WIDTH = 10;
 // --- Message position management ---
 
 async function fetchMessagePositions() {
-    const element = document.getElementById('colb');
-    const svg = element.querySelector('g');
-    if (!svg) {
-        messagePositions = [];
-        return;
-    }
-    try {
-        const plantuml = trimlines(editor.session.getValue());
-        const response = await fetch("getMessagePositions", {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({plantuml: plantuml, svg: svg.innerHTML})
-        });
-        const data = await response.json();
-        messagePositions = data.positions;
-    } catch (error) {
-        messagePositions = [];
-    }
+    const data = await fetchDiagramData("getMessagePositions");
+    messagePositions = data ? data.positions : [];
 }
 
 function findNearestMessage(y) {

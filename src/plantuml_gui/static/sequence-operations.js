@@ -45,62 +45,20 @@ function svgPointFromEvent(e, svgElement) {
 
 // Fetch participant lifeline positions from backend (called once per render)
 async function extractLifelinePositions() {
-    participantLifelines = [];
-    const element = document.getElementById('colb');
-    const svg = element.querySelector('g');
-    if (!svg) return;
-    try {
-        const plantuml = trimlines(editor.session.getValue());
-        const response = await fetch("getParticipantPositions", {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({plantuml: plantuml, svg: svg.innerHTML})
-        });
-        const data = await response.json();
-        participantLifelines = data.positions;
-    } catch (error) {
-        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-    }
+    const data = await fetchDiagramData("getParticipantPositions");
+    participantLifelines = data ? data.positions : [];
 }
 
 // Fetch note positions from backend (called once per render)
 async function fetchNotePositions() {
-    notePositions = [];
-    const element = document.getElementById('colb');
-    const svg = element.querySelector('g');
-    if (!svg) return;
-    try {
-        const plantuml = trimlines(editor.session.getValue());
-        const response = await fetch("getSeqNotePositions", {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({plantuml: plantuml, svg: svg.innerHTML})
-        });
-        const data = await response.json();
-        notePositions = data.positions;
-    } catch (error) {
-        notePositions = [];
-    }
+    const data = await fetchDiagramData("getSeqNotePositions");
+    notePositions = data ? data.positions : [];
 }
 
 // Fetch group positions from backend (called once per render)
 async function fetchGroupPositions() {
-    groupPositions = [];
-    const element = document.getElementById('colb');
-    const svg = element.querySelector('g');
-    if (!svg) return;
-    try {
-        const plantuml = trimlines(editor.session.getValue());
-        const response = await fetch("getSeqGroupPositions", {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({plantuml: plantuml, svg: svg.innerHTML})
-        });
-        const data = await response.json();
-        groupPositions = data.positions;
-    } catch (error) {
-        groupPositions = [];
-    }
+    const data = await fetchDiagramData("getSeqGroupPositions");
+    groupPositions = data ? data.positions : [];
 }
 
 // Vertical position of a message SVG element, comparable to messagePositions cy

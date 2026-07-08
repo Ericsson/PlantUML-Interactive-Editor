@@ -124,6 +124,29 @@ function findActiveHighlight(active, el) {
     return null;
 }
 
+// --- Positions fetch ---
+
+// POST the current puml + rendered SVG to a positions endpoint and return the
+// parsed JSON, or null if there is no rendered diagram or the request fails.
+// Hover highlighting is non-critical, so a failure simply disables it for that
+// render (callers default their state to empty) instead of surfacing an error.
+async function fetchDiagramData(endpoint) {
+    const colb = document.getElementById('colb');
+    const svg = colb ? colb.querySelector('g') : null;
+    if (!svg) return null;
+    try {
+        const plantuml = trimlines(editor.session.getValue());
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({plantuml: plantuml, svg: svg.innerHTML})
+        });
+        return await response.json();
+    } catch (error) {
+        return null;
+    }
+}
+
 // --- Editor-side dispatch ---
 // Routes an editor hover/cursor row to the active diagram's highlight, so the
 // mousemove, mouseleave and cursor-change paths all funnel through one place.
