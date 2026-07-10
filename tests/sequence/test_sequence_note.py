@@ -115,6 +115,15 @@ class TestAddNote:
         result = add_note(puml, svg, "Alice", "over", "", 0.0)
         assert result == puml
 
+    def test_add_note_multiline_text_is_escaped(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        result = add_note(puml, svg, "Alice", "over", "Line1\nLine2", 0.0)
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : Line1\\nLine2\nAlice -> Bob: Hello\n@enduml"
+        assert result == expected
+        # Still exactly 6 lines: the escaped \n must not split the note onto a new source line
+        assert len(result.splitlines()) == 6
+
     def test_add_note_above_existing_note(self):
         puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\nnote over Alice : Existing\nBob -> Alice: Reply\n@enduml"
         svg = extract_g_inner(_create_svg_from_uml(puml))
@@ -241,6 +250,12 @@ class TestGetNoteText:
         svgelement = extract_note_path(svg, 1)
         assert get_note_text(puml, svg, svgelement) == "Second"
 
+    def test_get_note_text_unescapes_newlines(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : Line1\\nLine2\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 0)
+        assert get_note_text(puml, svg, svgelement) == "Line1\nLine2"
+
 
 class TestEditNote:
     def test_edit_note(self):
@@ -257,6 +272,14 @@ class TestEditNote:
         svgelement = extract_note_path(svg, 1)
         result = edit_note(puml, svg, svgelement, "Updated")
         expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : First\nnote over Bob : Updated\n@enduml"
+        assert result == expected
+
+    def test_edit_note_multiline_text_is_escaped(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : Old text\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 0)
+        result = edit_note(puml, svg, svgelement, "Line1\nLine2")
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : Line1\\nLine2\n@enduml"
         assert result == expected
 
 
@@ -320,6 +343,26 @@ class TestAddNoteRoute:
             expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice, Bob : Span note\nAlice -> Bob: Hello\n@enduml"
             assert response.get_json()["plantuml"] == expected
 
+    def test_add_note_multiline_text_route(self, client):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        test_data = {
+            "plantuml": puml,
+            "svg": svg,
+            "participant": "Alice",
+            "placement": "over",
+            "text": "Line1\nLine2",
+            "yPosition": 0.0,
+        }
+        with client:
+            response = client.post(
+                "/addNote",
+                data=__import__("json").dumps(test_data),
+                content_type="application/json",
+            )
+            expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : Line1\\nLine2\nAlice -> Bob: Hello\n@enduml"
+            assert response.get_json()["plantuml"] == expected
+
     def test_add_note_empty_text_route(self, client):
         puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
         svg = extract_g_inner(_create_svg_from_uml(puml))
@@ -371,6 +414,25 @@ class TestNoteRoutes:
                 content_type="application/json",
             )
             expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : New text\n@enduml"
+            assert response.get_json()["plantuml"] == expected
+
+    def test_edit_note_multiline_text_route(self, client):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : Old text\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 0)
+        test_data = {
+            "plantuml": puml,
+            "svg": svg,
+            "svgelement": svgelement,
+            "text": "Line1\nLine2",
+        }
+        with client:
+            response = client.post(
+                "/editSeqNote",
+                data=__import__("json").dumps(test_data),
+                content_type="application/json",
+            )
+            expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : Line1\\nLine2\n@enduml"
             assert response.get_json()["plantuml"] == expected
 
     def test_delete_note_route(self, client):

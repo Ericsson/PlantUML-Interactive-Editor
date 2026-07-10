@@ -76,6 +76,16 @@ def extract_note_positions(svg: str, puml: str) -> List[tuple[float, int]]:
     return positions
 
 
+def escape_multiline_text(text: str) -> str:
+    """Convert real newlines to a literal \\n so the text stays one PlantUML line."""
+    return text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\\n")
+
+
+def unescape_multiline_text(text: str) -> str:
+    """Convert literal \\n back to real newlines for display when editing."""
+    return text.replace("\\n", "\n")
+
+
 def find_insertion_index(
     messages: List[Message], svg: str, puml: str, y: float, lines: List[str]
 ) -> int:

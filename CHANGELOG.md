@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### External
 
+- Fixed multi-line message text producing invalid PlantUML for sequence diagrams (newlines are now escaped as `\n` in the generated code)
+- Fixed multi-line note text producing invalid PlantUML for sequence diagrams (newlines are now escaped as `\n` in the generated code)
 - Editor-to-diagram hover highlighting for activity diagrams: hovering or moving the cursor to a line in the editor highlights the matching diagram element for all element types (activities, if/switch/repeat and while statements, notes, partitions, start/stop, connectors, merge markers, arrow labels, forks, title), matching the sequence diagram behavior
 - Label texts (partition labels, arrow labels) are highlighted in bold instead of grey, both from the editor side and when hovered in the diagram, matching how sequence diagrams bold message text
 - Fixed activity boxes after a `repeat` block without a `backward:` line highlighting the wrong editor line on hover
@@ -31,6 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Activity diagram-to-editor hover highlighting now reads the cached per-render positions (an element→rows map built in `buildActivityRowMap`, marked via `markEditorForElement`) instead of a per-hover backend fetch; removed the ten `processXLine` functions and their per-hover `getXLine` requests, so hovering a diagram element marks the editor line synchronously, matching how sequence diagrams already work. The `getXLine` activity routes are now unused by the frontend.
 - Removed the ten now-unused activity `getXLine` routes (`/getActivityLine`, `/getIfLine`, `/getEllipseLine`, `/getTitleLine`, `/getNoteLine`, `/getGroupLine`, `/getMergeLine`, `/getWhileLine`, `/getConnectorLine`, `/getArrowLine`) and their tests, plus the three orphaned functions `get_note_line`/`get_group_line`/`get_arrow_line` and now-unused imports. The shared line-finders they used stay (still used by `positions.py` and the edit/delete operations).
 - Consolidated the four per-render sequence position endpoints (`/getParticipantPositions`, `/getMessagePositions`, `/getSeqNotePositions`, `/getSeqGroupPositions`) into a single `/getSequencePositions` (new `sequence/positions.py` aggregator), matching the activity diagram's one-fetch-per-render pattern; a render now costs one round-trip with one puml+SVG payload instead of four serialized requests each re-sending the payload. The frontend's four fetchers are replaced by one `fetchSequencePositions`; each element type's sub-table keeps its own shape since sequence elements are matched spatially, so the data model is unchanged.
+- Fixed the activity ellipse diagram-side hover writing `fill` as `'#818181 '` (trailing space) in `activity.js`: the editor→diagram `ELLIPSE_HIGHLIGHT` applies the space-free `'#818181'`, so during a simultaneous editor+diagram hover the `apply` guard (`old === value`) failed to match, captured the spaced value as the "original", and restored it — the trailing space is removed so both directions use the identical value
 
 ## [0.30] - 2026-07-03
 

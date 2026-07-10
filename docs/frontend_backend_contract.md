@@ -81,6 +81,8 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 - **renameSeqGroup:** `{plantuml, svg, svgelement, label}`; returns `{"plantuml": updated_puml}` — replaces only the text after the keyword on the header line
 - **deleteSeqGroup:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}` — unwraps the group: removes the header and its matching `end` line, keeping the contents in place
 
+Message and note `text`/`message` fields may contain real newlines (the textareas allow multi-line input via Enter). Since messages and notes are single-line puml statements, `add_message`/`add_note`/`edit_message_text`/`edit_note` escape real newlines to a literal `\n` before writing the line (`escape_multiline_text` in `sequence/util.py`), and `get_message_text`/`get_note_text`/`get_message_positions` unescape `\n` back to real newlines before returning text to the frontend (`unescape_multiline_text`).
+
 ## script.js Requests
 
 `script.js` handles core operations:
@@ -108,13 +110,14 @@ Highlights applied by the editor→diagram direction are tracked in `sequenceHig
 
 ## Editor <-> Diagram Hover Highlighting (Activity Diagrams)
 
-The diagram→editor direction uses the per-element `get*Line` routes (fetched on mouseover, as before). The editor→diagram direction mirrors the sequence design with a single per-render fetch:
+Both directions are resolved client-side from a single per-render `getActivityPositions` fetch — no per-hover backend request. (This replaced the old per-element `get*Line` routes, which have been removed.)
 
 - **getActivityPositions:** `{plantuml, svg}`; returns `{"activities": [[rows]...], "polys": [[rows]...], "whiles": [[rows]...], "notes": [[rows]...], "groups": [[rows]...], "ellipses": [[rows]...], "connectors": [[rows]...], "merges": [[rows]...], "arrows": [[rows]...], "title": [rows]}` — for each element type, the puml line indexes owned by the nth element of that type in SVG document order. Range types (activities, notes, arrows, title) list every row of the block; structural types list only their keyword rows (e.g. a group lists its header and closing line, an if lists `if`/`else`/`endif`).
 
-During the handler-setup walk over the SVG, `activity.js` registers each hoverable element into `activityHoverTargets` per type, in the same document order the backend counts — the ordinal-alignment invariant the existing `get*Line` routes already rely on. `buildActivityRowMap` joins the two by ordinal into `activityRowMap` (editor row → elements). Fork rows come from the client-side `labelForks` data instead of the backend, and the walk mirrors two backend counting quirks: the first ellipse of an `end` marker's concentric pair is skipped, as are note-path candidates flagged `pointer-events: none`.
+During the handler-setup walk over the SVG, `activity.js` registers each hoverable element into `activityHoverTargets` per type, in the same document order the backend counts — the same ordinal-alignment invariant the removed `get*Line` routes once relied on. `buildActivityRowMap` joins the two by ordinal, building both `activityRowMap` (editor row → elements, for editor→diagram) and the inverse `activityElementRows` (element → rows, for diagram→editor). Fork rows come from the client-side `labelForks` data instead of the backend, and the walk mirrors two backend counting quirks: the first ellipse of an `end` marker's concentric pair is skipped, as are note-path candidates flagged `pointer-events: none`.
 
-`highlightActivityForRow(row)` highlights every registered element owning that row: shapes get a fill (`#d8d8d8`; `#818181` for start/stop, `#c2c2c2` for connectors, `#e5e5e5` for the title box) while label texts (partition labels, arrow labels) get `font-weight: bold`, matching the sequence convention for text. Applied highlights are tracked in `activityHighlighted` (`{el, attr, old}`) and restored exactly by `resetActivityHighlight()`; elements already showing the highlight value (e.g. a diagram-side hover in progress) are skipped so the true original is never overwritten.
+- **Editor → diagram**: `highlightActivityForRow(row)` highlights every element registered on that row: shapes get a fill (`#d8d8d8`; `#818181` for start/stop, `#c2c2c2` for connectors, `#e5e5e5` for the title box) while label texts (partition labels, arrow labels) get `font-weight: bold`, matching the sequence convention for text. Applied highlights are tracked in `activityHighlighted` (`{el, attr, old}`) and restored exactly by `resetActivityHighlight()`; elements already showing the highlight value (e.g. a diagram-side hover in progress) are skipped so the true original is never overwritten.
+- **Diagram → editor**: hovering a diagram element calls `markEditorForElement(activityElementRows, el)`, a synchronous lookup in the cached inverse map that paints the owning editor line(s) — no per-hover fetch.
 
 ## Response Handling
 

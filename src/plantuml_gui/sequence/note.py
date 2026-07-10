@@ -27,7 +27,13 @@ from typing import Dict, List
 from pyquery import PyQuery as Pq
 
 from .classes import Diagram, Message
-from .util import _find_note_line_index, extract_note_positions, find_insertion_index
+from .util import (
+    _find_note_line_index,
+    escape_multiline_text,
+    extract_note_positions,
+    find_insertion_index,
+    unescape_multiline_text,
+)
 
 MESSAGE_NOTE_TOLERANCE = 10.0
 
@@ -92,6 +98,7 @@ def add_note(
     if not text:
         return puml
 
+    text = escape_multiline_text(text)
     diagram = Diagram.from_svg(svg, puml)
     lines = puml.splitlines()
 
@@ -141,7 +148,8 @@ def get_note_text(puml: str, svg: str, svgelement: str) -> str:
     line_index = _find_note_line_index(puml, idx)
     line = puml.splitlines()[line_index]
     colon_pos = line.find(": ")
-    return line[colon_pos + 2 :] if colon_pos != -1 else ""
+    text = line[colon_pos + 2 :] if colon_pos != -1 else ""
+    return unescape_multiline_text(text)
 
 
 def edit_note(puml: str, svg: str, svgelement: str, text: str) -> str:
@@ -152,7 +160,7 @@ def edit_note(puml: str, svg: str, svgelement: str, text: str) -> str:
     line = lines[line_index]
     colon_pos = line.find(": ")
     if colon_pos != -1:
-        lines[line_index] = line[: colon_pos + 2] + text
+        lines[line_index] = line[: colon_pos + 2] + escape_multiline_text(text)
     return "\n".join(lines)
 
 

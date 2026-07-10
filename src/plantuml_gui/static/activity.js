@@ -2150,7 +2150,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
                 svgelement.addEventListener('mouseover', function() {
                     markEditorForElement(activityElementRows, svgelement)
                     ellipsecolor = svgelement.getAttribute('fill')
-                    svgelement.setAttribute('fill', '#818181 ')
+                    svgelement.setAttribute('fill', '#818181')
                 });
 
                 svgelement.addEventListener('mouseout', function() {
