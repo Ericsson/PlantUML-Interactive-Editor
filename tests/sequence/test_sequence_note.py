@@ -386,3 +386,42 @@ class TestNoteRoutes:
             )
             expected = "@startuml\nparticipant Alice\nparticipant Bob\n@enduml"
             assert response.get_json()["plantuml"] == expected
+
+
+class TestGetNotePositions:
+    PUML = """@startuml
+participant Alice
+participant Bob
+note over Alice : first
+Alice -> Bob: Hello
+note over Bob : second
+@enduml"""
+
+    def test_positions_in_document_order(self):
+        from plantuml_gui.sequence.note import get_note_positions
+
+        svg = extract_g_inner(_create_svg_from_uml(self.PUML))
+        positions = get_note_positions(self.PUML, svg)
+        assert [p["index"] for p in positions] == [3, 5]
+        # Notes are ordered top to bottom
+        assert positions[0]["cy"] < positions[1]["cy"]
+
+    def test_no_notes_returns_empty(self):
+        from plantuml_gui.sequence.note import get_note_positions
+
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        assert get_note_positions(puml, svg) == []
+
+    def test_route_returns_positions(self, client):
+        svg = extract_g_inner(_create_svg_from_uml(self.PUML))
+        test_data = {"plantuml": self.PUML, "svg": svg}
+        with client:
+            response = client.post(
+                "/getSequencePositions",
+                data=__import__("json").dumps(test_data),
+                content_type="application/json",
+            )
+            assert response.status_code == 200
+            positions = response.get_json()["notes"]
+            assert [p["index"] for p in positions] == [3, 5]

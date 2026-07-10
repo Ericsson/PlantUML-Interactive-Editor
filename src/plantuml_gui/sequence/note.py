@@ -22,12 +22,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from typing import List
+from typing import Dict, List
 
 from pyquery import PyQuery as Pq
 
 from .classes import Diagram, Message
-from .util import _find_note_line_index, find_insertion_index
+from .util import _find_note_line_index, extract_note_positions, find_insertion_index
 
 MESSAGE_NOTE_TOLERANCE = 10.0
 
@@ -154,6 +154,18 @@ def edit_note(puml: str, svg: str, svgelement: str, text: str) -> str:
     if colon_pos != -1:
         lines[line_index] = line[: colon_pos + 2] + text
     return "\n".join(lines)
+
+
+def get_note_positions(puml: str, svg: str) -> List[Dict[str, object]]:
+    """Return note positions for frontend hover highlighting.
+
+    Notes are ordered by SVG document order, which matches puml source
+    order, so the frontend can also match by ordinal.
+    """
+    return [
+        {"cy": cy, "index": line_index}
+        for cy, line_index in extract_note_positions(svg, puml)
+    ]
 
 
 def delete_note(puml: str, svg: str, svgelement: str) -> str:

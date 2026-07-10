@@ -33,6 +33,10 @@ PlantUML Activity Diagram documentation: [Activity Diagram (New Syntax) on plant
 - Detach elements
 - Break elements
 - Switch Statements
+- Bidirectional hover highlighting
+  - Hovering an element in the diagram highlights its line(s) in the editor
+  - Hovering a line in the editor, or moving the cursor to it, highlights the matching element in the diagram (activities, if/switch/repeat and while statements, notes, partitions, start/stop, connectors, merge markers, arrow labels, forks, title)
+  - Shapes are highlighted with a fill color; label texts (partitions, arrow labels) turn bold
 
 ## Partially Supported Features
 
@@ -88,3 +92,6 @@ but adding them to the PlantUML code should still work.
   - Label entered via modal dialog after selecting the range
   - Rename a group's title (right-click the keyword tab or its header text → Rename); the keyword (group/alt/opt/loop) itself is unchanged
   - Delete a group (right-click the keyword tab or its header text → Delete Group); unwraps the block, removing only the header and matching `end` line and keeping its contents in place
+- Bidirectional hover highlighting
+  - Hovering a message, participant, note, or group box in the diagram highlights its line(s) in the editor
+  - Hovering a line in the editor, or moving the cursor to it, highlights the matching element in the diagram

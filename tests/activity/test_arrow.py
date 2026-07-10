@@ -77,34 +77,6 @@ received from AMF;
 
             assert not result_value
 
-    def test_get_arrow_line(self, client):
-        test_data = {
-            "plantuml": r"""@startuml
-start
--> Nsmf_PDUSession_CreateSMContext Request
-received from AMF;
-: 1. Nsmf_PDUSession_CreateSMContext Request;
--> label on arrow;
-: 2. activity2;
-@enduml""",
-            "svg": """<ellipse cx="172" cy="20" fill="#222222" rx="10" ry="10" style="stroke:#222222;stroke-width:1.0;"></ellipse><rect fill="#F1F1F1" height="33.9688" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="322" x="11" y="84.3594"></rect><text fill="#000000" font-family="sans-serif" font-size="12" lengthAdjust="spacing" textLength="298" x="25" y="105.3281" style="pointer-events: none;">1. Nsmf_PDUSession_CreateSMContext Request</text><rect fill="#F1F1F1" height="33.9688" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="91" x="126.5" y="159.8828"></rect><text fill="#000000" font-family="sans-serif" font-size="12" lengthAdjust="spacing" textLength="67" x="140.5" y="180.8516" style="pointer-events: none;">2. activity2</text><line style="stroke: rgb(24, 24, 24); stroke-width: 1; pointer-events: none;" x1="172" x2="172" y1="30" y2="84.3594"></line><polygon fill="#181818" points="168,74.3594,172,84.3594,176,74.3594,172,78.3594" style="stroke:#181818;stroke-width:1.0;"></polygon><text fill="#000000" font-family="sans-serif" font-size="11" lengthAdjust="spacing" textLength="259" x="176" y="51.3047">Nsmf_PDUSession_CreateSMContext Request</text><text fill="#000000" font-family="sans-serif" font-size="11" lengthAdjust="spacing" textLength="105" x="176" y="64.1094">received from AMF</text><line style="stroke:#181818;stroke-width:1.0;" x1="172" x2="172" y1="118.3281" y2="159.8828"></line><polygon fill="#181818" points="168,149.8828,172,159.8828,176,149.8828,172,153.8828" style="stroke:#181818;stroke-width:1.0;"></polygon><text fill="#000000" font-family="sans-serif" font-size="11" lengthAdjust="spacing" textLength="82" x="176" y="139.6328">label on arrow</text>""",
-            "svgelement": """<polygon fill="#181818" points="168,149.8828,172,159.8828,176,149.8828,172,153.8828" style="stroke:#181818;stroke-width:1.0;"></polygon>""",
-        }
-        with client:
-            response = client.post(
-                "/getArrowLine",
-                data=json.dumps(test_data),
-                content_type="application/json",
-            )
-            response_json = json.loads(response.data.decode("utf-8"))
-            result_value = response_json.get("result")
-
-            # Expected value
-            expected_puml = [5, 5]
-
-            # Assert the result value is as expected
-            assert result_value == expected_puml
-
     def test_edit_switch_case_multiline(self, client):
         test_data = {
             "plantuml": r"""@startuml

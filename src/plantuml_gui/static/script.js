@@ -27,7 +27,7 @@ let fline = -1;
 let history = [];
 let historyPointer = -1;
 let editor;
-let colorqueue = [];
+let currentDiagramType = "unknown";
 var Range = ace.require("ace/range").Range
 
 async function initeditor() {
@@ -71,6 +71,9 @@ async function initeditor() {
         // Add the changeCursor event listener when the editor is clicked
         cursorChangeListener()
     });
+
+    // Editor hover/leave -> diagram highlight dispatch (see hover-highlight.js)
+    initEditorHoverHighlighting(editor);
     console.log("Editor initialization done.")
 }
 
@@ -105,27 +108,8 @@ function findChangedLines() {
 }
 
 const cursorChangeListener = async function(e) {
-    const svg = element.querySelector('g');
-    resetHighlight(svg);
-
-    let start = editor.getCursorPosition().row;
-    const line = editor.session.getLine(start).trimStart();
-    if (!line.startsWith(':') && !line.startsWith('#')) {
-        return;
-    }
-    let end = start;
-    const lastRow = editor.session.getLength() - 1;
-
-    // Make sure we don't go out of bounds
-    while (end <= lastRow && !editor.session.getLine(end).trim().endsWith(';')) {
-        end++;
-    }
-
-    const lines = editor.session.getLines(start, end);
-    let text = lines.join('\n');
-    text = (text.match(/:(.*?);/s) || [])[1]?.trim(); // get text between : and ;
-
-    highlightActivity(svg, text);
+    resetEditorHighlight();
+    highlightEditorRow(editor.getCursorPosition().row);
 };
 
 function initialize() {
@@ -626,7 +610,8 @@ async function renderPlantUml() {
         displayErrorMessage(`Error with fetch API: ${error.message}`, error);
     }
 
-    switch (checkDiagramType(pumlcontent)) {
+    currentDiagramType = checkDiagramType(pumlcontent);
+    switch (currentDiagramType) {
         case "activity":
             setHandlersForActivityDiagram(pumlcontent, element);
             break;
@@ -700,22 +685,6 @@ function indentPuml(pumlcontent) {
 function getHashParameter() {
     const query = window.location.search.substring(1); // Remove the leading "?"
     return query ? query : null;
-}
-
-function resetHighlight(svg) {
-    if (svg) {
-        const rects = svg.getElementsByTagName("rect");
-
-        for (let i = 0; i < rects.length; i++) {
-            const rect = rects[i];
-            if (checkIfActivity(rects, i)) {
-                if (rect.getAttribute('fill') == "#d8d8d8") {
-                    rect.setAttribute('fill', colorqueue.shift())
-                }
-            }
-        }
-        colorqueue = []
-    }
 }
 
 function trimlines(pumlcontent) {

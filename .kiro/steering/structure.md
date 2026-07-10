@@ -20,6 +20,7 @@
 │   │   ├── activation.py   # Activation bar logic (activate + deactivate/destroy pair)
 │   │   ├── group.py        # Group block logic (group, alt, opt, loop)
 │   │   ├── note.py         # Note logic (add, edit, delete notes)
+│   │   ├── positions.py    # Per-render position aggregator (get_sequence_positions: one fetch for all element types' editor rows)
 │   │   └── util.py         # Shared utilities (insertion index, note position extraction)
 │   ├── activity/           # Activity diagram package
 │   │   ├── routes.py       # All activity routes (~64 endpoints)
@@ -45,6 +46,7 @@
 │   └── static/             # Frontend assets
 │       ├── script.js       # Main activity diagram JS
 │       ├── activity.js     # Activity-specific interactions
+│       ├── hover-highlight.js # Shared editor->diagram hover-highlight core (row map, highlight styles, and editor hover/cursor dispatch), used by activity.js and sequence-operations.js
 │       ├── sequence-message.js  # Sequence add-message interaction (hover, ghost arrow, modal)
 │       ├── sequence-activation.js # Sequence activation-bar interaction (ghost bar, two-click)
 │       ├── sequence-group.js    # Sequence group-block interaction (ghost box, two-click, modal)
@@ -70,7 +72,7 @@
 │   │   ├── test_if.py
 │   │   ├── test_if_statements.py
 │   │   ├── test_merge.py
-│   │   ├── test_note.py
+│   │   ├── test_activity_note.py
 │   │   ├── test_repeat_while.py
 │   │   ├── test_switch.py
 │   │   ├── test_title.py
@@ -81,11 +83,17 @@
 │   │   ├── test_participant.py
 │   │   ├── test_message.py
 │   │   ├── test_activation.py
-│   │   └── test_sequence_group.py
+│   │   ├── test_sequence_group.py
+│   │   └── test_sequence_note.py
 │   └── e2e/                # Playwright end-to-end tests
 │       ├── conftest.py     # Live server fixture
 │       ├── test_app_loads.py  # App loads correctly
-│       └── test_js_logic.py   # JS function logic tests
+│       ├── test_js_logic.py   # JS function logic tests
+│       ├── test_ribbon.py     # Toolbar ribbon UI tests
+│       ├── test_sequence_activation.py       # Activation bar e2e tests
+│       ├── test_sequence_hover_highlight.py  # Editor <-> diagram hover highlighting e2e tests
+│       ├── test_sequence_message_interactions.py # Message add/edit/delete e2e tests
+│       └── test_sequence_participant.py      # Participant add/rename/delete e2e tests
 └── .kiro/steering/         # Kiro steering files
 ```
 

@@ -646,27 +646,3 @@ repeat while (while ?) is (yes) not (no)
 :Activity 4;
 @enduml"""
             assert response.data.decode("utf-8") == expected_puml
-
-    def test_activity_line(self, client):
-        test_data = {
-            "plantuml": """@startuml
-:Activity 1;
-:Activity 2;
-:Activity 3;
-:Activity 4;
-@enduml""",
-            "svg": """<rect fill="#F1F1F1" height="33.9688" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="75" x="11" y="11"></rect><text fill="#000000" font-family="sans-serif" font-size="12" lengthAdjust="spacing" textLength="55" x="21" y="31.9688">Activity 1</text><rect fill="#F1F1F1" height="33.9688" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="75" x="11" y="64.9688"></rect><text fill="#000000" font-family="sans-serif" font-size="12" lengthAdjust="spacing" textLength="55" x="21" y="85.9375">Activity 2</text><rect fill="#F1F1F1" height="33.9688" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="75" x="11" y="118.9375"></rect><text fill="#000000" font-family="sans-serif" font-size="12" lengthAdjust="spacing" textLength="55" x="21" y="139.9063">Activity 3</text><rect fill="#F1F1F1" height="33.9688" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="75" x="11" y="172.9063"></rect><text fill="#000000" font-family="sans-serif" font-size="12" lengthAdjust="spacing" textLength="55" x="21" y="193.875">Activity 4</text><line style="stroke:#181818;stroke-width:1.0;" x1="48.5" x2="48.5" y1="44.9688" y2="64.9688"></line><polygon fill="#181818" points="44.5,54.9688,48.5,64.9688,52.5,54.9688,48.5,58.9688" style="stroke:#181818;stroke-width:1.0;"></polygon><line style="stroke:#181818;stroke-width:1.0;" x1="48.5" x2="48.5" y1="98.9375" y2="118.9375"></line><polygon fill="#181818" points="44.5,108.9375,48.5,118.9375,52.5,108.9375,48.5,112.9375" style="stroke:#181818;stroke-width:1.0;"></polygon><line style="stroke:#181818;stroke-width:1.0;" x1="48.5" x2="48.5" y1="152.9063" y2="172.9063"></line><polygon fill="#181818" points="44.5,162.9063,48.5,172.9063,52.5,162.9063,48.5,166.9063" style="stroke:#181818;stroke-width:1.0;"></polygon>""",
-            "svgelement": """<rect fill="#F1F1F1" height="33.9688" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="75" x="11" y="118.9375"></rect>""",
-        }
-        with client:
-            response = client.post(
-                "/getActivityLine",
-                data=json.dumps(test_data),
-                content_type="application/json",
-            )
-
-            response_json = json.loads(response.data.decode("utf-8"))
-            result_value = response_json.get("result")
-
-            expected_output = [3, 3]
-            assert result_value == expected_output

@@ -595,3 +595,42 @@ participant Bob
 Alice -> Alice: think
 @enduml"""
             assert response.get_json()["plantuml"] == expected
+
+
+class TestGetParticipantPositions:
+    PUML = """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hello
+@enduml"""
+
+    def test_positions_include_line_index(self):
+        from plantuml_gui.sequence.participant import get_participant_positions
+
+        svg = extract_g_element(_create_svg_from_uml(self.PUML))
+        positions = get_participant_positions(self.PUML, svg)
+        assert [p["name"] for p in positions] == ["Alice", "Bob"]
+        assert [p["index"] for p in positions] == [1, 2]
+
+    def test_implicit_participant_has_negative_index(self):
+        from plantuml_gui.sequence.participant import get_participant_positions
+
+        puml = """@startuml
+Alice -> Bob: Hello
+@enduml"""
+        svg = extract_g_element(_create_svg_from_uml(puml))
+        positions = get_participant_positions(puml, svg)
+        assert len(positions) == 2
+        assert all(p["index"] == -1 for p in positions)
+
+    def test_route_returns_index(self, client):
+        svg = extract_g_element(_create_svg_from_uml(self.PUML))
+        with client:
+            response = client.post(
+                "/getSequencePositions",
+                data=json.dumps({"plantuml": self.PUML, "svg": svg}),
+                content_type="application/json",
+            )
+            assert response.status_code == 200
+            positions = response.get_json()["participants"]
+            assert [p["index"] for p in positions] == [1, 2]
