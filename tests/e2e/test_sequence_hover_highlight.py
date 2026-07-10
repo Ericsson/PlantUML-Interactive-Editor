@@ -269,6 +269,8 @@ class TestEditorToSvgHighlight:
                 '<text font-size="13" x="32" y="76">m2</text>' +
                 '</g></svg>';
             const els = colb.querySelectorAll('g *');
+            sequenceRowMap = new Map();
+            setupMessageHandlers(els, colb.querySelector('g'));
 
             highlightSequenceForRow(3);
             const highlighted = Array.from(els).map(el => el.style.fontWeight === 'bold');
@@ -299,6 +301,8 @@ class TestEditorToSvgHighlight:
                 '<rect fill="#E2E2F0" style="stroke:#181818;stroke-width:0.5;" x="100" width="50" y="5"></rect>' +
                 '</g></svg>';
             const rects = colb.querySelectorAll('rect');
+            sequenceRowMap = new Map();
+            setupParticipantHandlers(colb.querySelectorAll('g *'), colb.querySelector('g'), colb);
 
             highlightSequenceForRow(2);
             const highlighted = Array.from(rects).map(r => r.getAttribute('fill'));
@@ -331,6 +335,8 @@ class TestEditorToSvgHighlight:
                 '</g></svg>';
             const tab = colb.querySelector('path');
             const box = colb.querySelector('rect');
+            sequenceRowMap = new Map();
+            setupGroupHandlers(colb.querySelectorAll('g *'));
 
             highlightSequenceForRow(3);
             const headerRow = {box: box.style.strokeWidth, tab: tab.style.strokeWidth};
@@ -368,6 +374,8 @@ class TestEditorToSvgHighlight:
                 '<path fill="#FEFFDD" d="M1,1"></path>' +
                 '</g></svg>';
             const paths = colb.querySelectorAll('path');
+            sequenceRowMap = new Map();
+            setupNoteHandlers(colb.querySelectorAll('g *'));
 
             highlightSequenceForRow(4);
             const highlighted = Array.from(paths).map(p => p.getAttribute('fill'));
@@ -473,6 +481,8 @@ class TestEditorToSvgHighlight:
                 '<line style="stroke:#181818;stroke-width:1.0;" x1="25" x2="76" y1="40" y2="40"></line>' +
                 '</g></svg>';
             const message = colb.querySelector('line');
+            sequenceRowMap = new Map();
+            setupMessageHandlers([message], colb.querySelector('g'));
 
             editor.moveCursorTo(1, 0);
             await cursorChangeListener();
@@ -484,3 +494,42 @@ class TestEditorToSvgHighlight:
         )
 
         assert result["highlighted"] is True
+
+    def test_leaving_editor_clears_lingering_highlight(self, app_url, page):
+        # Hovering an editor row highlights the matching element; when the
+        # pointer then leaves the editor (mouseleave on the Ace container) the
+        # highlight must be cleared so it does not linger on the diagram. The
+        # sequence diagram-side hover preserves highlights and never resets, so
+        # this relies on the editor mouseleave handler in script.js.
+        result = page.evaluate(
+            """() => {"""
+            + HOVER_MARKER_HELPERS
+            + """
+            resetAddModes();
+            currentDiagramType = 'sequence';
+            messagePositions = [{cy: 40, index: 3, text: 'm1'}];
+            participantLifelines = [];
+            notePositions = [];
+            groupPositions = [];
+            sequenceHighlighted = [];
+            const colb = document.getElementById('colb');
+            colb.innerHTML = '<svg><g>' +
+                '<line style="stroke:#181818;stroke-width:1.0;" x1="25" x2="76" y1="40" y2="40"></line>' +
+                '</g></svg>';
+            const message = colb.querySelector('line');
+            sequenceRowMap = new Map();
+            setupMessageHandlers([message], colb.querySelector('g'));
+
+            highlightSequenceForRow(3);
+            const whileHovering = message.style.fontWeight === 'bold';
+
+            editor.container.dispatchEvent(new MouseEvent('mouseleave', {bubbles: true}));
+            const afterLeaving = message.style.fontWeight === 'bold';
+            currentDiagramType = 'unknown';
+            return {whileHovering, afterLeaving, count: sequenceHighlighted.length};
+        }"""
+        )
+
+        assert result["whileHovering"] is True
+        assert result["afterLeaving"] is False
+        assert result["count"] == 0

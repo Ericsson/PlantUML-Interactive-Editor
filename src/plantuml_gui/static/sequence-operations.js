@@ -8,7 +8,30 @@ let notePositions = []; // [{cy, index}, ...]
 let groupPositions = []; // [{headerIndex, endIndex}, ...]
 
 // Elements highlighted from the editor side, with how to restore them
-let sequenceHighlighted = []; // [{el, kind, old}, ...]
+let sequenceHighlighted = []; // [{el, style, token}, ...] (see hover-highlight.js)
+
+// Editor-row -> diagram elements to highlight, built once per render during the
+// setup walk (mirrors the activity diagram's activityRowMap). Lets
+// highlightSequenceForRow be a map lookup instead of re-walking the whole SVG
+// and re-deriving each element's ordinal on every hover.
+let sequenceRowMap = new Map(); // Map<row, [{el, style}, ...]> (see hover-highlight.js)
+
+// Highlight treatment per sequence element type (see hover-highlight.js).
+// Participants and notes recolor their fill; messages bold and thicken and group
+// boxes/tabs thicken, both via style properties that restore the literal style
+// attribute the element classifiers match on.
+const SEQ_HIGHLIGHTS = {
+    participant: attributeHighlight('fill', '#d8d8d8'),
+    note: attributeHighlight('fill', '#d8d8d8'),
+    message: stylePropertyHighlight({fontWeight: 'bold', strokeWidth: '2.0'}),
+    group: stylePropertyHighlight({strokeWidth: '2.0'})
+};
+
+// Register a diagram element to highlight when the given editor row is hovered.
+// kind picks the element's highlight treatment from SEQ_HIGHLIGHTS.
+function registerSequenceRow(row, el, kind) {
+    registerHoverRow(sequenceRowMap, row, el, SEQ_HIGHLIGHTS[kind]);
+}
 
 // --- Utilities ---
 
@@ -20,64 +43,17 @@ function svgPointFromEvent(e, svgElement) {
     return point.matrixTransform(svgElement.getScreenCTM().inverse());
 }
 
-// Fetch participant lifeline positions from backend (called once per render)
-async function extractLifelinePositions() {
-    participantLifelines = [];
-    const element = document.getElementById('colb');
-    const svg = element.querySelector('g');
-    if (!svg) return;
-    try {
-        const plantuml = trimlines(editor.session.getValue());
-        const response = await fetch("getParticipantPositions", {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({plantuml: plantuml, svg: svg.innerHTML})
-        });
-        const data = await response.json();
-        participantLifelines = data.positions;
-    } catch (error) {
-        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-    }
-}
-
-// Fetch note positions from backend (called once per render)
-async function fetchNotePositions() {
-    notePositions = [];
-    const element = document.getElementById('colb');
-    const svg = element.querySelector('g');
-    if (!svg) return;
-    try {
-        const plantuml = trimlines(editor.session.getValue());
-        const response = await fetch("getSeqNotePositions", {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({plantuml: plantuml, svg: svg.innerHTML})
-        });
-        const data = await response.json();
-        notePositions = data.positions;
-    } catch (error) {
-        notePositions = [];
-    }
-}
-
-// Fetch group positions from backend (called once per render)
-async function fetchGroupPositions() {
-    groupPositions = [];
-    const element = document.getElementById('colb');
-    const svg = element.querySelector('g');
-    if (!svg) return;
-    try {
-        const plantuml = trimlines(editor.session.getValue());
-        const response = await fetch("getSeqGroupPositions", {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({plantuml: plantuml, svg: svg.innerHTML})
-        });
-        const data = await response.json();
-        groupPositions = data.positions;
-    } catch (error) {
-        groupPositions = [];
-    }
+// Fetch every element type's positions in one round-trip (called once per
+// render). The backend bundles participant lifelines, messages, notes and
+// groups into a single response so a render costs one request instead of four;
+// each sub-table keeps its own shape (see getSequencePositions). A failed fetch
+// leaves every table empty, disabling hover/gesture snapping for that render.
+async function fetchSequencePositions() {
+    const data = await fetchDiagramData("getSequencePositions");
+    participantLifelines = data ? data.participants : [];
+    messagePositions = data ? data.messages : [];
+    notePositions = data ? data.notes : [];
+    groupPositions = data ? data.groups : [];
 }
 
 // Vertical position of a message SVG element, comparable to messagePositions cy
@@ -104,10 +80,11 @@ function messageElementCy(svgelement) {
 
 // --- Editor -> diagram highlighting ---
 
-// Restore the literal style attribute. Mutating el.style re-serializes the
-// attribute and loses the exact "stroke-width:1.0" string that the element
-// classifiers (e.g. checkIfMessageElement) match on, so unhighlighting must
-// put back the original attribute rather than clear style properties.
+// Restore the literal style attribute (used by the message diagram-side
+// mouseout). Mutating el.style re-serializes the attribute and loses the exact
+// "stroke-width:1.0" string that the element classifiers (e.g.
+// checkIfMessageElement) match on, so unhighlighting must put back the original
+// attribute rather than clear style properties.
 function restoreStyleAttribute(el, old) {
     if (old) {
         el.setAttribute('style', old);
@@ -117,97 +94,15 @@ function restoreStyleAttribute(el, old) {
 }
 
 function resetSequenceHighlight() {
-    for (const entry of sequenceHighlighted) {
-        if (entry.kind === 'message' || entry.kind === 'group') {
-            restoreStyleAttribute(entry.el, entry.old);
-        } else { // participant or note fill
-            entry.el.setAttribute('fill', entry.old);
-        }
-    }
-    sequenceHighlighted = [];
+    sequenceHighlighted = clearHoverHighlight(sequenceHighlighted);
 }
 
-// Highlight the diagram element(s) defined on the given editor row
+// Highlight the diagram element(s) registered for the given editor row.
+// The element->row mapping is precomputed in sequenceRowMap during the render
+// walk, so this is a shared map lookup; resetSequenceHighlight undoes it.
 function highlightSequenceForRow(row) {
     if (isSequenceAddMode()) return;
-    const element = document.getElementById('colb');
-    const svg = element ? element.querySelector('g') : null;
-    if (!svg) return;
-    const svgelements = svg.querySelectorAll('*');
-
-    const message = messagePositions.find(m => m.index === row);
-    if (message) {
-        // Assign each message element to its nearest message (same rule as
-        // hover in the other direction) so tolerances never overlap neighbors.
-        for (const el of svgelements) {
-            if (!checkIfMessageElement(el)) continue;
-            const nearest = findNearestMessage(messageElementCy(el));
-            if (nearest && nearest.index === row) {
-                const old = el.getAttribute('style');
-                el.style.fontWeight = 'bold';
-                el.style.strokeWidth = '2.0';
-                sequenceHighlighted.push({el: el, kind: 'message', old: old});
-            }
-        }
-        return;
-    }
-
-    const participant = participantLifelines.find(p => p.index === row);
-    if (participant) {
-        for (let i = 0; i < svgelements.length; i++) {
-            if (!checkIfParticipant(svgelements, i)) continue;
-            const el = svgelements[i];
-            const cx = parseFloat(el.getAttribute('x')) + parseFloat(el.getAttribute('width')) / 2;
-            if (Math.abs(cx - participant.cx) <= 1) {
-                sequenceHighlighted.push({el: el, kind: 'participant', old: el.getAttribute('fill')});
-                el.setAttribute('fill', '#d8d8d8');
-            }
-        }
-        return;
-    }
-
-    const noteOrdinal = notePositions.findIndex(n => n.index === row);
-    if (noteOrdinal !== -1) {
-        // Each note renders two #FEFFDD paths (body + fold) in document order
-        let pathCount = 0;
-        for (const el of svgelements) {
-            if (el.tagName.toLowerCase() !== 'path' || el.getAttribute('fill') !== '#FEFFDD') continue;
-            if (Math.floor(pathCount / 2) === noteOrdinal) {
-                sequenceHighlighted.push({el: el, kind: 'note', old: el.getAttribute('fill')});
-                el.setAttribute('fill', '#d8d8d8');
-            }
-            pathCount++;
-        }
-        return;
-    }
-
-    const groupOrdinal = groupPositions.findIndex(g => g.headerIndex === row || g.endIndex === row);
-    if (groupOrdinal !== -1) {
-        // Group boxes (rect fill "none") appear in document order matching
-        // puml source order; the #EEEEEE tab path precedes its box.
-        let boxCount = 0;
-        let lastTabPath = null;
-        for (const el of svgelements) {
-            if (el.tagName.toLowerCase() === 'path' && el.getAttribute('fill') === '#EEEEEE') {
-                lastTabPath = el;
-                continue;
-            }
-            if (!checkIfGroupBox(el)) continue;
-            if (boxCount === groupOrdinal) {
-                const oldBox = el.getAttribute('style');
-                el.style.strokeWidth = '2.0';
-                sequenceHighlighted.push({el: el, kind: 'group', old: oldBox});
-                if (lastTabPath) {
-                    const oldTab = lastTabPath.getAttribute('style');
-                    lastTabPath.style.strokeWidth = '2.0';
-                    sequenceHighlighted.push({el: lastTabPath, kind: 'group', old: oldTab});
-                }
-                break;
-            }
-            boxCount++;
-            lastTabPath = null;
-        }
-    }
+    highlightHoverRow(sequenceRowMap, row, sequenceHighlighted);
 }
 
 // --- Background context menu management ---
@@ -347,6 +242,11 @@ function setupParticipantHandlers(svgelements, svg, element) {
 
         if (!checkIfParticipant(svgelements, index)) continue;
 
+        // Register this rect for editor->diagram highlighting on its lifeline's row.
+        const participantCx = parseFloat(svgelement.getAttribute('x')) + parseFloat(svgelement.getAttribute('width')) / 2;
+        const participantLifeline = participantLifelines.find(p => Math.abs(p.cx - participantCx) <= 1);
+        if (participantLifeline) registerSequenceRow(participantLifeline.index, svgelement, 'participant');
+
         svgelement.addEventListener('dblclick', async () => {
             lastclickedsvgelement = svgelement;
             try {
@@ -374,11 +274,9 @@ function setupParticipantHandlers(svgelements, svg, element) {
 
         let rectcolor = "";
         svgelement.addEventListener('mouseover', function() {
-            const svg = element.querySelector('g');
-            resetHighlight(svg);
             // If already highlighted from the editor side, keep the original fill
-            const highlighted = sequenceHighlighted.find(h => h.el === svgelement);
-            rectcolor = highlighted ? highlighted.old : svgelement.getAttribute('fill');
+            const highlighted = findActiveHighlight(sequenceHighlighted, svgelement);
+            rectcolor = highlighted ? highlighted.token.old : svgelement.getAttribute('fill');
             svgelement.setAttribute('fill', '#d8d8d8');
             const cx = parseFloat(svgelement.getAttribute('x')) + parseFloat(svgelement.getAttribute('width')) / 2;
             const lifeline = participantLifelines.find(p => Math.abs(p.cx - cx) <= 1);
@@ -387,7 +285,7 @@ function setupParticipantHandlers(svgelements, svg, element) {
 
         svgelement.addEventListener('mouseout', function() {
             clearMarkers();
-            if (sequenceHighlighted.some(h => h.el === svgelement)) return;
+            if (findActiveHighlight(sequenceHighlighted, svgelement)) return;
             svgelement.setAttribute('fill', rectcolor);
         });
 
@@ -420,6 +318,7 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
     fetchSvgFromPlantUml().then(async (svgContent) => {
         element.innerHTML = svgContent;
         sequenceHighlighted = []; // old SVG is gone; drop stale references
+        sequenceRowMap = new Map(); // rebuilt below by the setup*Handlers walk
         const svgContainer = element.querySelector('svg');
         const svg = element.querySelector('g');
         if (!svg) {
@@ -427,10 +326,7 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
             return;
         }
 
-        await extractLifelinePositions();
-        await fetchMessagePositions();
-        await fetchNotePositions();
-        await fetchGroupPositions();
+        await fetchSequencePositions();
         cancelMessageAddMode();
         cancelActivationAddMode();
         cancelGroupAddMode();
@@ -538,13 +434,30 @@ function setupGroupHandlers(svgelements) {
         }
 
         if (checkIfGroupBox(svgelement)) {
-            groupOrdinal++;
+            // Only a real box - one immediately following its #EEEEEE tab path -
+            // advances the ordinal. PlantUML also emits an invisible layout rect
+            // with fill="none" but no preceding tab; it must not shift the
+            // ordinal, or lookups into groupPositions (built by the backend's
+            // _count_group_boxes, which applies this same tab-pairing rule)
+            // misalign.
             if (pendingTabPath) {
+                groupOrdinal++;
                 currentGroupRect = svgelement;
                 let tabPath = pendingTabPath;
                 let groupRectForTab = currentGroupRect;
                 tabPath.addEventListener('contextmenu', (e) => openGroupContextMenu(groupRectForTab, e));
                 addGroupHoverMarkers(tabPath, groupOrdinal);
+                // Register the box and its tab for editor->diagram highlighting
+                // under both the group's header and end lines (mirrors the
+                // backend group's headerIndex/endIndex; registerSequenceRow drops
+                // any -1 line).
+                const group = groupPositions[groupOrdinal];
+                if (group) {
+                    registerSequenceRow(group.headerIndex, currentGroupRect, 'group');
+                    registerSequenceRow(group.headerIndex, tabPath, 'group');
+                    registerSequenceRow(group.endIndex, currentGroupRect, 'group');
+                    registerSequenceRow(group.endIndex, tabPath, 'group');
+                }
                 pendingTabPath = null;
                 headerTextsRemaining = 2; // keyword text + optional bracketed label
             }
@@ -573,12 +486,17 @@ function setupMessageHandlers(svgelements, svg) {
         let svgelement = svgelements[index];
         if (!checkIfMessageElement(svgelement)) continue;
 
+        // Register this element for editor->diagram highlighting on its message's
+        // row, assigning it to the nearest message (same rule the mouseover uses).
+        const nearestMessage = findNearestMessage(messageElementCy(svgelement));
+        if (nearestMessage) registerSequenceRow(nearestMessage.index, svgelement, 'message');
+
         let originalstyle; // undefined while no hover is in progress
         svgelement.addEventListener('mouseover', function() {
             if (isSequenceAddMode()) return;
             // If already highlighted from the editor side, keep the original style
-            const highlighted = sequenceHighlighted.find(h => h.el === svgelement);
-            originalstyle = highlighted ? highlighted.old : svgelement.getAttribute('style');
+            const highlighted = findActiveHighlight(sequenceHighlighted, svgelement);
+            originalstyle = highlighted ? highlighted.token.old : svgelement.getAttribute('style');
             svgelement.style.fontWeight = 'bold';
             svgelement.style.strokeWidth = '2.0';
             const nearest = findNearestMessage(messageElementCy(svgelement));
@@ -589,7 +507,7 @@ function setupMessageHandlers(svgelements, svg) {
             clearMarkers();
             if (originalstyle === undefined) return;
             // Keep styles if the element is highlighted from the editor side
-            if (sequenceHighlighted.some(h => h.el === svgelement)) return;
+            if (findActiveHighlight(sequenceHighlighted, svgelement)) return;
             restoreStyleAttribute(svgelement, originalstyle);
             originalstyle = undefined;
         });
@@ -678,6 +596,11 @@ function setupNoteHandlers(svgelements) {
             const noteOrdinal = Math.floor(notePathCount / 2);
             notePathCount++;
 
+            // Register this path (body + fold both map to the note) for
+            // editor->diagram highlighting on the note's row.
+            const noteInfo = notePositions[noteOrdinal];
+            if (noteInfo) registerSequenceRow(noteInfo.index, svgelement, 'note');
+
             svgelement.addEventListener('contextmenu', function(e) {
                 lastclickedsvgelement = svgelement;
                 e.preventDefault();
@@ -691,8 +614,8 @@ function setupNoteHandlers(svgelements) {
             let notecolor = "";
             svgelement.addEventListener('mouseover', function() {
                 if (isSequenceAddMode()) return;
-                const highlighted = sequenceHighlighted.find(h => h.el === svgelement);
-                notecolor = highlighted ? highlighted.old : svgelement.getAttribute('fill');
+                const highlighted = findActiveHighlight(sequenceHighlighted, svgelement);
+                notecolor = highlighted ? highlighted.token.old : svgelement.getAttribute('fill');
                 svgelement.setAttribute('fill', '#d8d8d8');
                 const note = notePositions[noteOrdinal];
                 if (note && note.index >= 0) setEditorMarkers(note.index);
@@ -700,7 +623,7 @@ function setupNoteHandlers(svgelements) {
 
             svgelement.addEventListener('mouseout', function() {
                 clearMarkers();
-                if (sequenceHighlighted.some(h => h.el === svgelement)) return;
+                if (findActiveHighlight(sequenceHighlighted, svgelement)) return;
                 svgelement.setAttribute('fill', notecolor);
             });
         }

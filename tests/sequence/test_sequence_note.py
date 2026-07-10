@@ -480,10 +480,10 @@ note over Bob : second
         test_data = {"plantuml": self.PUML, "svg": svg}
         with client:
             response = client.post(
-                "/getSeqNotePositions",
+                "/getSequencePositions",
                 data=__import__("json").dumps(test_data),
                 content_type="application/json",
             )
             assert response.status_code == 200
-            positions = response.get_json()["positions"]
+            positions = response.get_json()["notes"]
             assert [p["index"] for p in positions] == [3, 5]

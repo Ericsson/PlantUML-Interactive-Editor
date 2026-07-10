@@ -25,28 +25,21 @@
 from flask import Blueprint, jsonify, request
 
 from .activation import add_activation, delete_activation
-from .group import (
-    add_group,
-    delete_group,
-    get_group_label,
-    get_group_positions,
-    rename_group,
-)
+from .group import add_group, delete_group, get_group_label, rename_group
 from .message import (
     add_message,
     delete_message,
     edit_message_text,
-    get_message_positions,
     get_message_text,
 )
-from .note import add_note, delete_note, edit_note, get_note_positions, get_note_text
+from .note import add_note, delete_note, edit_note, get_note_text
 from .participant import (
     add_participant,
     delete_participant,
     edit_participant_name,
     get_participant_name,
-    get_participant_positions,
 )
+from .positions import get_sequence_positions
 
 sequence_bp = Blueprint("sequence", __name__)
 
@@ -133,12 +126,12 @@ def deleteparticipant():
     return jsonify({"plantuml": delete_participant(puml, svg, svgelement)})
 
 
-@sequence_bp.route("/getParticipantPositions", methods=["POST"])
-def getparticipantpositions():
+@sequence_bp.route("/getSequencePositions", methods=["POST"])
+def getsequencepositions():
     data = request.get_json()
     puml = data["plantuml"]
     svg = data["svg"]
-    return jsonify({"positions": get_participant_positions(puml, svg)})
+    return jsonify(get_sequence_positions(puml, svg))
 
 
 @sequence_bp.route("/getMessageText", methods=["POST"])
@@ -167,30 +160,6 @@ def deletemessage():
     svg = data["svg"]
     svgelement = data["svgelement"]
     return jsonify({"plantuml": delete_message(puml, svg, svgelement)})
-
-
-@sequence_bp.route("/getMessagePositions", methods=["POST"])
-def getmessagepositions():
-    data = request.get_json()
-    puml = data["plantuml"]
-    svg = data["svg"]
-    return jsonify({"positions": get_message_positions(puml, svg)})
-
-
-@sequence_bp.route("/getSeqNotePositions", methods=["POST"])
-def getseqnotepositions():
-    data = request.get_json()
-    puml = data["plantuml"]
-    svg = data["svg"]
-    return jsonify({"positions": get_note_positions(puml, svg)})
-
-
-@sequence_bp.route("/getSeqGroupPositions", methods=["POST"])
-def getseqgrouppositions():
-    data = request.get_json()
-    puml = data["plantuml"]
-    svg = data["svg"]
-    return jsonify({"positions": get_group_positions(puml, svg)})
 
 
 @sequence_bp.route("/addNote", methods=["POST"])

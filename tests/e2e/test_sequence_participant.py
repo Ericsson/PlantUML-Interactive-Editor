@@ -120,7 +120,7 @@ class TestRenameParticipant:
 
 class TestLifelineExtraction:
     def test_extract_lifeline_positions(self, app_url, page):
-        """extractLifelinePositions fetches positions from backend after render."""
+        """fetchSequencePositions fetches positions from backend after render."""
         page.evaluate("""() => {
             editor.session.setValue("@startuml\\nparticipant Alice\\nparticipant Bob\\n@enduml");
         }""")

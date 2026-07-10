@@ -33,6 +33,10 @@ PlantUML Activity Diagram documentation: [Activity Diagram (New Syntax) on plant
 - Detach elements
 - Break elements
 - Switch Statements
+- Bidirectional hover highlighting
+  - Hovering an element in the diagram highlights its line(s) in the editor
+  - Hovering a line in the editor, or moving the cursor to it, highlights the matching element in the diagram (activities, if/switch/repeat and while statements, notes, partitions, start/stop, connectors, merge markers, arrow labels, forks, title)
+  - Shapes are highlighted with a fill color; label texts (partitions, arrow labels) turn bold
 
 ## Partially Supported Features
 

@@ -27,9 +27,7 @@ let fline = -1;
 let history = [];
 let historyPointer = -1;
 let editor;
-let colorqueue = [];
 let currentDiagramType = "unknown";
-let lastEditorHoverRow = -1;
 var Range = ace.require("ace/range").Range
 
 async function initeditor() {
@@ -74,15 +72,8 @@ async function initeditor() {
         cursorChangeListener()
     });
 
-    // Hovering a line in the editor highlights the matching sequence element
-    editor.on('mousemove', function(e) {
-        if (currentDiagramType !== 'sequence') return;
-        const row = e.getDocumentPosition().row;
-        if (row === lastEditorHoverRow) return;
-        lastEditorHoverRow = row;
-        resetSequenceHighlight();
-        highlightSequenceForRow(row);
-    });
+    // Editor hover/leave -> diagram highlight dispatch (see hover-highlight.js)
+    initEditorHoverHighlighting(editor);
     console.log("Editor initialization done.")
 }
 
@@ -117,33 +108,8 @@ function findChangedLines() {
 }
 
 const cursorChangeListener = async function(e) {
-    if (currentDiagramType === 'sequence') {
-        resetSequenceHighlight();
-        highlightSequenceForRow(editor.getCursorPosition().row);
-        return;
-    }
-
-    const svg = element.querySelector('g');
-    resetHighlight(svg);
-
-    let start = editor.getCursorPosition().row;
-    const line = editor.session.getLine(start).trimStart();
-    if (!line.startsWith(':') && !line.startsWith('#')) {
-        return;
-    }
-    let end = start;
-    const lastRow = editor.session.getLength() - 1;
-
-    // Make sure we don't go out of bounds
-    while (end <= lastRow && !editor.session.getLine(end).trim().endsWith(';')) {
-        end++;
-    }
-
-    const lines = editor.session.getLines(start, end);
-    let text = lines.join('\n');
-    text = (text.match(/:(.*?);/s) || [])[1]?.trim(); // get text between : and ;
-
-    highlightActivity(svg, text);
+    resetEditorHighlight();
+    highlightEditorRow(editor.getCursorPosition().row);
 };
 
 function initialize() {
@@ -719,22 +685,6 @@ function indentPuml(pumlcontent) {
 function getHashParameter() {
     const query = window.location.search.substring(1); // Remove the leading "?"
     return query ? query : null;
-}
-
-function resetHighlight(svg) {
-    if (svg) {
-        const rects = svg.getElementsByTagName("rect");
-
-        for (let i = 0; i < rects.length; i++) {
-            const rect = rects[i];
-            if (checkIfActivity(rects, i)) {
-                if (rect.getAttribute('fill') == "#d8d8d8") {
-                    rect.setAttribute('fill', colorqueue.shift())
-                }
-            }
-        }
-        colorqueue = []
-    }
 }
 
 function trimlines(pumlcontent) {
