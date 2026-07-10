@@ -318,6 +318,7 @@ function buttonEventListeners() {
             displayErrorMessage(`Error with fetch API: ${error.message}`, error);
         }
     })
+    // Download the diagram as a PNG file via a temporary download link.
     document.getElementById('png').addEventListener('click', async () => {
         try {
             const plantuml = trimlines(editor.session.getValue());
@@ -329,20 +330,14 @@ function buttonEventListeners() {
 
             const blob = await response.blob();
 
-            // Convert blob → base64 Data URL to make image copiable
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const imageUrl = reader.result; // data:image/png;base64,...
-
-                const newTab = window.open('', '_blank');
-                const img = newTab.document.createElement('img');
-                img.src = imageUrl;
-                newTab.document.body.appendChild(img);
-                newTab.document.body.style.textAlign = 'center';
-                newTab.document.close();
-            };
-
-            reader.readAsDataURL(blob);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "diagram.png";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
 
         } catch (error) {
             displayErrorMessage(`Error with fetch API: ${error.message}`, error);
