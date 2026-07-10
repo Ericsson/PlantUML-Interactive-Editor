@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### External
 
+- Added a visible Import button in the code toolbar (left of the Download button, separated by a divider) to load a `.puml`/`.txt` file into the editor; previously this was only reachable via a hidden button. The Download button no longer uses the blue accent style, matching the other toolbar buttons
 - Fixed multi-line message text producing invalid PlantUML for sequence diagrams (newlines are now escaped as `\n` in the generated code)
 - Fixed multi-line note text producing invalid PlantUML for sequence diagrams (newlines are now escaped as `\n` in the generated code)
 - Editor-to-diagram hover highlighting for activity diagrams: hovering or moving the cursor to a line in the editor highlights the matching diagram element for all element types (activities, if/switch/repeat and while statements, notes, partitions, start/stop, connectors, merge markers, arrow labels, forks, title), matching the sequence diagram behavior

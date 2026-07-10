@@ -109,10 +109,37 @@ def test_code_toolbar_paste_button(app_url, page, context):
 
 
 def test_code_toolbar_download_button(app_url, page):
-    """Download button exists with accent styling."""
+    """Download button exists and is visible."""
     btn = page.locator(".code-toolbar #save")
     assert btn.is_visible()
-    assert "toolbar-btn--accent" in btn.get_attribute("class")
+    assert "toolbar-btn" in btn.get_attribute("class")
+
+
+def test_code_toolbar_import_button_loads_file(app_url, page):
+    """Import button is visible left of the Download button and loads a file into the editor."""
+    import_btn = page.locator(".code-toolbar #load")
+    download_btn = page.locator(".code-toolbar #save")
+    assert import_btn.is_visible()
+
+    import_box = import_btn.bounding_box()
+    download_box = download_btn.bounding_box()
+    assert import_box["x"] < download_box["x"]
+
+    with page.expect_file_chooser() as fc_info:
+        import_btn.click()
+    file_chooser = fc_info.value
+    file_chooser.set_files(
+        files=[
+            {
+                "name": "demo.puml",
+                "mimeType": "text/plain",
+                "buffer": b"@startuml\nfoo -> bar\n@enduml",
+            }
+        ]
+    )
+    page.wait_for_timeout(500)
+    content = page.evaluate("() => editor.session.getValue()")
+    assert "foo -> bar" in content
 
 
 def test_zoom_in_increases_scale(app_url, page):
