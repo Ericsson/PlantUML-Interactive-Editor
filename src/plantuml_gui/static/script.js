@@ -472,7 +472,7 @@ function addActivityEventListeners() {
             'ellipse-menu',
             'if-menu',
             'fork-menu',
-            'seq-note-menu',
+            'note-menu',
             'group-menu',
             'merge-menu',
             'while-menu',
