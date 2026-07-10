@@ -78,7 +78,7 @@ def extract_note_positions(svg: str, puml: str) -> List[tuple[float, int]]:
 
 def escape_multiline_text(text: str) -> str:
     """Convert real newlines to a literal \\n so the text stays one PlantUML line."""
-    return text.replace("\r\n", "\n").replace("\n", "\\n")
+    return text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\\n")
 
 
 def unescape_multiline_text(text: str) -> str:
