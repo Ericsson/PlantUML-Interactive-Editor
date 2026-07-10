@@ -12,11 +12,8 @@ let ghostActivationBar = null;
 const ACTIVATION_BAR_WIDTH = 10;
 
 // --- Message position management ---
-
-async function fetchMessagePositions() {
-    const data = await fetchDiagramData("getMessagePositions");
-    messagePositions = data ? data.positions : [];
-}
+// messagePositions is populated once per render by fetchSequencePositions
+// (sequence-operations.js), which fetches every element type in one request.
 
 function findNearestMessage(y) {
     if (messagePositions.length === 0) return null;

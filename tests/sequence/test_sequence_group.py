@@ -463,11 +463,11 @@ class TestGetGroupPositions:
         svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
         with client:
             response = client.post(
-                "/getSeqGroupPositions",
+                "/getSequencePositions",
                 data=json.dumps({"plantuml": NESTED_GROUP_PUML, "svg": svg}),
                 content_type="application/json",
             )
             assert response.status_code == 200
-            positions = response.get_json()["positions"]
+            positions = response.get_json()["groups"]
             assert len(positions) == 3
             assert positions[0] == {"headerIndex": 3, "endIndex": 8}

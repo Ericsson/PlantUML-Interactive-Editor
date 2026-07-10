@@ -204,7 +204,7 @@ class TestActivationFlow:
     def test_second_bar_uses_refreshed_message_positions(self, app_url, page):
         """Adding a second bar must work once one already exists.
 
-        After the first bar renders, fetchMessagePositions runs against an SVG
+        After the first bar renders, fetchSequencePositions runs against an SVG
         that now contains an activation rect. This is the scenario that used to
         500 (activation rect mistaken for a participant). Verify message
         positions still resolve and a second balanced bar is added.

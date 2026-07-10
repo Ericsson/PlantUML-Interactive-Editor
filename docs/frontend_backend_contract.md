@@ -66,7 +66,7 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 - **editParticipantName:** `{plantuml, svg, name, svgelement}`; returns `{"plantuml": updated_puml}`
 - **deleteParticipant:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}`
 - **addMessage:** `{plantuml, svg, message, svgelement, firstcoordinates, secondcoordinates}` — coordinates are `[x, y]` arrays; y-coordinate determines insertion position between existing messages; returns `{"plantuml": updated_puml}`
-- **getParticipantPositions:** `{plantuml, svg}`; returns `{"positions": [{name, cx, yTop, yBottom}, ...]}` — called once per render to provide lifeline data for hover detection and ghost arrow
+- **getSequencePositions:** `{plantuml, svg}`; returns `{"participants": [{name, cx, yTop, yBottom, index}, ...], "messages": [{cy, index, text}, ...], "notes": [{cy, index}, ...], "groups": [{headerIndex, endIndex}, ...]}` — called once per render; bundles every sequence element type's position table into one response so a render costs a single round-trip. Fetched into `participantLifelines`, `messagePositions`, `notePositions`, `groupPositions`. Powers hover detection/highlighting, the ghost arrow, and the activation/group snapping gestures
 - **getMessageText:** `{plantuml, svg, svgelement}`; returns `{"text": message_label}` — fetches current message label for the edit modal
 - **editMessageText:** `{plantuml, svg, svgelement, text}`; returns `{"plantuml": updated_puml}` — replaces the message label text
 - **deleteMessage:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}` — removes the message line from puml
@@ -74,15 +74,12 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 - **getSeqNoteText:** `{plantuml, svg, svgelement}`; returns `{"text": note_text}` — fetches current note text for the edit modal
 - **editSeqNote:** `{plantuml, svg, svgelement, text}`; returns `{"plantuml": updated_puml}` — replaces the note text
 - **deleteSeqNote:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}` — removes the note line from puml
-- **getSeqNotePositions:** `{plantuml, svg}`; returns `{"positions": [{cy, index}, ...]}` — one entry per note (SVG Y, puml line index). Fetched each render into `notePositions`; used to highlight the matching note when the editor cursor/hover lands on its line
-- **getMessagePositions:** `{plantuml, svg}`; returns `{"positions": [{cy, index, text}, ...]}` — one entry per message (SVG Y, puml line index, label). Fetched each render into `messagePositions`; the activation gesture snaps to the nearest message and sends its line index.
 - **addActivation:** `{plantuml, participant, startMessageIndex, endMessageIndex, endType}`; returns `{"plantuml": updated_puml}` — inserts a matched `activate` line after the message at `startMessageIndex` and a closing `deactivate`/`destroy` line after the message at `endMessageIndex`; `endType` is 'deactivate' or 'destroy' (defaults to 'deactivate')
 - **deleteActivation:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}` — `svgelement` is the right-clicked activation-bar rect; removes that bar's `activate` line and its paired `deactivate`/`destroy` line (handles nested bars)
 - **addGroup:** `{plantuml, groupType, label, startMessageIndex, endMessageIndex}`; returns `{"plantuml": updated_puml}` — wraps messages between `startMessageIndex` and `endMessageIndex` in a `<groupType> <label> ... end` block; `groupType` is 'group', 'alt', 'opt', or 'loop'; indexes are puml line numbers from `messagePositions`; range is normalized (order does not matter); returns 400 with `{"error": message}` for invalid group types
 - **getSeqGroupLabel:** `{plantuml, svg, svgelement}`; returns `{"type": keyword, "label": label_text}` — `svgelement` is the clicked group's box rect (`fill="none"`); fetches the current title for the rename modal
 - **renameSeqGroup:** `{plantuml, svg, svgelement, label}`; returns `{"plantuml": updated_puml}` — replaces only the text after the keyword on the header line
 - **deleteSeqGroup:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}` — unwraps the group: removes the header and its matching `end` line, keeping the contents in place
-- **getSeqGroupPositions:** `{plantuml, svg}`; returns `{"positions": [{headerIndex, endIndex}, ...]}` — one entry per group. Fetched each render into `groupPositions`; used to highlight the matching group box when the editor cursor/hover lands on its header or `end` line
 
 ## script.js Requests
 
@@ -98,11 +95,11 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 
 For activity diagrams, the frontend captures `lastclickedsvgelement` on right-click (the actual SVG DOM element). Its `outerHTML` is sent as `svgelement`. The backend reconstructs the element's geometric identity (x/y for rects, points for polygons, cx/cy for ellipses) to match it against the parsed SVG.
 
-For sequence diagrams, the frontend computes `cx` from the clicked rect's x + width/2. For messages, the frontend fetches participant positions from `/getParticipantPositions` on each render and uses them for hover detection (±15px tolerance from lifeline cx). It sends the lifeline cx and cursor y as `[x, y]` coordinates. The y-coordinate determines insertion position between existing messages.
+For sequence diagrams, the frontend computes `cx` from the clicked rect's x + width/2. For messages, the frontend fetches participant positions once per render via `/getSequencePositions` (the `participants` table) and uses them for hover detection (±15px tolerance from lifeline cx). It sends the lifeline cx and cursor y as `[x, y]` coordinates. The y-coordinate determines insertion position between existing messages.
 
 ## Editor <-> Diagram Hover Highlighting (Sequence Diagrams)
 
-Each render, the frontend fetches four position tables into module-level arrays: `messagePositions`, `participantLifelines`, `notePositions`, `groupPositions` (via `/getMessagePositions`, `/getParticipantPositions`, `/getSeqNotePositions`, `/getSeqGroupPositions`). No further backend round-trip is needed for highlighting itself — both directions are resolved client-side against these cached tables:
+Each render, the frontend fetches all position tables in a single `/getSequencePositions` round-trip and stores them in module-level arrays: `messagePositions`, `participantLifelines`, `notePositions`, `groupPositions`. No further backend round-trip is needed for highlighting itself — both directions are resolved client-side against these cached tables:
 
 - **Diagram → editor**: hovering an SVG element looks up its puml line index from the matching table and calls `setEditorMarkers`/`getmarker` to paint that line.
 - **Editor → diagram**: moving the cursor or mouse over a line in the editor (`highlightSequenceForRow` in `sequence-operations.js`) checks the four tables for that row, then finds the matching SVG element(s) by counting shapes in document order (e.g. the Nth `#FEFFDD` note path, the Nth group box immediately following its `#EEEEEE` tab) and highlights them directly — no fetch involved.

@@ -627,10 +627,10 @@ Alice -> Bob: Hello
         svg = extract_g_element(_create_svg_from_uml(self.PUML))
         with client:
             response = client.post(
-                "/getParticipantPositions",
+                "/getSequencePositions",
                 data=json.dumps({"plantuml": self.PUML, "svg": svg}),
                 content_type="application/json",
             )
             assert response.status_code == 200
-            positions = response.get_json()["positions"]
+            positions = response.get_json()["participants"]
             assert [p["index"] for p in positions] == [1, 2]

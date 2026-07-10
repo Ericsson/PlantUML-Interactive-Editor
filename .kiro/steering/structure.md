@@ -20,6 +20,7 @@
 │   │   ├── activation.py   # Activation bar logic (activate + deactivate/destroy pair)
 │   │   ├── group.py        # Group block logic (group, alt, opt, loop)
 │   │   ├── note.py         # Note logic (add, edit, delete notes)
+│   │   ├── positions.py    # Per-render position aggregator (get_sequence_positions: one fetch for all element types' editor rows)
 │   │   └── util.py         # Shared utilities (insertion index, note position extraction)
 │   ├── activity/           # Activity diagram package
 │   │   ├── routes.py       # All activity routes (~64 endpoints)

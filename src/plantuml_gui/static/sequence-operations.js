@@ -43,22 +43,17 @@ function svgPointFromEvent(e, svgElement) {
     return point.matrixTransform(svgElement.getScreenCTM().inverse());
 }
 
-// Fetch participant lifeline positions from backend (called once per render)
-async function extractLifelinePositions() {
-    const data = await fetchDiagramData("getParticipantPositions");
-    participantLifelines = data ? data.positions : [];
-}
-
-// Fetch note positions from backend (called once per render)
-async function fetchNotePositions() {
-    const data = await fetchDiagramData("getSeqNotePositions");
-    notePositions = data ? data.positions : [];
-}
-
-// Fetch group positions from backend (called once per render)
-async function fetchGroupPositions() {
-    const data = await fetchDiagramData("getSeqGroupPositions");
-    groupPositions = data ? data.positions : [];
+// Fetch every element type's positions in one round-trip (called once per
+// render). The backend bundles participant lifelines, messages, notes and
+// groups into a single response so a render costs one request instead of four;
+// each sub-table keeps its own shape (see getSequencePositions). A failed fetch
+// leaves every table empty, disabling hover/gesture snapping for that render.
+async function fetchSequencePositions() {
+    const data = await fetchDiagramData("getSequencePositions");
+    participantLifelines = data ? data.participants : [];
+    messagePositions = data ? data.messages : [];
+    notePositions = data ? data.notes : [];
+    groupPositions = data ? data.groups : [];
 }
 
 // Vertical position of a message SVG element, comparable to messagePositions cy
@@ -331,10 +326,7 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
             return;
         }
 
-        await extractLifelinePositions();
-        await fetchMessagePositions();
-        await fetchNotePositions();
-        await fetchGroupPositions();
+        await fetchSequencePositions();
         cancelMessageAddMode();
         cancelActivationAddMode();
         cancelGroupAddMode();
