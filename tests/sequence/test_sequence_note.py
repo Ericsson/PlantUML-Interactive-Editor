@@ -60,6 +60,80 @@ def extract_note_path(svg_string, note_index=0):
     return None
 
 
+class TestNoteLineKeyword:
+    def test_plain_note(self):
+        from plantuml_gui.sequence.util import note_line_keyword
+
+        assert note_line_keyword("note over Alice : text") == "note"
+
+    def test_hnote(self):
+        from plantuml_gui.sequence.util import note_line_keyword
+
+        assert note_line_keyword("hnote left of Alice : text") == "hnote"
+
+    def test_rnote(self):
+        from plantuml_gui.sequence.util import note_line_keyword
+
+        assert note_line_keyword("rnote right of Bob : text") == "rnote"
+
+    def test_note_with_color_token(self):
+        from plantuml_gui.sequence.util import note_line_keyword
+
+        assert note_line_keyword("note #FFAAAA over Alice : text") == "note"
+
+    def test_hnote_with_named_color_token(self):
+        from plantuml_gui.sequence.util import note_line_keyword
+
+        assert note_line_keyword("hnote #palegreen over Alice : text") == "hnote"
+
+    def test_message_attached_shortcut(self):
+        from plantuml_gui.sequence.util import note_line_keyword
+
+        assert note_line_keyword("note left : text") == "note"
+        assert note_line_keyword("hnote right : text") == "hnote"
+
+    def test_non_note_line_returns_none(self):
+        from plantuml_gui.sequence.util import note_line_keyword
+
+        assert note_line_keyword("Alice -> Bob: Hello") is None
+        assert note_line_keyword("participant Alice") is None
+
+    def test_prefix_collision_not_matched(self):
+        """A participant literally named 'notebook' must not be
+        mistaken for a note line."""
+        from plantuml_gui.sequence.util import note_line_keyword
+
+        assert note_line_keyword("notebook -> Bob: Hello") is None
+
+
+class TestFindNoteLineIndexMixedTypes:
+    def test_ordinal_resolution_across_mixed_types(self):
+        from plantuml_gui.sequence.util import _find_note_line_index
+
+        puml = (
+            "@startuml\nparticipant Alice\nparticipant Bob\n"
+            "note over Alice : first\n"
+            "hnote over Bob : second\n"
+            "rnote over Alice : third\n"
+            "@enduml"
+        )
+        assert _find_note_line_index(puml, 1) == 3
+        assert _find_note_line_index(puml, 2) == 4
+        assert _find_note_line_index(puml, 3) == 5
+
+    def test_ordinal_resolution_with_colors(self):
+        from plantuml_gui.sequence.util import _find_note_line_index
+
+        puml = (
+            "@startuml\nparticipant Alice\n"
+            "note #FFAAAA over Alice : first\n"
+            "hnote #palegreen over Alice : second\n"
+            "@enduml"
+        )
+        assert _find_note_line_index(puml, 1) == 2
+        assert _find_note_line_index(puml, 2) == 3
+
+
 class TestAddNote:
     def test_add_note_over(self):
         puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"

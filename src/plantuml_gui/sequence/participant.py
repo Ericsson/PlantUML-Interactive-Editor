@@ -29,6 +29,7 @@ from typing import Dict, List
 from pyquery import PyQuery as Pq
 
 from .classes import Diagram, is_participant_rect
+from .util import is_note_line
 
 
 def index_of_clicked_participant(svg: str, svgelement: str) -> int:
@@ -112,7 +113,7 @@ def delete_participant(puml: str, svg: str, svgelement: str) -> str:
             lines_to_remove.add(msg.index)
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if stripped.startswith("note "):
+        if is_note_line(stripped):
             header = stripped.split(" : ", 1)[0]
             if participant.name in header:
                 lines_to_remove.add(i)

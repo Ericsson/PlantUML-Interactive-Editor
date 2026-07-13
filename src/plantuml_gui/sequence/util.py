@@ -36,6 +36,12 @@ from .classes import Message
 # - "rnote": a single <rect> element (plain rectangle, no fold).
 _HEXAGON_POINT_COUNT = 7
 
+# The three PlantUML keywords that render as a "note" element. Order matters
+# for matching: check longer keywords first isn't required here since they
+# all differ by more than a shared prefix, but kept as a tuple for clarity
+# and to avoid repeating the literal list at each call site.
+NOTE_KEYWORDS = ("note", "hnote", "rnote")
+
 
 def classify_note_shape(path: Pq) -> Optional[str]:
     """Classify a single SVG shape element as a note type, or None.
@@ -73,13 +79,41 @@ def classify_note_shape(path: Pq) -> Optional[str]:
     return None
 
 
+def note_line_keyword(stripped_line: str) -> Optional[str]:
+    """Return the note keyword ("note"/"hnote"/"rnote") a puml line starts
+    with, or None if the line is not a note line.
+
+    A note line starts with one of the note keywords, followed by either
+    a space (e.g. "note over X : text") or an optional "#color" token
+    before the rest of the syntax (e.g. "note #FFAAAA over X : text").
+    Matching is prefix-based and independent of placement/color so it
+    stays correct as new placement forms or the future color-editing
+    feature are added.
+    """
+    for keyword in NOTE_KEYWORDS:
+        if not stripped_line.startswith(keyword):
+            continue
+        rest = stripped_line[len(keyword) :]
+        if rest.startswith(" ") or rest.startswith("#"):
+            return keyword
+    return None
+
+
+def is_note_line(stripped_line: str) -> bool:
+    """Return True if a puml line is a note/hnote/rnote line."""
+    return note_line_keyword(stripped_line) is not None
+
+
 def _find_note_line_index(puml: str, note_index: int) -> int:
-    """Find the puml line index of the nth note (1-based)."""
+    """Find the puml line index of the nth note (1-based).
+
+    Matches "note", "hnote", and "rnote" lines uniformly.
+    """
     lines = puml.splitlines()
     count = 0
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if stripped.startswith("note "):
+        if is_note_line(stripped):
             count += 1
             if count == note_index:
                 return i
