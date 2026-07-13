@@ -22,11 +22,55 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from typing import List
+from typing import List, Optional
 
 from pyquery import PyQuery as Pq
 
 from .classes import Message
+
+# PlantUML renders each note type as a visually distinct shape, independent
+# of fill color:
+# - "note":  two <path> elements - a folded-corner rectangle body (6 points)
+#   immediately followed by the small triangular fold corner (4 points).
+# - "hnote": a single <polygon> with exactly 7 points forming a hexagon.
+# - "rnote": a single <rect> element (plain rectangle, no fold).
+_HEXAGON_POINT_COUNT = 7
+
+
+def classify_note_shape(path: Pq) -> Optional[str]:
+    """Classify a single SVG shape element as a note type, or None.
+
+    Identifies "note", "hnote", or "rnote" by tag name and path/point
+    structure only - never by fill color - so detection keeps working
+    once note colors become user-customizable.
+
+    For "note", `path` must be the first of the two-path pair (the folded
+    rectangle body); the caller is responsible for skipping the second
+    (fold corner) path.
+    """
+    tag = path[0].tag if path else None
+
+    if tag == "rect":
+        return "rnote"
+
+    if tag == "polygon":
+        points = (path.attr("points") or "").strip()
+        if not points:
+            return None
+        point_count = len([p for p in points.split(",") if p.strip()]) // 2
+        if point_count == _HEXAGON_POINT_COUNT:
+            return "hnote"
+        return None
+
+    if tag == "path":
+        d_attr = path.attr("d") or ""
+        # A note body path has 6 coordinate points (folded-corner rectangle).
+        point_count = d_attr.count("L") + 1
+        if point_count == 6:
+            return "note"
+        return None
+
+    return None
 
 
 def _find_note_line_index(puml: str, note_index: int) -> int:
