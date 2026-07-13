@@ -50,13 +50,19 @@ def extract_note_path(svg_string, note_index=0):
     d = Pq(svg_string)
     paths = list(d("path").items())
     count = 0
-    for i, path in enumerate(paths):
+    i = 0
+    while i < len(paths):
+        path = paths[i]
         if path.attr("fill") != "#FEFFDD":
+            i += 1
             continue
         if i + 1 < len(paths) and paths[i + 1].attr("fill") == "#FEFFDD":
             if count == note_index:
                 return str(path)
             count += 1
+            i += 2  # skip the fold-corner path, it's not a separate note
+        else:
+            i += 1
     return None
 
 
@@ -293,6 +299,143 @@ class TestAddNote:
         )
         expected = "@startuml\nparticipant Alice\nnote right of Alice : My note\nAlice -> Alice: self\n@enduml"
         assert result == expected
+
+
+class TestShapeBasedNoteDetection:
+    """Covers index_of_clicked_note / extract_note_positions detecting
+    hnote and rnote, custom colors, and excluding shape look-alikes
+    (participant boxes, activation bars, group borders/tabs)."""
+
+    def extract_hnote_polygon(self, svg_string, index=0):
+        d = Pq(svg_string)
+        polygons = [
+            p
+            for p in d("polygon").items()
+            if len((p.attr("points") or "").split(",")) // 2 == 7
+        ]
+        return str(polygons[index])
+
+    def extract_rnote_rect(self, svg_string, index=0):
+        d = Pq(svg_string)
+        rects = [r for r in d("rect").items() if r.attr("rx") is None]
+        return str(rects[index])
+
+    def test_click_hnote(self):
+        puml = "@startuml\nparticipant Alice\nhnote over Alice : hex note\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = self.extract_hnote_polygon(svg)
+        assert index_of_clicked_note(svg, svgelement) == 1
+
+    def test_click_rnote(self):
+        puml = "@startuml\nparticipant Alice\nrnote over Alice : rect note\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = self.extract_rnote_rect(svg)
+        assert index_of_clicked_note(svg, svgelement) == 1
+
+    def test_click_second_of_mixed_types(self):
+        puml = (
+            "@startuml\nparticipant Alice\nparticipant Bob\n"
+            "note over Alice : first\n"
+            "hnote over Bob : second\n"
+            "@enduml"
+        )
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = self.extract_hnote_polygon(svg)
+        assert index_of_clicked_note(svg, svgelement) == 2
+
+    def test_click_third_of_mixed_types(self):
+        puml = (
+            "@startuml\nparticipant Alice\nparticipant Bob\n"
+            "note over Alice : first\n"
+            "hnote over Bob : second\n"
+            "rnote over Alice : third\n"
+            "@enduml"
+        )
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = self.extract_rnote_rect(svg)
+        assert index_of_clicked_note(svg, svgelement) == 3
+
+    def test_detection_independent_of_custom_color(self):
+        """A note colored to match a common non-note fill (white) must
+        still be detected correctly by shape, not by fill value."""
+        puml = "@startuml\nparticipant Alice\nrnote over Alice #FFFFFF : white rnote\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = self.extract_rnote_rect(svg)
+        assert index_of_clicked_note(svg, svgelement) == 1
+
+    def test_participant_box_not_detected_as_rnote(self):
+        """Participant header rects must never be picked up as notes,
+        even though both are plain <rect> with the same stroke-width."""
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nrnote over Alice : only note\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        from plantuml_gui.sequence.note import get_note_positions
+
+        positions = get_note_positions(puml, svg)
+        assert len(positions) == 1
+
+    def test_activation_bar_not_detected_as_rnote(self):
+        """Activation bars are plain <rect> too but use a different
+        stroke-width than notes, so they must be excluded."""
+        puml = (
+            "@startuml\nparticipant Alice\nparticipant Bob\n"
+            "activate Alice\n"
+            "rnote over Alice #FFFFFF : white rnote\n"
+            "deactivate Alice\n"
+            "@enduml"
+        )
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        from plantuml_gui.sequence.note import get_note_positions
+
+        positions = get_note_positions(puml, svg)
+        assert len(positions) == 1
+
+    def test_group_border_and_tab_not_detected_as_note(self):
+        """Group blocks render a <path> tab (6 points, like a note body)
+        and a <rect> border - neither must be mistaken for a note."""
+        puml = (
+            "@startuml\nparticipant Alice\nparticipant Bob\n"
+            "group g1\n"
+            "Alice -> Bob : hi\n"
+            "end\n"
+            "note over Alice #FFFFFF : white note\n"
+            "@enduml"
+        )
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        from plantuml_gui.sequence.note import get_note_positions
+
+        positions = get_note_positions(puml, svg)
+        assert len(positions) == 1
+
+    def test_message_arrowhead_not_detected_as_hnote(self):
+        """Message arrowheads are 4-point <polygon>, hnote is 7-point;
+        must not collide."""
+        puml = (
+            "@startuml\nparticipant Alice\nparticipant Bob\n"
+            "Alice -> Bob : hello\n"
+            "hnote over Alice : hex note\n"
+            "@enduml"
+        )
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        from plantuml_gui.sequence.note import get_note_positions
+
+        positions = get_note_positions(puml, svg)
+        assert len(positions) == 1
+
+    def test_get_note_positions_mixed_types_ordered(self):
+        from plantuml_gui.sequence.note import get_note_positions
+
+        puml = (
+            "@startuml\nparticipant Alice\nparticipant Bob\n"
+            "note over Alice : first\n"
+            "hnote over Bob : second\n"
+            "rnote over Alice : third\n"
+            "@enduml"
+        )
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        positions = get_note_positions(puml, svg)
+        assert [p["index"] for p in positions] == [3, 4, 5]
+        # top-to-bottom document order
+        assert positions[0]["cy"] < positions[1]["cy"] < positions[2]["cy"]
 
 
 class TestIndexOfClickedNote:

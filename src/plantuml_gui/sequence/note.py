@@ -32,6 +32,7 @@ from .util import (
     escape_multiline_text,
     extract_note_positions,
     find_insertion_index,
+    iter_note_shapes,
     unescape_multiline_text,
 )
 
@@ -116,28 +117,43 @@ def add_note(
     return "\n".join(lines)
 
 
+def _shapes_match(a: Pq, b: Pq) -> bool:
+    """Return True if two SVG shapes represent the same note element.
+
+    Compares by tag-appropriate identity attribute (never fill color):
+    `d` for <path> (note), `points` for <polygon> (hnote), and x/y/width/
+    height for <rect> (rnote).
+    """
+    tag_a = a[0].tag if a else None
+    tag_b = b[0].tag if b else None
+    if tag_a != tag_b:
+        return False
+
+    if tag_a == "path":
+        return a.attr("d") == b.attr("d")
+    if tag_a == "polygon":
+        return a.attr("points") == b.attr("points")
+    if tag_a == "rect":
+        return (
+            a.attr("x") == b.attr("x")
+            and a.attr("y") == b.attr("y")
+            and a.attr("width") == b.attr("width")
+            and a.attr("height") == b.attr("height")
+        )
+    return False
+
+
 def index_of_clicked_note(svg: str, svgelement: str) -> int:
     """Find the 1-based index of the clicked note in the SVG.
 
-    Notes are rendered as path elements with fill #FEFFDD. Each note
-    has two paths (body + fold corner). We count the body paths (those
-    followed by another #FEFFDD path) and match by the d attribute.
+    Identifies notes by shape (see iter_note_shapes), not fill color, so
+    this keeps working once note colors become user-customizable.
     """
     clicked = Pq(svgelement)
-    clicked_d = clicked.attr("d")
 
-    d = Pq(svg)
-    paths = list(d("path").items())
-    count = 0
-
-    for i, path in enumerate(paths):
-        if path.attr("fill") != "#FEFFDD":
-            continue
-        # A note body path is followed by the fold corner path
-        if i + 1 < len(paths) and paths[i + 1].attr("fill") == "#FEFFDD":
-            count += 1
-            if path.attr("d") == clicked_d:
-                return count
+    for count, (shape, _note_type) in enumerate(iter_note_shapes(svg), start=1):
+        if _shapes_match(shape, clicked):
+            return count
 
     return -1
 

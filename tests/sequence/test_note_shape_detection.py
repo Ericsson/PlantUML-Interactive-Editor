@@ -31,7 +31,7 @@ across the placements PlantUML supports for all three note types.
 
 import re
 
-from plantuml_gui.sequence.util import classify_note_shape
+from plantuml_gui.sequence.util import classify_note_shape, iter_note_shapes
 from plantuml_gui.shared.render import _create_svg_from_uml
 from pyquery import PyQuery as Pq
 
@@ -176,3 +176,73 @@ class TestClassifyNoteShape:
         note_paths = [s for s in shapes if s[0].tag == "path"]
         fold_corner = note_paths[1]
         assert classify_note_shape(fold_corner) is None
+
+
+class TestIterNoteShapes:
+    """Covers the candidate-filtering, document-order note iterator that
+    extract_note_positions and index_of_clicked_note are built on."""
+
+    def test_mixed_types_in_document_order(self):
+        puml = (
+            "@startuml\nparticipant Alice\nparticipant Bob\n"
+            "note over Alice : first\n"
+            "hnote over Bob : second\n"
+            "rnote over Alice : third\n"
+            "@enduml"
+        )
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        results = iter_note_shapes(svg)
+        assert [t for _shape, t in results] == ["note", "hnote", "rnote"]
+
+    def test_excludes_participant_boxes(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nrnote over Alice : only note\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        results = iter_note_shapes(svg)
+        assert len(results) == 1
+        assert results[0][1] == "rnote"
+
+    def test_excludes_activation_bars(self):
+        puml = (
+            "@startuml\nparticipant Alice\n"
+            "activate Alice\n"
+            "rnote over Alice #FFFFFF : white rnote\n"
+            "deactivate Alice\n"
+            "@enduml"
+        )
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        results = iter_note_shapes(svg)
+        assert len(results) == 1
+        assert results[0][1] == "rnote"
+
+    def test_excludes_group_border_and_tab(self):
+        puml = (
+            "@startuml\nparticipant Alice\nparticipant Bob\n"
+            "group g1\n"
+            "Alice -> Bob : hi\n"
+            "end\n"
+            "note over Alice #FFFFFF : white note\n"
+            "@enduml"
+        )
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        results = iter_note_shapes(svg)
+        assert len(results) == 1
+        assert results[0][1] == "note"
+
+    def test_excludes_message_arrowheads(self):
+        puml = (
+            "@startuml\nparticipant Alice\nparticipant Bob\n"
+            "Alice -> Bob : hello\n"
+            "hnote over Alice : hex note\n"
+            "@enduml"
+        )
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        results = iter_note_shapes(svg)
+        assert len(results) == 1
+        assert results[0][1] == "hnote"
+
+    def test_no_notes_returns_empty(self):
+        puml = (
+            "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob : hi\n@enduml"
+        )
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        assert iter_note_shapes(svg) == []
