@@ -642,6 +642,7 @@ function setupNoteHandlers(svgelements) {
 // --- Note operation event listeners ---
 
 let notePlacement = '';
+let selectedNoteType = 'note';
 let noteEditMode = false;
 let isAddNoteActive = false;
 
@@ -651,20 +652,35 @@ function isNoteAddMode() {
 
 function cancelNoteAddMode() {
     isAddNoteActive = false;
+    selectedNoteType = 'note';
 }
 
 function noteOperationEventListeners() {
-    // "Add Note" in sequence-menu shows the placement menu
+    // "Add Note" in sequence-menu shows the note type submenu
     document.getElementById('seq-addNote').addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
-        isAddNoteActive = true;
         var seqMenu = document.getElementById('sequence-menu');
+        var typeMenu = document.getElementById('seq-note-type-menu');
+        typeMenu.style.display = 'block';
+        typeMenu.style.left = seqMenu.style.left;
+        typeMenu.style.top = seqMenu.style.top;
+        seqMenu.style.display = 'none';
+    });
+
+    // Note type submenu items show the placement menu
+    document.getElementById('seq-note-type-menu').addEventListener('click', function(e) {
+        var item = e.target.closest('[data-note-type]');
+        if (!item) return;
+        e.preventDefault();
+        selectedNoteType = item.getAttribute('data-note-type');
+        var typeMenu = document.getElementById('seq-note-type-menu');
         var placementMenu = document.getElementById('seq-note-placement-menu');
         placementMenu.style.display = 'block';
-        placementMenu.style.left = seqMenu.style.left;
-        placementMenu.style.top = seqMenu.style.top;
-        seqMenu.style.display = 'none';
+        placementMenu.style.left = typeMenu.style.left;
+        placementMenu.style.top = typeMenu.style.top;
+        typeMenu.style.display = 'none';
+        isAddNoteActive = true;
     });
 
     // Placement menu items
