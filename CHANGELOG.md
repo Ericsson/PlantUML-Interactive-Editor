@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### External
 
+- Fixed downloaded PNG diagrams being low resolution and blurry: PlantUML's default PNG rasterization renders at ~96 DPI, so the exported image was much lower quality than the in-app SVG preview; PNG export now renders at 300 DPI (roughly 3x the pixel dimensions)
+- Fixed the PNG toolbar button opening the rendered diagram in a new tab instead of downloading it; it now triggers a `diagram.png` file download, matching its "Download diagram as PNG" tooltip
 - Added a visible Import button in the code toolbar (left of the Download button, separated by a divider) to load a `.puml`/`.txt` file into the editor; previously this was only reachable via a hidden button. The Download button no longer uses the blue accent style, matching the other toolbar buttons
 - Fixed multi-line message text producing invalid PlantUML for sequence diagrams (newlines are now escaped as `\n` in the generated code)
 - Fixed multi-line note text producing invalid PlantUML for sequence diagrams (newlines are now escaped as `\n` in the generated code)

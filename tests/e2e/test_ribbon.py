@@ -142,6 +142,15 @@ def test_code_toolbar_import_button_loads_file(app_url, page):
     assert "foo -> bar" in content
 
 
+def test_diagram_toolbar_png_button_downloads_file(app_url, page):
+    """PNG button downloads the diagram as a file instead of opening a new tab."""
+    page.wait_for_timeout(1000)
+    with page.expect_download() as download_info:
+        page.locator("#png").click()
+    download = download_info.value
+    assert download.suggested_filename == "diagram.png"
+
+
 def test_zoom_in_increases_scale(app_url, page):
     """Clicking zoom in increases the panzoom scale."""
     page.wait_for_timeout(2000)
