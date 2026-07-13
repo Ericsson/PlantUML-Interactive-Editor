@@ -126,7 +126,7 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 
 ## Sequence Diagram (Notes)
 
-- **POST /addNote** — Input: `plantuml`, `svg`, `participant`, `placement` ('over'/'left'/'right'/'spanning'), `text`, `yPosition`, optional `secondParticipant`. Returns: JSON `{"plantuml": modified_puml}`. Y-coordinate determines insertion position.
+- **POST /addNote** — Input: `plantuml`, `svg`, `participant`, `placement` ('over'/'left'/'right'/'spanning'), `text`, `yPosition`, optional `secondParticipant`, optional `noteType` ('note'/'hnote'/'rnote', defaults to 'note' if missing or unrecognized). Returns: JSON `{"plantuml": modified_puml}`. Y-coordinate determines insertion position. All three note types support the same placement grammar identically.
 - **POST /getSeqNoteText** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"text": note_text}`.
 - **POST /editSeqNote** — Input: `plantuml`, `svg`, `svgelement`, `text`. Returns: JSON `{"plantuml": modified_puml}`.
 - **POST /deleteSeqNote** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"plantuml": modified_puml}`.

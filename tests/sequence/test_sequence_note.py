@@ -301,6 +301,130 @@ class TestAddNote:
         assert result == expected
 
 
+class TestAddNoteWithType:
+    """Covers note_type parameterization of add_note across all placements
+    and the message-attached shortcut, mirroring TestAddNote's plain-note
+    coverage but for hnote/rnote."""
+
+    def test_add_hnote_over(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        result = add_note(
+            puml, svg, "Alice", "over", "Hex note", 0.0, note_type="hnote"
+        )
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nhnote over Alice : Hex note\nAlice -> Bob: Hello\n@enduml"
+        assert result == expected
+
+    def test_add_rnote_over(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        result = add_note(
+            puml, svg, "Alice", "over", "Rect note", 0.0, note_type="rnote"
+        )
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nrnote over Alice : Rect note\nAlice -> Bob: Hello\n@enduml"
+        assert result == expected
+
+    def test_add_hnote_left_far_from_message_uses_participant(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        result = add_note(puml, svg, "Alice", "left", "Far hex", 0.0, note_type="hnote")
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nhnote left of Alice : Far hex\nAlice -> Bob: Hello\n@enduml"
+        assert result == expected
+
+    def test_add_rnote_right(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        result = add_note(puml, svg, "Bob", "right", "Far rect", 0.0, note_type="rnote")
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nrnote right of Bob : Far rect\nAlice -> Bob: Hello\n@enduml"
+        assert result == expected
+
+    def test_add_hnote_spanning(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        result = add_note(
+            puml,
+            svg,
+            "Alice",
+            "spanning",
+            "Span hex",
+            0.0,
+            "Bob",
+            note_type="hnote",
+        )
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nhnote over Alice, Bob : Span hex\nAlice -> Bob: Hello\n@enduml"
+        assert result == expected
+
+    def test_add_rnote_spanning(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        result = add_note(
+            puml,
+            svg,
+            "Alice",
+            "spanning",
+            "Span rect",
+            0.0,
+            "Bob",
+            note_type="rnote",
+        )
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nrnote over Alice, Bob : Span rect\nAlice -> Bob: Hello\n@enduml"
+        assert result == expected
+
+    def test_add_hnote_left_attached_to_message(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\nBob -> Alice: Reply\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        from plantuml_gui.sequence.classes import Diagram
+
+        diagram = Diagram.from_svg(svg, puml)
+        result = add_note(
+            puml,
+            svg,
+            "Alice",
+            "left",
+            "Attached hex",
+            diagram.messages[0].cy,
+            note_type="hnote",
+        )
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\nhnote left : Attached hex\nBob -> Alice: Reply\n@enduml"
+        assert result == expected
+
+    def test_add_rnote_right_attached_to_message(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        from plantuml_gui.sequence.classes import Diagram
+
+        diagram = Diagram.from_svg(svg, puml)
+        result = add_note(
+            puml,
+            svg,
+            "Bob",
+            "right",
+            "Attached rect",
+            diagram.messages[0].cy,
+            note_type="rnote",
+        )
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\nrnote right : Attached rect\n@enduml"
+        assert result == expected
+
+    def test_missing_note_type_defaults_to_note(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        result = add_note(puml, svg, "Alice", "over", "Default note", 0.0)
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : Default note\nAlice -> Bob: Hello\n@enduml"
+        assert result == expected
+
+    def test_invalid_note_type_defaults_to_note(self):
+        """An unrecognized note_type value (e.g. tampered request) must not
+        produce invalid PlantUML syntax; falls back to plain note."""
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        result = add_note(
+            puml, svg, "Alice", "over", "Fallback", 0.0, note_type="not-a-real-type"
+        )
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : Fallback\nAlice -> Bob: Hello\n@enduml"
+        assert result == expected
+
+
 class TestShapeBasedNoteDetection:
     """Covers index_of_clicked_note / extract_note_positions detecting
     hnote and rnote, custom colors, and excluding shape look-alikes
@@ -558,6 +682,47 @@ class TestAddNoteRoute:
                 content_type="application/json",
             )
             expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice, Bob : Span note\nAlice -> Bob: Hello\n@enduml"
+            assert response.get_json()["plantuml"] == expected
+
+    def test_add_note_with_note_type_route(self, client):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        test_data = {
+            "plantuml": puml,
+            "svg": svg,
+            "participant": "Alice",
+            "placement": "over",
+            "text": "Hex note",
+            "yPosition": 0.0,
+            "noteType": "hnote",
+        }
+        with client:
+            response = client.post(
+                "/addNote",
+                data=__import__("json").dumps(test_data),
+                content_type="application/json",
+            )
+            expected = "@startuml\nparticipant Alice\nparticipant Bob\nhnote over Alice : Hex note\nAlice -> Bob: Hello\n@enduml"
+            assert response.get_json()["plantuml"] == expected
+
+    def test_add_note_without_note_type_route_defaults_to_note(self, client):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        test_data = {
+            "plantuml": puml,
+            "svg": svg,
+            "participant": "Alice",
+            "placement": "over",
+            "text": "Plain note",
+            "yPosition": 0.0,
+        }
+        with client:
+            response = client.post(
+                "/addNote",
+                data=__import__("json").dumps(test_data),
+                content_type="application/json",
+            )
+            expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : Plain note\nAlice -> Bob: Hello\n@enduml"
             assert response.get_json()["plantuml"] == expected
 
     def test_add_note_multiline_text_route(self, client):

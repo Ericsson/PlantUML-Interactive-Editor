@@ -70,7 +70,7 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 - **getMessageText:** `{plantuml, svg, svgelement}`; returns `{"text": message_label}` — fetches current message label for the edit modal
 - **editMessageText:** `{plantuml, svg, svgelement, text}`; returns `{"plantuml": updated_puml}` — replaces the message label text
 - **deleteMessage:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}` — removes the message line from puml
-- **addNote:** `{plantuml, svg, participant, placement, text, yPosition, secondParticipant?}`; returns `{"plantuml": updated_puml}` — inserts a note at the Y-position; placement is 'over', 'left', 'right', or 'spanning'
+- **addNote:** `{plantuml, svg, participant, placement, text, yPosition, secondParticipant?, noteType?}`; returns `{"plantuml": updated_puml}` — inserts a note at the Y-position; placement is 'over', 'left', 'right', or 'spanning'; noteType is 'note', 'hnote', or 'rnote' (defaults to 'note' if missing/unrecognized); all three types support the same placement grammar
 - **getSeqNoteText:** `{plantuml, svg, svgelement}`; returns `{"text": note_text}` — fetches current note text for the edit modal
 - **editSeqNote:** `{plantuml, svg, svgelement, text}`; returns `{"plantuml": updated_puml}` — replaces the note text
 - **deleteSeqNote:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}` — removes the note line from puml

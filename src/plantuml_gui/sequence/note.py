@@ -28,6 +28,7 @@ from pyquery import PyQuery as Pq
 
 from .classes import Diagram, Message
 from .util import (
+    NOTE_KEYWORDS,
     _find_note_line_index,
     escape_multiline_text,
     extract_note_positions,
@@ -61,21 +62,33 @@ def _find_nearest_message(
     return closest
 
 
+def _normalize_note_type(note_type: str | None) -> str:
+    """Validate and default a note_type value from an untrusted request.
+
+    Falls back to "note" for missing or unrecognized values, since the
+    request body comes directly from client JS.
+    """
+    if note_type in NOTE_KEYWORDS:
+        return note_type
+    return "note"
+
+
 def _build_note_line(
     participant: str,
     placement: str,
     text: str,
     second_participant: str | None = None,
+    note_type: str = "note",
 ) -> str:
     """Build the PlantUML note syntax string."""
     if placement == "over":
-        return f"note over {participant} : {text}"
+        return f"{note_type} over {participant} : {text}"
     if placement == "left":
-        return f"note left of {participant} : {text}"
+        return f"{note_type} left of {participant} : {text}"
     if placement == "right":
-        return f"note right of {participant} : {text}"
+        return f"{note_type} right of {participant} : {text}"
     if placement == "spanning":
-        return f"note over {participant}, {second_participant} : {text}"
+        return f"{note_type} over {participant}, {second_participant} : {text}"
     return ""
 
 
@@ -88,8 +101,13 @@ def add_note(
     y_position: float,
     second_participant: str | None = None,
     x_position: float | None = None,
+    note_type: str | None = None,
 ) -> str:
     """Add a note at the correct Y-position in the sequence diagram.
+
+    note_type selects the PlantUML keyword ("note", "hnote", or "rnote"),
+    defaulting to "note" for missing/unrecognized values. All three types
+    support the same placement grammar identically.
 
     If placement is 'left' or 'right' and the y_position is close to an
     existing message, and x_position falls within the message's horizontal
@@ -99,6 +117,7 @@ def add_note(
     if not text:
         return puml
 
+    note_type = _normalize_note_type(note_type)
     text = escape_multiline_text(text)
     diagram = Diagram.from_svg(svg, puml)
     lines = puml.splitlines()
@@ -107,12 +126,14 @@ def add_note(
     if placement in ("left", "right"):
         nearest = _find_nearest_message(diagram.messages, y_position, x_position)
         if nearest:
-            note_line = f"note {placement} : {text}"
+            note_line = f"{note_type} {placement} : {text}"
             lines.insert(nearest.index + 1, note_line)
             return "\n".join(lines)
 
     insert_at = find_insertion_index(diagram.messages, svg, puml, y_position, lines)
-    note_line = _build_note_line(participant, placement, text, second_participant)
+    note_line = _build_note_line(
+        participant, placement, text, second_participant, note_type
+    )
     lines.insert(insert_at, note_line)
     return "\n".join(lines)
 
