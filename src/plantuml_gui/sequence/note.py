@@ -34,6 +34,7 @@ from .util import (
     extract_note_positions,
     find_insertion_index,
     iter_note_shapes,
+    note_line_keyword,
     unescape_multiline_text,
 )
 
@@ -189,15 +190,51 @@ def get_note_text(puml: str, svg: str, svgelement: str) -> str:
     return unescape_multiline_text(text)
 
 
-def edit_note(puml: str, svg: str, svgelement: str, text: str) -> str:
-    """Edit the text of the clicked note."""
+def get_note_type(puml: str, svg: str, svgelement: str) -> str:
+    """Get the PlantUML keyword ("note"/"hnote"/"rnote") of the clicked note.
+
+    Falls back to "note" if the note can't be found, matching
+    _normalize_note_type's default so callers always get a valid type.
+    """
+    idx = index_of_clicked_note(svg, svgelement)
+    line_index = _find_note_line_index(puml, idx)
+    if line_index == -1:
+        return "note"
+    line = puml.splitlines()[line_index]
+    keyword = note_line_keyword(line.strip())
+    return keyword if keyword is not None else "note"
+
+
+def edit_note(
+    puml: str, svg: str, svgelement: str, text: str, note_type: str | None = None
+) -> str:
+    """Edit the text of the clicked note, optionally changing its type.
+
+    note_type selects the PlantUML keyword ("note"/"hnote"/"rnote"). If
+    omitted or unrecognized, the existing keyword is left unchanged (a
+    text-only edit, matching the original behavior).
+    """
     idx = index_of_clicked_note(svg, svgelement)
     line_index = _find_note_line_index(puml, idx)
     lines = puml.splitlines()
     line = lines[line_index]
     colon_pos = line.find(": ")
-    if colon_pos != -1:
-        lines[line_index] = line[: colon_pos + 2] + escape_multiline_text(text)
+    if colon_pos == -1:
+        return puml
+
+    new_line = line[: colon_pos + 2] + escape_multiline_text(text)
+
+    if note_type is not None and note_type in NOTE_KEYWORDS:
+        current_keyword = note_line_keyword(line.strip())
+        if current_keyword is not None and current_keyword != note_type:
+            # Replace only the leading keyword, preserving any leading
+            # whitespace, the placement clause, and an optional #color
+            # token exactly as they were.
+            stripped = new_line.strip()
+            leading_ws = new_line[: len(new_line) - len(stripped)]
+            new_line = leading_ws + note_type + stripped[len(current_keyword) :]
+
+    lines[line_index] = new_line
     return "\n".join(lines)
 
 

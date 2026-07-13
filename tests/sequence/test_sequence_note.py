@@ -425,24 +425,32 @@ class TestAddNoteWithType:
         assert result == expected
 
 
+def extract_hnote_polygon(svg_string, index=0):
+    d = Pq(svg_string)
+    polygons = [
+        p
+        for p in d("polygon").items()
+        if len((p.attr("points") or "").split(",")) // 2 == 7
+    ]
+    return str(polygons[index])
+
+
+def extract_rnote_rect(svg_string, index=0):
+    d = Pq(svg_string)
+    rects = [r for r in d("rect").items() if r.attr("rx") is None]
+    return str(rects[index])
+
+
 class TestShapeBasedNoteDetection:
     """Covers index_of_clicked_note / extract_note_positions detecting
     hnote and rnote, custom colors, and excluding shape look-alikes
     (participant boxes, activation bars, group borders/tabs)."""
 
     def extract_hnote_polygon(self, svg_string, index=0):
-        d = Pq(svg_string)
-        polygons = [
-            p
-            for p in d("polygon").items()
-            if len((p.attr("points") or "").split(",")) // 2 == 7
-        ]
-        return str(polygons[index])
+        return extract_hnote_polygon(svg_string, index)
 
     def extract_rnote_rect(self, svg_string, index=0):
-        d = Pq(svg_string)
-        rects = [r for r in d("rect").items() if r.attr("rx") is None]
-        return str(rects[index])
+        return extract_rnote_rect(svg_string, index)
 
     def test_click_hnote(self):
         puml = "@startuml\nparticipant Alice\nhnote over Alice : hex note\n@enduml"
@@ -598,6 +606,55 @@ class TestGetNoteText:
         assert get_note_text(puml, svg, svgelement) == "Line1\nLine2"
 
 
+class TestGetNoteType:
+    def test_plain_note_type(self):
+        from plantuml_gui.sequence.note import get_note_type
+
+        puml = "@startuml\nparticipant Alice\nnote over Alice : text\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 0)
+        assert get_note_type(puml, svg, svgelement) == "note"
+
+    def test_hnote_type(self):
+        from plantuml_gui.sequence.note import get_note_type
+
+        puml = "@startuml\nparticipant Alice\nhnote over Alice : text\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_hnote_polygon(svg)
+        assert get_note_type(puml, svg, svgelement) == "hnote"
+
+    def test_rnote_type(self):
+        from plantuml_gui.sequence.note import get_note_type
+
+        puml = "@startuml\nparticipant Alice\nrnote over Alice : text\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_rnote_rect(svg)
+        assert get_note_type(puml, svg, svgelement) == "rnote"
+
+    def test_type_of_second_note_in_mixed_diagram(self):
+        from plantuml_gui.sequence.note import get_note_type
+
+        puml = (
+            "@startuml\nparticipant Alice\nparticipant Bob\n"
+            "note over Alice : first\n"
+            "rnote over Bob : second\n"
+            "@enduml"
+        )
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_rnote_rect(svg)
+        assert get_note_type(puml, svg, svgelement) == "rnote"
+
+    def test_type_with_custom_color(self):
+        from plantuml_gui.sequence.note import get_note_type
+
+        puml = (
+            "@startuml\nparticipant Alice\nhnote over Alice #palegreen : text\n@enduml"
+        )
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_hnote_polygon(svg)
+        assert get_note_type(puml, svg, svgelement) == "hnote"
+
+
 class TestEditNote:
     def test_edit_note(self):
         puml = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : Old text\n@enduml"
@@ -621,6 +678,77 @@ class TestEditNote:
         svgelement = extract_note_path(svg, 0)
         result = edit_note(puml, svg, svgelement, "Line1\nLine2")
         expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : Line1\\nLine2\n@enduml"
+        assert result == expected
+
+    def test_edit_note_same_type_is_text_only_change(self):
+        puml = "@startuml\nparticipant Alice\nnote over Alice : Old text\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 0)
+        result = edit_note(puml, svg, svgelement, "New text", note_type="note")
+        expected = "@startuml\nparticipant Alice\nnote over Alice : New text\n@enduml"
+        assert result == expected
+
+    def test_edit_note_changes_type_to_hnote(self):
+        puml = "@startuml\nparticipant Alice\nnote over Alice : Old text\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 0)
+        result = edit_note(puml, svg, svgelement, "New text", note_type="hnote")
+        expected = "@startuml\nparticipant Alice\nhnote over Alice : New text\n@enduml"
+        assert result == expected
+
+    def test_edit_hnote_changes_type_to_rnote(self):
+        puml = "@startuml\nparticipant Alice\nhnote over Alice : Old text\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_hnote_polygon(svg)
+        result = edit_note(puml, svg, svgelement, "New text", note_type="rnote")
+        expected = "@startuml\nparticipant Alice\nrnote over Alice : New text\n@enduml"
+        assert result == expected
+
+    def test_edit_rnote_changes_type_to_note(self):
+        puml = "@startuml\nparticipant Alice\nrnote over Alice : Old text\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_rnote_rect(svg)
+        result = edit_note(puml, svg, svgelement, "New text", note_type="note")
+        expected = "@startuml\nparticipant Alice\nnote over Alice : New text\n@enduml"
+        assert result == expected
+
+    def test_edit_note_preserves_placement_when_changing_type(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nnote left of Alice : Old text\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 0)
+        result = edit_note(puml, svg, svgelement, "New text", note_type="rnote")
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nrnote left of Alice : New text\n@enduml"
+        assert result == expected
+
+    def test_edit_note_preserves_color_token_when_changing_type(self):
+        from plantuml_gui.sequence.util import iter_note_shapes
+
+        puml = (
+            "@startuml\nparticipant Alice\nnote over Alice #FFAAAA : Old text\n@enduml"
+        )
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        shape, _note_type = iter_note_shapes(svg)[0]
+        svgelement = str(shape)
+        result = edit_note(puml, svg, svgelement, "New text", note_type="hnote")
+        expected = (
+            "@startuml\nparticipant Alice\nhnote over Alice #FFAAAA : New text\n@enduml"
+        )
+        assert result == expected
+
+    def test_edit_note_invalid_type_leaves_keyword_unchanged(self):
+        puml = "@startuml\nparticipant Alice\nnote over Alice : Old text\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 0)
+        result = edit_note(puml, svg, svgelement, "New text", note_type="not-a-type")
+        expected = "@startuml\nparticipant Alice\nnote over Alice : New text\n@enduml"
+        assert result == expected
+
+    def test_edit_note_missing_type_leaves_keyword_unchanged(self):
+        puml = "@startuml\nparticipant Alice\nrnote over Alice : Old text\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_rnote_rect(svg)
+        result = edit_note(puml, svg, svgelement, "New text")
+        expected = "@startuml\nparticipant Alice\nrnote over Alice : New text\n@enduml"
         assert result == expected
 
 
@@ -779,6 +907,21 @@ class TestNoteRoutes:
             )
             assert response.get_json()["text"] == "My note"
 
+    def test_get_note_text_route_returns_note_type(self, client):
+        puml = "@startuml\nparticipant Alice\nhnote over Alice : My hex note\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_hnote_polygon(svg)
+        test_data = {"plantuml": puml, "svg": svg, "svgelement": svgelement}
+        with client:
+            response = client.post(
+                "/getSeqNoteText",
+                data=__import__("json").dumps(test_data),
+                content_type="application/json",
+            )
+            data = response.get_json()
+            assert data["text"] == "My hex note"
+            assert data["noteType"] == "hnote"
+
     def test_edit_note_route(self, client):
         puml = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : Old text\n@enduml"
         svg = extract_g_inner(_create_svg_from_uml(puml))
@@ -796,6 +939,28 @@ class TestNoteRoutes:
                 content_type="application/json",
             )
             expected = "@startuml\nparticipant Alice\nparticipant Bob\nnote over Alice : New text\n@enduml"
+            assert response.get_json()["plantuml"] == expected
+
+    def test_edit_note_route_with_note_type_change(self, client):
+        puml = "@startuml\nparticipant Alice\nnote over Alice : Old text\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 0)
+        test_data = {
+            "plantuml": puml,
+            "svg": svg,
+            "svgelement": svgelement,
+            "text": "New text",
+            "noteType": "rnote",
+        }
+        with client:
+            response = client.post(
+                "/editSeqNote",
+                data=__import__("json").dumps(test_data),
+                content_type="application/json",
+            )
+            expected = (
+                "@startuml\nparticipant Alice\nrnote over Alice : New text\n@enduml"
+            )
             assert response.get_json()["plantuml"] == expected
 
     def test_edit_note_multiline_text_route(self, client):

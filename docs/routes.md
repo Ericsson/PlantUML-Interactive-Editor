@@ -127,8 +127,8 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 ## Sequence Diagram (Notes)
 
 - **POST /addNote** — Input: `plantuml`, `svg`, `participant`, `placement` ('over'/'left'/'right'/'spanning'), `text`, `yPosition`, optional `secondParticipant`, optional `noteType` ('note'/'hnote'/'rnote', defaults to 'note' if missing or unrecognized). Returns: JSON `{"plantuml": modified_puml}`. Y-coordinate determines insertion position. All three note types support the same placement grammar identically.
-- **POST /getSeqNoteText** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"text": note_text}`.
-- **POST /editSeqNote** — Input: `plantuml`, `svg`, `svgelement`, `text`. Returns: JSON `{"plantuml": modified_puml}`.
+- **POST /getSeqNoteText** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"text": note_text, "noteType": "note"|"hnote"|"rnote"}`. `noteType` is the detected keyword of the clicked note, falling back to `"note"` if detection fails.
+- **POST /editSeqNote** — Input: `plantuml`, `svg`, `svgelement`, `text`, optional `noteType` ('note'/'hnote'/'rnote'). Returns: JSON `{"plantuml": modified_puml}`. If `noteType` is omitted or unrecognized, only the text is changed and the note's existing keyword is left as-is.
 - **POST /deleteSeqNote** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"plantuml": modified_puml}`.
 
 `text` may contain real newlines (multi-line textarea input); since a note is a single-line puml statement, `addNote`/`editSeqNote` escape newlines to a literal `\n`, and `getSeqNoteText` unescapes `\n` back to real newlines.
