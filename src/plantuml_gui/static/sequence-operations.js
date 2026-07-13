@@ -673,6 +673,12 @@ function noteOperationEventListeners() {
         var item = e.target.closest('[data-note-type]');
         if (!item) return;
         e.preventDefault();
+        // Stop the click from bubbling to document, where Bootstrap's
+        // dropdown auto-close listener would otherwise immediately hide
+        // the placement menu we are about to show (it treats any
+        // document click as "close open dropdown-menus", including this
+        // one, since our menus aren't managed by Bootstrap's JS).
+        e.stopPropagation();
         selectedNoteType = item.getAttribute('data-note-type');
         var typeMenu = document.getElementById('seq-note-type-menu');
         var placementMenu = document.getElementById('seq-note-placement-menu');

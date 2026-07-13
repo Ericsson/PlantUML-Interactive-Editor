@@ -28,6 +28,100 @@ R Note choice, which itself swaps in place for the existing placement menu.
 """
 
 
+def _open_sequence_demo(page):
+    """Switch the app to sequence mode via the real "Sequence Demo" menu
+    item, matching how an end user would do it (not editor.setValue)."""
+    page.click(".toolbar-btn.dropdown-toggle")
+    page.wait_for_selector("#sequence", state="visible")
+    page.click("#sequence")
+    page.wait_for_function(
+        "() => participantLifelines && participantLifelines.length === 3",
+        timeout=15000,
+    )
+
+
+def _right_click_lifeline(page, lifeline_index=0, y_offset=60):
+    """Real right-click near a lifeline, converting SVG user-space
+    coordinates to screen coordinates the same way a real click would land,
+    so this exercises the actual DOM event/bubbling pipeline (unlike
+    dispatchEvent, which does not interact with Bootstrap's document-level
+    click handlers)."""
+    x, y = page.evaluate(
+        """(args) => {
+            const svg = document.querySelector('#colb svg');
+            const lifeline = participantLifelines[args.index];
+            const pt = svg.createSVGPoint();
+            pt.x = lifeline.cx;
+            pt.y = args.yOffset;
+            const screenPt = pt.matrixTransform(svg.getScreenCTM());
+            return [screenPt.x, screenPt.y];
+        }""",
+        {"index": lifeline_index, "yOffset": y_offset},
+    )
+    page.mouse.click(x, y, button="right")
+    page.wait_for_selector("#sequence-menu", state="visible")
+
+
+class TestSequenceNoteTypeMenuRealClicks:
+    """Regression coverage using genuine mouse clicks (not dispatchEvent),
+    since Bootstrap 4's dropdown module attaches a document-level click
+    listener that closes any .dropdown-menu on click - including one this
+    code just opened, if the triggering click's event isn't stopped from
+    bubbling to document. dispatchEvent-based tests do not bubble the same
+    way and previously missed this regression."""
+
+    def test_real_click_through_type_and_placement_menus(self, app_url, page):
+        _open_sequence_demo(page)
+        _right_click_lifeline(page)
+
+        page.click("#seq-addNote")
+        assert (
+            page.evaluate(
+                "() => document.getElementById('seq-note-type-menu').style.display"
+            )
+            == "block"
+        )
+
+        page.click('#seq-note-type-menu [data-note-type="hnote"]')
+
+        # The real bug: this used to be reset back to "none" immediately
+        # after being shown, because the click bubbled to Bootstrap's
+        # document-level dropdown auto-close listener.
+        assert (
+            page.evaluate(
+                "() => document.getElementById('seq-note-type-menu').style.display"
+            )
+            == "none"
+        )
+        assert (
+            page.evaluate(
+                "() => document.getElementById('seq-note-placement-menu').style.display"
+            )
+            == "block"
+        )
+        assert page.evaluate("() => selectedNoteType") == "hnote"
+
+    def test_real_click_creates_hnote_end_to_end(self, app_url, page):
+        _open_sequence_demo(page)
+        _right_click_lifeline(page)
+
+        page.click("#seq-addNote")
+        page.click('#seq-note-type-menu [data-note-type="hnote"]')
+        page.click('#seq-note-placement-menu [data-placement="over"]')
+
+        page.fill("#seq-note-text", "Real click hex note")
+        page.click("#seq-submit-note")
+        page.wait_for_function(
+            "() => editor.session.getValue().includes('Real click hex note')",
+            timeout=15000,
+        )
+
+        lines = page.evaluate(
+            "() => editor.session.getValue().split('\\n').map(l => l.trim())"
+        )
+        assert "hnote over bob : Real click hex note" in lines
+
+
 class TestSequenceNoteTypeMenu:
     def test_add_note_click_shows_type_menu_in_place_of_sequence_menu(
         self, app_url, page
