@@ -72,7 +72,7 @@ but adding them to the PlantUML code should still work.
   - Self-messages supported (same participant as sender and receiver)
   - Messages inserted at correct vertical position between existing messages
 - Notes
-  - Add note from lifeline context menu (over, left of, right of, spanning)
+  - Add note from lifeline context menu, choosing a type (Note, H Note, or R Note) then a placement (over, left of, right of, spanning)
   - Edit note text (right-click note → Edit Note)
   - Delete note (right-click note → Delete Note)
   - Notes inserted at correct vertical position based on click Y-coordinate

@@ -143,3 +143,77 @@ class TestSequenceNoteTypeMenu:
         assert result["typeMenuDisplay"] == "block"
         assert result["selectedType"] == "note"
         assert result["active"] is False
+
+
+class TestSequenceNoteCreateFlowWithType:
+    """Full integration: type menu -> placement menu -> modal -> submit,
+    verifying noteType reaches the backend and produces the right keyword."""
+
+    _PUML = "@startuml\\nparticipant Alice\\nparticipant Bob\\nAlice -> Bob: hello\\n@enduml"
+
+    def _load_sequence(self, page, retries=12, wait_ms=2500):
+        for _ in range(retries):
+            page.evaluate(f"() => editor.session.setValue('{self._PUML}')")
+            page.wait_for_timeout(wait_ms)
+            count = page.evaluate("() => participantLifelines.length")
+            if count == 2:
+                return
+        raise AssertionError("participantLifelines never loaded")
+
+    def _create_note_via_menus(self, page, note_type, text):
+        page.evaluate("""() => { noteOperationEventListeners(); }""")
+        page.evaluate("""() => {
+            const alice = participantLifelines[0];
+            messageOrigin = {cx: alice.cx, y: 40, name: alice.name};
+            firstClickCoordinates = [alice.cx, 40];
+        }""")
+        page.evaluate(
+            """(noteType) => {
+                document.querySelector(
+                    '#seq-note-type-menu [data-note-type="' + noteType + '"]'
+                ).dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+                document.querySelector('#seq-note-placement-menu [data-placement="over"]')
+                    .dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+            }""",
+            note_type,
+        )
+        page.evaluate(
+            """(text) => { document.getElementById('seq-note-text').value = text; }""",
+            text,
+        )
+        page.evaluate("""() => { submitNote(); }""")
+        page.wait_for_timeout(3000)
+
+    def test_creates_hnote_end_to_end(self, app_url, page):
+        self._load_sequence(page)
+        self._create_note_via_menus(page, "hnote", "Hex note text")
+
+        lines = page.evaluate(
+            "() => editor.session.getValue().split('\\n').map(l => l.trim())"
+        )
+        assert "hnote over Alice : Hex note text" in lines
+
+    def test_creates_rnote_end_to_end(self, app_url, page):
+        self._load_sequence(page)
+        self._create_note_via_menus(page, "rnote", "Rect note text")
+
+        lines = page.evaluate(
+            "() => editor.session.getValue().split('\\n').map(l => l.trim())"
+        )
+        assert "rnote over Alice : Rect note text" in lines
+
+    def test_creates_plain_note_when_note_type_selected(self, app_url, page):
+        self._load_sequence(page)
+        self._create_note_via_menus(page, "note", "Plain note text")
+
+        lines = page.evaluate(
+            "() => editor.session.getValue().split('\\n').map(l => l.trim())"
+        )
+        assert "note over Alice : Plain note text" in lines
+
+    def test_note_type_resets_to_note_after_create(self, app_url, page):
+        self._load_sequence(page)
+        self._create_note_via_menus(page, "hnote", "First note")
+
+        reset_type = page.evaluate("() => selectedNoteType")
+        assert reset_type == "note"

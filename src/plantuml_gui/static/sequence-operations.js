@@ -892,7 +892,8 @@ async function submitNote() {
                 placement: notePlacement,
                 text: text,
                 yPosition: firstClickCoordinates[1],
-                xPosition: firstClickCoordinates[0]
+                xPosition: firstClickCoordinates[0],
+                noteType: selectedNoteType
             };
             if (notePlacement === 'spanning') {
                 body.secondParticipant = document.getElementById('seq-note-second-participant').value;
