@@ -468,3 +468,84 @@ class TestSequenceNoteModalTypeSelector:
             "() => editor.session.getValue().split('\\n').map(l => l.trim())"
         )
         assert "hnote over bob : Unchanged type note edited" in lines
+
+
+class TestMultiLineNoteRightClick:
+    """Regression: right-clicking any line of a multi-line note must open
+    the note context menu, not the message menu.
+
+    PlantUML renders each note line as its own <text> element in sequence
+    after the note shape. Only the first line's previousElementSibling is
+    the note shape; lines 2+ follow the preceding line's text. The old
+    single-sibling exclusion therefore missed lines 2+, leaving them
+    hoverable and wired to the message menu. isNoteText() walks back over
+    the earlier lines to the anchoring shape, so every line is excluded
+    from message handling and given pointer-events:none (clicks fall
+    through to the note shape, which opens the note menu)."""
+
+    _PUML = (
+        "@startuml\\nparticipant Alice\\nparticipant Bob\\n"
+        "note over Alice\\nline one\\nline two\\nline three\\nend note\\n"
+        "Alice -> Bob : hello\\n@enduml"
+    )
+
+    def _load(self, page, retries=12, wait_ms=2500):
+        for _ in range(retries):
+            page.evaluate(f"() => editor.session.setValue('{self._PUML}')")
+            page.wait_for_timeout(wait_ms)
+            count = page.evaluate("() => participantLifelines.length")
+            if count == 2:
+                return
+        raise AssertionError("participantLifelines never loaded")
+
+    def _note_line_count(self, page):
+        return page.evaluate(
+            """() => {
+                const svg = document.querySelector('#colb svg');
+                return Array.from(svg.querySelectorAll('text'))
+                    .filter(el => isNoteText(el)).length;
+            }"""
+        )
+
+    def _right_click_note_line(self, page, line_index):
+        """Right-click the center of the Nth note-body text line."""
+        x, y = page.evaluate(
+            """(idx) => {
+                const svg = document.querySelector('#colb svg');
+                const texts = Array.from(svg.querySelectorAll('text'))
+                    .filter(el => isNoteText(el));
+                const box = texts[idx].getBoundingClientRect();
+                return [box.x + box.width / 2, box.y + box.height / 2];
+            }""",
+            line_index,
+        )
+        page.mouse.click(x, y, button="right")
+
+    def test_all_note_lines_detected_as_note_text(self, app_url, page):
+        _open_sequence_demo(page)
+        self._load(page)
+        # All three lines must be recognized as note text (the bug missed
+        # lines 2 and 3).
+        assert self._note_line_count(page) == 3
+
+    def test_right_click_second_line_opens_note_menu(self, app_url, page):
+        _open_sequence_demo(page)
+        self._load(page)
+
+        self._right_click_note_line(page, 1)  # "line two"
+        page.wait_for_selector("#seq-note-menu", state="visible", timeout=15000)
+        assert (
+            page.evaluate("() => document.getElementById('message-menu').style.display")
+            != "block"
+        )
+
+    def test_right_click_last_line_opens_note_menu(self, app_url, page):
+        _open_sequence_demo(page)
+        self._load(page)
+
+        self._right_click_note_line(page, 2)  # "line three"
+        page.wait_for_selector("#seq-note-menu", state="visible", timeout=15000)
+        assert (
+            page.evaluate("() => document.getElementById('message-menu').style.display")
+            != "block"
+        )
