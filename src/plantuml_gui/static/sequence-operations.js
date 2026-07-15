@@ -636,6 +636,12 @@ function isNoteCandidate(svgelement) {
 
 function setupNoteHandlers(svgelements) {
     let noteOrdinal = -1;
+    // Box rects share the exact rnote signature (rect, stroke-width:0.5, no
+    // rx/ry) and are told apart only by enclosing a participant header. Collect
+    // participant bounds so box rects can be skipped here (they get their own
+    // context menu / hover via setupBoxHandlers); otherwise a box would also
+    // open the note menu and be miscounted in the note ordinal.
+    const participantBounds = participantHeaderBounds(svgelements);
 
     // Attaches the shared context-menu/hover/highlight behavior to one
     // shape belonging to note number thisNoteOrdinal. Called once for
@@ -678,6 +684,9 @@ function setupNoteHandlers(svgelements) {
         const tag = svgelement.tagName.toLowerCase();
 
         if ((tag === 'path' || tag === 'polygon' || tag === 'rect') && isNoteCandidate(svgelement)) {
+            // A box rect looks exactly like an rnote; skip it so it isn't
+            // handled/counted as a note (setupBoxHandlers owns it).
+            if (tag === 'rect' && checkIfBoxRect(svgelement, participantBounds)) continue;
             const noteType = classifyNoteShape(svgelement);
             if (noteType === null) continue;
 

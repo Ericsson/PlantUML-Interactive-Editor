@@ -250,6 +250,35 @@ class TestBoxDelete:
         assert result["url"].endswith("deleteSeqBox")
         assert 'fill="#DDDDDD"' in result["body"]["svgelement"]
 
+    def test_box_rect_is_not_treated_as_a_note(self, app_url, page):
+        """Right-clicking a box opens only the box menu, never the note menu.
+
+        A box rect and an rnote share the same SVG signature, so
+        setupNoteHandlers must skip box rects (they enclose a participant)."""
+        result = page.evaluate(
+            """(setup) => {
+                const {boxRect} = eval('(' + setup + ')')();
+                // Run BOTH handler passes over the same nodes, as a render does.
+                const nodes = document.querySelectorAll('#colb svg *');
+                setupNoteHandlers(nodes);
+                setupBoxHandlers(nodes);
+
+                document.getElementById('seq-note-menu').style.display = 'none';
+                document.getElementById('seq-box-menu').style.display = 'none';
+
+                boxRect.dispatchEvent(new MouseEvent('contextmenu', {
+                    bubbles: true, cancelable: true, clientX: 30, clientY: 40}));
+
+                return {
+                    boxMenu: document.getElementById('seq-box-menu').style.display,
+                    noteMenu: document.getElementById('seq-note-menu').style.display,
+                };
+            }""",
+            SETUP_BOX,
+        )
+        assert result["boxMenu"] == "block"
+        assert result["noteMenu"] == "none"
+
     def test_box_menu_dismissed_on_click(self, app_url, page):
         """The box context menu hides on the next document click (e.g. after
         choosing Delete Box), like the other sequence menus."""

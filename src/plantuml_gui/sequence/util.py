@@ -26,6 +26,7 @@ from typing import List, Optional
 
 from pyquery import PyQuery as Pq
 
+from .box import _participant_header_bounds, is_box_rect
 from .classes import Message
 
 # PlantUML renders each note type as a visually distinct shape, independent
@@ -122,12 +123,20 @@ def iter_note_shapes(svg: str) -> List[tuple[Pq, str]]:
     """
     d = Pq(svg)
     shapes = list(d("path, polygon, rect").items())
+    # Box rects share the exact rnote signature (rect, stroke-width:0.5, no
+    # rx/ry); they are told apart only by enclosing a participant header. Skip
+    # them so a box is never counted/handled as an rnote.
+    participant_bounds = _participant_header_bounds(d)
     results: List[tuple[Pq, str]] = []
     i = 0
 
     while i < len(shapes):
         shape = shapes[i]
         if not _is_note_candidate(shape):
+            i += 1
+            continue
+
+        if shape[0].tag == "rect" and is_box_rect(shape, participant_bounds):
             i += 1
             continue
 

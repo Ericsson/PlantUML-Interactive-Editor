@@ -489,6 +489,31 @@ class TestBoxRoutes:
         assert "participant alice" in lines
 
 
+class TestBoxNotConfusedWithNote:
+    # A box rect and an rnote share the exact same SVG signature; only the
+    # box encloses a participant. Detection must not conflate the two.
+    BOX_AND_RNOTE_PUML = """@startuml
+box "MyBox"
+participant alice
+participant bob
+end box
+rnote over alice: a real rnote
+alice -> bob: m1
+@enduml"""
+
+    def test_note_detection_ignores_box(self):
+        from plantuml_gui.sequence.note import get_note_positions
+
+        svg = _g_inner(self.BOX_AND_RNOTE_PUML)
+        notes = get_note_positions(self.BOX_AND_RNOTE_PUML, svg)
+        # Exactly one note (the rnote); the box must not be counted.
+        assert len(notes) == 1
+
+    def test_box_still_detected_alongside_rnote(self):
+        svg = _svg_of(self.BOX_AND_RNOTE_PUML)
+        assert len(_box_rects(svg)) == 1
+
+
 class TestBoxPositions:
     def test_get_sequence_positions_includes_boxes(self):
         svg = _g_inner(SINGLE_BOX_PUML)
