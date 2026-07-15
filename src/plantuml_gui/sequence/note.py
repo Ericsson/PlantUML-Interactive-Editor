@@ -180,14 +180,43 @@ def index_of_clicked_note(svg: str, svgelement: str) -> int:
     return -1
 
 
-def get_note_text(puml: str, svg: str, svgelement: str) -> str:
-    """Get the text of the clicked note."""
+def _resolve_note_line(puml: str, svg: str, svgelement: str) -> str | None:
+    """Resolve the clicked note's puml source line, or None if not found.
+
+    Shared by get_note_text/get_note_type so the SVG is parsed and the
+    puml scanned once per lookup, and the not-found case is handled in a
+    single place.
+    """
     idx = index_of_clicked_note(svg, svgelement)
     line_index = _find_note_line_index(puml, idx)
-    line = puml.splitlines()[line_index]
+    if line_index == -1:
+        return None
+    return puml.splitlines()[line_index]
+
+
+def _note_text_from_line(line: str) -> str:
+    """Extract a note's display text from its puml line (pure)."""
     colon_pos = line.find(": ")
     text = line[colon_pos + 2 :] if colon_pos != -1 else ""
     return unescape_multiline_text(text)
+
+
+def _note_type_from_line(line: str) -> str:
+    """Extract a note's keyword ("note"/"hnote"/"rnote") from its puml line.
+
+    Falls back to "note" for an unrecognized line, matching
+    _normalize_note_type's default so callers always get a valid type.
+    """
+    keyword = note_line_keyword(line.strip())
+    return keyword if keyword is not None else "note"
+
+
+def get_note_text(puml: str, svg: str, svgelement: str) -> str:
+    """Get the text of the clicked note."""
+    line = _resolve_note_line(puml, svg, svgelement)
+    if line is None:
+        return ""
+    return _note_text_from_line(line)
 
 
 def get_note_type(puml: str, svg: str, svgelement: str) -> str:
@@ -196,13 +225,24 @@ def get_note_type(puml: str, svg: str, svgelement: str) -> str:
     Falls back to "note" if the note can't be found, matching
     _normalize_note_type's default so callers always get a valid type.
     """
-    idx = index_of_clicked_note(svg, svgelement)
-    line_index = _find_note_line_index(puml, idx)
-    if line_index == -1:
+    line = _resolve_note_line(puml, svg, svgelement)
+    if line is None:
         return "note"
-    line = puml.splitlines()[line_index]
-    keyword = note_line_keyword(line.strip())
-    return keyword if keyword is not None else "note"
+    return _note_type_from_line(line)
+
+
+def get_note_text_and_type(puml: str, svg: str, svgelement: str) -> tuple[str, str]:
+    """Return (text, note_type) for the clicked note in one lookup.
+
+    Resolves the note's puml line once (parsing the SVG a single time)
+    and derives both fields, so callers needing both - like the
+    /getSeqNoteText route - avoid a redundant parse. Mirrors the
+    individual functions' not-found defaults ("" text, "note" type).
+    """
+    line = _resolve_note_line(puml, svg, svgelement)
+    if line is None:
+        return "", "note"
+    return _note_text_from_line(line), _note_type_from_line(line)
 
 
 def edit_note(

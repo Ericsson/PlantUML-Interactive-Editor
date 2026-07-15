@@ -93,6 +93,7 @@
 │       ├── test_sequence_activation.py       # Activation bar e2e tests
 │       ├── test_sequence_hover_highlight.py  # Editor <-> diagram hover highlighting e2e tests
 │       ├── test_sequence_message_interactions.py # Message add/edit/delete e2e tests
+│       ├── test_sequence_note_menu.py         # Note type menu, modal type selector & create/edit flow e2e tests
 │       └── test_sequence_participant.py      # Participant add/rename/delete e2e tests
 └── .kiro/steering/         # Kiro steering files
 ```
