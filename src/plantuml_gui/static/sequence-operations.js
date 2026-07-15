@@ -373,13 +373,10 @@ function checkIfMessageElement(svgelement) {
         if (svgelement.getAttribute('font-weight') === 'bold') {
             return false;
         }
-        // Exclude note text (preceded by a note/hnote/rnote shape, or by
-        // the fold-corner path for "note" specifically)
-        let prev = svgelement.previousElementSibling;
-        if (prev && (prev.tagName.toLowerCase() === 'path' ||
-                     prev.tagName.toLowerCase() === 'polygon' ||
-                     prev.tagName.toLowerCase() === 'rect') &&
-            isNoteCandidate(prev)) {
+        // Exclude note text. Each note line is a separate <text> element;
+        // only the first line's previous sibling is the note shape, so
+        // isNoteText walks back over earlier lines to find the anchor.
+        if (isNoteText(svgelement)) {
             return false;
         }
         return true;
@@ -634,6 +631,30 @@ function isNoteCandidate(svgelement) {
     return true;
 }
 
+// Determines whether a font-size-13 <text> element is a line of a note's
+// body. PlantUML renders each note line as a separate <text> element in
+// sequence after the note's shape (path/polygon/rect). Only the first
+// line's previous sibling is the note shape; each later line follows the
+// preceding line's text, so a single previousElementSibling check misses
+// lines 2+. Walk back over the earlier (non-bold, font-size-13) note-line
+// texts to find the shape that anchors them. A message label's text is
+// always preceded by its arrow line/polygon (never a note candidate), so
+// this never misclassifies message text as note text.
+function isNoteText(svgelement) {
+    if (svgelement.tagName.toLowerCase() !== 'text') return false;
+    if (svgelement.getAttribute('font-size') !== '13') return false;
+    let prev = svgelement.previousElementSibling;
+    while (prev && prev.tagName.toLowerCase() === 'text' &&
+           prev.getAttribute('font-size') === '13' &&
+           prev.getAttribute('font-weight') !== 'bold') {
+        prev = prev.previousElementSibling;
+    }
+    if (!prev) return false;
+    const prevTag = prev.tagName.toLowerCase();
+    return (prevTag === 'path' || prevTag === 'polygon' || prevTag === 'rect') &&
+        isNoteCandidate(prev);
+}
+
 function setupNoteHandlers(svgelements) {
     let noteOrdinal = -1;
     // Box rects share the exact rnote signature (rect, stroke-width:0.5, no
@@ -707,20 +728,14 @@ function setupNoteHandlers(svgelements) {
             }
         }
 
-        // Note text should not be hoverable. previousElementSibling is
-        // the note's fold-corner path for "note" (which is note-styled
-        // but not independently classifiable as a full note shape - a
-        // path with 4 points), or the single shape itself for "hnote"/
-        // "rnote". isNoteCandidate alone (tag + stroke-width:0.5, no
-        // rx/ry) correctly matches both cases.
-        if (tag === 'text' && svgelement.getAttribute('font-size') === '13') {
-            let prev = svgelement.previousElementSibling;
-            if (prev && (prev.tagName.toLowerCase() === 'path' ||
-                         prev.tagName.toLowerCase() === 'polygon' ||
-                         prev.tagName.toLowerCase() === 'rect') &&
-                isNoteCandidate(prev)) {
-                svgelement.style.pointerEvents = 'none';
-            }
+        // Note text should not be hoverable. Each note line is a separate
+        // <text> element; only the first line's previous sibling is the
+        // note's shape (fold-corner path for "note", or the single shape
+        // for "hnote"/"rnote"), so isNoteText walks back over earlier lines
+        // to find the anchoring shape and disable pointer events on every
+        // line - not just the first.
+        if (isNoteText(svgelement)) {
+            svgelement.style.pointerEvents = 'none';
         }
     }
 }
