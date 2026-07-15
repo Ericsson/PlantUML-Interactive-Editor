@@ -139,6 +139,7 @@ function isSequenceAddMode() {
     return isAddMessageActive ||
         (typeof isActivationAddMode === 'function' && isActivationAddMode()) ||
         (typeof isGroupAddMode === 'function' && isGroupAddMode()) ||
+        (typeof isBoxAddMode === 'function' && isBoxAddMode()) ||
         (typeof isNoteAddMode === 'function' && isNoteAddMode());
 }
 
@@ -226,6 +227,9 @@ function setupLifelineInteraction() {
         } else if (isGroupAddMode()) {
             handleGroupMouseMove(svgContainer, y);
             hideIndicatorCircle();
+        } else if (typeof isBoxAddMode === 'function' && isBoxAddMode()) {
+            handleBoxMouseMove(svgContainer, x);
+            hideIndicatorCircle();
         } else {
             hideGhostArrow();
             const lifeline = findNearestLifeline(x, y, participantLifelines);
@@ -257,6 +261,14 @@ function setupLifelineInteraction() {
             const transformed = svgPointFromEvent(e, svgContainer);
             e.stopPropagation();
             handleGroupClick(e, transformed.y);
+            return;
+        }
+
+        // Box-add mode: click confirms the participant range (by center-x).
+        if (typeof isBoxAddMode === 'function' && isBoxAddMode()) {
+            const transformed = svgPointFromEvent(e, svgContainer);
+            e.stopPropagation();
+            handleBoxClick(e, transformed.x);
             return;
         }
 

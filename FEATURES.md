@@ -93,6 +93,13 @@ but adding them to the PlantUML code should still work.
   - Label entered via modal dialog after selecting the range
   - Rename a group's title (right-click the keyword tab or its header text → Rename); the keyword (group/alt/opt/loop) itself is unchanged
   - Delete a group (right-click the keyword tab or its header text → Delete Group); unwraps the block, removing only the header and matching `end` line and keeping its contents in place
+- Participant boxes
+  - Add a box from the participant context menu (right-click a participant → Box)
+  - Hover another participant to grow a live ghost box across the range, then click to create it
+  - Wraps the selected contiguous participants in a `box ... end box` block (created untitled/uncolored for now)
+  - Nested boxes supported: when the selected range nests inside or contains an existing box, `!pragma teoz true` is added automatically so PlantUML can render the nesting
+  - A range that partially overlaps (crosses) an existing box is rejected with an error, since PlantUML cannot render crossing boxes
+  - Delete a box (right-click the box → Delete Box); unwraps it, removing only the `box` header and matching `end box` line and keeping the participants
 - Bidirectional hover highlighting
-  - Hovering a message, participant, note, or group box in the diagram highlights its line(s) in the editor
+  - Hovering a message, participant, note, group box, or participant box in the diagram highlights its line(s) in the editor
   - Hovering a line in the editor, or moving the cursor to it, highlights the matching element in the diagram
