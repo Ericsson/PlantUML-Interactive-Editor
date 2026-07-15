@@ -250,6 +250,19 @@ class TestBoxDelete:
         assert result["url"].endswith("deleteSeqBox")
         assert 'fill="#DDDDDD"' in result["body"]["svgelement"]
 
+    def test_box_menu_dismissed_on_click(self, app_url, page):
+        """The box context menu hides on the next document click (e.g. after
+        choosing Delete Box), like the other sequence menus."""
+        result = page.evaluate("""() => {
+            // Wire the sequence menu-dismiss document listener.
+            addSequenceEventListeners();
+            const menu = document.getElementById('seq-box-menu');
+            menu.style.display = 'block';
+            document.body.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+            return menu.style.display;
+        }""")
+        assert result == "none"
+
 
 class TestBoxHoverHighlight:
     def test_hovering_box_marks_editor_rows(self, app_url, page):

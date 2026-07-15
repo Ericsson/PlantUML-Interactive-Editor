@@ -503,7 +503,8 @@ function addSequenceEventListeners() {
             'seq-note-menu',
             'activation-end-menu',
             'seq-group-type-menu',
-            'seq-group-menu'
+            'seq-group-menu',
+            'seq-box-menu'
         ];
 
         menuIds.forEach(function(id) {
