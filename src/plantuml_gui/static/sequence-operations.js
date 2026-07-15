@@ -6,6 +6,7 @@ const LIFELINE_TOLERANCE = 15;
 // Note/group positions fetched from backend (refreshed each render)
 let notePositions = []; // [{cy, index}, ...]
 let groupPositions = []; // [{headerIndex, endIndex}, ...]
+let boxPositions = []; // [{headerIndex, endIndex}, ...]
 
 // Elements highlighted from the editor side, with how to restore them
 let sequenceHighlighted = []; // [{el, style, token}, ...] (see hover-highlight.js)
@@ -24,7 +25,8 @@ const SEQ_HIGHLIGHTS = {
     participant: attributeHighlight('fill', '#d8d8d8'),
     note: attributeHighlight('fill', '#d8d8d8'),
     message: stylePropertyHighlight({fontWeight: 'bold', strokeWidth: '2.0'}),
-    group: stylePropertyHighlight({strokeWidth: '2.0'})
+    group: stylePropertyHighlight({strokeWidth: '2.0'}),
+    box: stylePropertyHighlight({strokeWidth: '2.0'})
 };
 
 // Register a diagram element to highlight when the given editor row is hovered.
@@ -54,6 +56,7 @@ async function fetchSequencePositions() {
     messagePositions = data ? data.messages : [];
     notePositions = data ? data.notes : [];
     groupPositions = data ? data.groups : [];
+    boxPositions = data ? data.boxes : [];
 }
 
 // Vertical position of a message SVG element, comparable to messagePositions cy
@@ -311,6 +314,7 @@ function sequenceEventListeners() {
     noteOperationEventListeners();
     activationEventListeners();
     groupOperationEventListeners();
+    boxEventListeners();
 }
 
 // Called on every render when diagram type is sequence
@@ -330,6 +334,7 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
         cancelMessageAddMode();
         cancelActivationAddMode();
         cancelGroupAddMode();
+        cancelBoxAddMode();
         cancelNoteAddMode();
 
         handleContextMenuBackground(svgContainer);
@@ -338,6 +343,7 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
         setupMessageHandlers(svg.querySelectorAll('*'), svg);
         setupNoteHandlers(svg.querySelectorAll('*'));
         setupGroupHandlers(svg.querySelectorAll('*'));
+        setupBoxHandlers(svg.querySelectorAll('*'));
 
         toggleLoadingOverlay();
     }).catch((error) => {
@@ -630,6 +636,12 @@ function isNoteCandidate(svgelement) {
 
 function setupNoteHandlers(svgelements) {
     let noteOrdinal = -1;
+    // Box rects share the exact rnote signature (rect, stroke-width:0.5, no
+    // rx/ry) and are told apart only by enclosing a participant header. Collect
+    // participant bounds so box rects can be skipped here (they get their own
+    // context menu / hover via setupBoxHandlers); otherwise a box would also
+    // open the note menu and be miscounted in the note ordinal.
+    const participantBounds = participantHeaderBounds(svgelements);
 
     // Attaches the shared context-menu/hover/highlight behavior to one
     // shape belonging to note number thisNoteOrdinal. Called once for
@@ -672,6 +684,9 @@ function setupNoteHandlers(svgelements) {
         const tag = svgelement.tagName.toLowerCase();
 
         if ((tag === 'path' || tag === 'polygon' || tag === 'rect') && isNoteCandidate(svgelement)) {
+            // A box rect looks exactly like an rnote; skip it so it isn't
+            // handled/counted as a note (setupBoxHandlers owns it).
+            if (tag === 'rect' && checkIfBoxRect(svgelement, participantBounds)) continue;
             const noteType = classifyNoteShape(svgelement);
             if (noteType === null) continue;
 
@@ -1011,5 +1026,122 @@ async function submitNote() {
         setPuml(data.plantuml);
     } catch (error) {
         displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+    }
+}
+
+
+// --- Box handlers (contextmenu + hover on participant boxes) ---
+
+// Collect participant header rect bounds (rounded corners + the shared 0.5
+// stroke), used to identify box rects by geometric enclosure.
+function participantHeaderBounds(svgelements) {
+    const bounds = [];
+    for (const el of svgelements) {
+        if (el.tagName.toLowerCase() !== 'rect') continue;
+        const style = el.getAttribute('style') || '';
+        if (el.hasAttribute('rx') && el.hasAttribute('ry') &&
+            style.includes('stroke-width:0.5')) {
+            bounds.push({
+                x: parseFloat(el.getAttribute('x')),
+                y: parseFloat(el.getAttribute('y')),
+                width: parseFloat(el.getAttribute('width')),
+                height: parseFloat(el.getAttribute('height'))
+            });
+        }
+    }
+    return bounds;
+}
+
+// A box rect shares the participant header style but has no rounded corners and
+// a solid fill, and encloses at least one participant header. That enclosure is
+// what separates it from an rnote (identical style/fill). Mirrors is_box_rect
+// in sequence/box.py.
+function checkIfBoxRect(svgelement, participantBounds) {
+    if (svgelement.tagName.toLowerCase() !== 'rect') return false;
+    if ((svgelement.getAttribute('style') || '') !== 'stroke:#181818;stroke-width:0.5;') {
+        return false;
+    }
+    if (svgelement.hasAttribute('rx') || svgelement.hasAttribute('ry')) return false;
+    const fill = svgelement.getAttribute('fill');
+    if (!fill || fill === 'none') return false;
+
+    const x = parseFloat(svgelement.getAttribute('x'));
+    const y = parseFloat(svgelement.getAttribute('y'));
+    const w = parseFloat(svgelement.getAttribute('width'));
+    const h = parseFloat(svgelement.getAttribute('height'));
+    return participantBounds.some(b =>
+        x <= b.x && b.x + b.width <= x + w &&
+        y <= b.y && b.y + b.height <= y + h);
+}
+
+// Opens the box context menu, identifying the box by its rect (the backend
+// matches boxes by the rect's x/y).
+// Box rects recorded during the last setup walk, with their bounds, so the
+// background context menu can hit-test a right-click against them.
+let boxElements = []; // [{rect, x, y, w, h}, ...]
+
+// Return the innermost box enclosing the given point, or null. "Innermost" =
+// smallest-area enclosing box, so a right-click inside a nested box targets the
+// inner box rather than its container.
+function findEnclosingBox(cx, cy) {
+    let best = null;
+    let bestArea = Infinity;
+    for (const b of boxElements) {
+        if (cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h) {
+            const area = b.w * b.h;
+            if (area < bestArea) {
+                bestArea = area;
+                best = b.rect;
+            }
+        }
+    }
+    return best;
+}
+
+// Attaches hover highlighting to each box rect and records its bounds. The box
+// context menu is not attached here: the box rect covers the lifeline area, so
+// a dedicated handler would hijack the lifeline right-click. Instead the
+// background (lifeline) context menu detects an enclosing box via
+// findEnclosingBox and appends Edit Box / Delete Box items. Boxes appear in
+// document order matching puml source order (outer before inner), so the
+// ordinal indexes boxPositions.
+function setupBoxHandlers(svgelements) {
+    const participantBounds = participantHeaderBounds(svgelements);
+    boxElements = [];
+    let boxOrdinal = -1;
+
+    for (let index = 0; index < svgelements.length; index++) {
+        const svgelement = svgelements[index];
+        if (!checkIfBoxRect(svgelement, participantBounds)) continue;
+
+        boxOrdinal++;
+        const box = boxPositions[boxOrdinal];
+
+        boxElements.push({
+            rect: svgelement,
+            x: parseFloat(svgelement.getAttribute('x')),
+            y: parseFloat(svgelement.getAttribute('y')),
+            w: parseFloat(svgelement.getAttribute('width')),
+            h: parseFloat(svgelement.getAttribute('height')),
+        });
+
+        // Register for editor->diagram highlighting on both the box header and
+        // its end box line (registerSequenceRow drops any -1 line).
+        if (box) {
+            registerSequenceRow(box.headerIndex, svgelement, 'box');
+            registerSequenceRow(box.endIndex, svgelement, 'box');
+        }
+
+        const thisOrdinal = boxOrdinal;
+        svgelement.addEventListener('mouseover', function() {
+            if (isSequenceAddMode()) return;
+            const b = boxPositions[thisOrdinal];
+            if (b && b.headerIndex >= 0) {
+                getmarker([b.headerIndex, b.endIndex >= 0 ? b.endIndex : b.headerIndex]);
+            }
+        });
+        svgelement.addEventListener('mouseout', function() {
+            clearMarkers();
+        });
     }
 }

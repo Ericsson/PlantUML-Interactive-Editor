@@ -139,10 +139,51 @@ function isSequenceAddMode() {
     return isAddMessageActive ||
         (typeof isActivationAddMode === 'function' && isActivationAddMode()) ||
         (typeof isGroupAddMode === 'function' && isGroupAddMode()) ||
+        (typeof isBoxAddMode === 'function' && isBoxAddMode()) ||
         (typeof isNoteAddMode === 'function' && isNoteAddMode());
 }
 
 // --- Background context menu (right-click on diagram) ---
+
+// Lifeline-only actions (add message/activation/note/group) require a lifeline
+// under the cursor; hide them when the right-click is inside a box but not on a
+// lifeline, leaving only the Edit Box / Delete Box items.
+function toggleLifelineMenuItems(hasLifeline) {
+    ['addMessageSolid', 'addMessageDashed', 'seq-addActivation',
+     'seq-addNote', 'seq-addGroup'].forEach((id) => {
+        const li = document.getElementById(id).closest('li');
+        if (li) li.style.display = hasLifeline ? '' : 'none';
+    });
+}
+
+// Show the "Delete activation bar" item if the right-clicked target is an
+// activation bar (rect with stroke-width:1.0; headers use 0.5, the background a
+// transparent stroke), and remember the bar for the delete request.
+function toggleActivationDeleteItem(target) {
+    const onBar = target && target.tagName &&
+        target.tagName.toLowerCase() === 'rect' &&
+        (target.getAttribute('style') || '').includes('stroke:#181818;stroke-width:1.0');
+    const item = document.getElementById('seq-deleteActivation-item');
+    const divider = document.getElementById('seq-deleteActivation-divider');
+    if (onBar) lastclickedsvgelement = target;
+    item.style.display = onBar ? '' : 'none';
+    divider.style.display = onBar ? '' : 'none';
+}
+
+// Show Edit Box / Delete Box when the right-click is inside a box, recording the
+// box in contextBoxRect. The divider only shows when lifeline items precede it.
+// The box rect has no context-menu handler of its own -- it covers the lifeline
+// area, so one would hijack the lifeline right-click -- so the box is detected
+// here by hit-testing the recorded box bounds (findEnclosingBox).
+function toggleBoxMenuItems(enclosingBox, hasLifeline) {
+    const divider = document.getElementById('seq-box-divider');
+    const editItem = document.getElementById('seq-editBox-item');
+    const deleteItem = document.getElementById('seq-deleteBox-item');
+    contextBoxRect = enclosingBox || null;
+    divider.style.display = enclosingBox && hasLifeline ? '' : 'none';
+    editItem.style.display = enclosingBox ? '' : 'none';
+    deleteItem.style.display = enclosingBox ? '' : 'none';
+}
 
 function backgroundContextMenu(e, svgElement) {
     e.preventDefault();
@@ -154,30 +195,20 @@ function backgroundContextMenu(e, svgElement) {
     if (isSequenceAddMode()) return;
 
     const lifeline = findNearestLifeline(cx, cy, participantLifelines);
+    const enclosingBox =
+        typeof findEnclosingBox === 'function' ? findEnclosingBox(cx, cy) : null;
 
-    if (!lifeline) return;
+    // Show the menu if the click is on a lifeline or inside a box. Right-
+    // clicking empty space that is neither shows nothing.
+    if (!lifeline && !enclosingBox) return;
 
-    firstClickCoordinates = [lifeline.cx, cy];
-    messageOrigin = {cx: lifeline.cx, y: cy, name: lifeline.name};
-
-    // If the right-click landed on an activation bar (a rect with the
-    // stroke:#181818;stroke-width:1.0 style; participant headers use 0.5 and the
-    // SVG background uses a transparent stroke), show the "Delete activation
-    // bar" item and remember the clicked bar for the delete request.
-    const target = e.target;
-    const onBar = target && target.tagName &&
-        target.tagName.toLowerCase() === 'rect' &&
-        (target.getAttribute('style') || '').includes('stroke:#181818;stroke-width:1.0');
-    const deleteItem = document.getElementById('seq-deleteActivation-item');
-    const deleteDivider = document.getElementById('seq-deleteActivation-divider');
-    if (onBar) {
-        lastclickedsvgelement = target;
-        deleteItem.style.display = '';
-        deleteDivider.style.display = '';
-    } else {
-        deleteItem.style.display = 'none';
-        deleteDivider.style.display = 'none';
+    toggleLifelineMenuItems(!!lifeline);
+    if (lifeline) {
+        firstClickCoordinates = [lifeline.cx, cy];
+        messageOrigin = {cx: lifeline.cx, y: cy, name: lifeline.name};
     }
+    toggleActivationDeleteItem(e.target);
+    toggleBoxMenuItems(enclosingBox, !!lifeline);
 
     var contextMenu = document.getElementById('sequence-menu');
     contextMenu.style.display = 'block';
@@ -226,6 +257,9 @@ function setupLifelineInteraction() {
         } else if (isGroupAddMode()) {
             handleGroupMouseMove(svgContainer, y);
             hideIndicatorCircle();
+        } else if (typeof isBoxAddMode === 'function' && isBoxAddMode()) {
+            handleBoxMouseMove(svgContainer, x);
+            hideIndicatorCircle();
         } else {
             hideGhostArrow();
             const lifeline = findNearestLifeline(x, y, participantLifelines);
@@ -257,6 +291,14 @@ function setupLifelineInteraction() {
             const transformed = svgPointFromEvent(e, svgContainer);
             e.stopPropagation();
             handleGroupClick(e, transformed.y);
+            return;
+        }
+
+        // Box-add mode: click confirms the participant range (by center-x).
+        if (typeof isBoxAddMode === 'function' && isBoxAddMode()) {
+            const transformed = svgPointFromEvent(e, svgContainer);
+            e.stopPropagation();
+            handleBoxClick(e, transformed.x);
             return;
         }
 

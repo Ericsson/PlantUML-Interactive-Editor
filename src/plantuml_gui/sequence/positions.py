@@ -36,6 +36,7 @@ what its own get_*_positions function already returned.
 
 from typing import Dict
 
+from .box import get_box_positions
 from .group import get_group_positions
 from .message import get_message_positions
 from .note import get_note_positions
@@ -49,4 +50,5 @@ def get_sequence_positions(puml: str, svg: str) -> Dict[str, object]:
         "messages": get_message_positions(puml, svg),
         "notes": get_note_positions(puml, svg),
         "groups": get_group_positions(puml, svg),
+        "boxes": get_box_positions(puml, svg),
     }

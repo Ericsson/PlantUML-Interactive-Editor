@@ -59,6 +59,9 @@
   <li><a class="dropdown-item" href="#" id="seq-addGroup">Add Group &#9634;</a></li>
   <li id="seq-deleteActivation-divider" style="display:none"><hr class="dropdown-divider"></li>
   <li id="seq-deleteActivation-item" style="display:none"><a class="dropdown-item" href="#" id="seq-deleteActivation">Delete activation bar</a></li>
+  <li id="seq-box-divider" style="display:none"><hr class="dropdown-divider"></li>
+  <li id="seq-editBox-item" style="display:none"><a class="dropdown-item" href="#" id="seq-editBox">Edit Box</a></li>
+  <li id="seq-deleteBox-item" style="display:none"><a class="dropdown-item" href="#" id="seq-deleteBox">Delete Box</a></li>
 </div>
 
 <div class="dropdown-menu" id="seq-group-type-menu">
@@ -145,6 +148,7 @@
   <li><a class="dropdown-item" href="#" id="addParticipantLeft"><span style="display:inline-block;transform:scaleX(-1)">&#10132;</span> Add Participant</a></li>
   <li><a class="dropdown-item" href="#" id="addParticipantRight">Add Participant &#10132;</a></li>
   <li><a class="dropdown-item" href="#" id="renameParticipant">Rename</a></li>
+  <li><a class="dropdown-item" href="#" id="seq-addBox">Box &#9634;</a></li>
   <li><hr class="dropdown-divider"></li>
   <li><a class="dropdown-item" href="#" id="deleteParticipant">Delete Participant</a></li>
 </div>
@@ -172,6 +176,46 @@
           </div>
           <div class="modal-footer">
               <button id="seq-submit-group" type="button" class="btn btn-primary" onclick="submitGroup()">Submit</button>
+          </div>
+      </div>
+  </div>
+</div>
+
+
+<div class="modal fade" id="seq-box-modalForm" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+      <div class="modal-content shadow">
+          <div class="modal-header">
+              <h5 class="modal-title">Edit Box</h5>
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                  <span aria-hidden="true">&times;</span>
+              </button>
+          </div>
+          <div class="modal-body">
+              <div class="form-group">
+                  <label for="seq-box-title-text" class="col-form-label">Title:</label>
+                  <textarea class="form-control" id="seq-box-title-text"></textarea>
+              </div>
+              <div class="form-group">
+                  <label for="seq-box-color-select" class="col-form-label">Color:</label>
+                  <select class="form-control" id="seq-box-color-select">
+                      <option value="none">None</option>
+                      <option value="LightBlue" style="background-color:LightBlue">LightBlue</option>
+                      <option value="LightGreen" style="background-color:LightGreen">LightGreen</option>
+                      <option value="LightYellow" style="background-color:LightYellow">LightYellow</option>
+                      <option value="LightPink" style="background-color:LightPink">LightPink</option>
+                      <option value="LightGray" style="background-color:LightGray">LightGray</option>
+                      <option value="Wheat" style="background-color:Wheat">Wheat</option>
+                      <option value="Khaki" style="background-color:Khaki">Khaki</option>
+                      <option value="Orange" style="background-color:Orange">Orange</option>
+                      <option value="LightCoral" style="background-color:LightCoral">LightCoral</option>
+                      <option value="LightCyan" style="background-color:LightCyan">LightCyan</option>
+                      <option value="Thistle" style="background-color:Thistle">Thistle</option>
+                  </select>
+              </div>
+          </div>
+          <div class="modal-footer">
+              <button id="seq-submit-box" type="button" class="btn btn-primary" onclick="submitBoxEdit()">Submit</button>
           </div>
       </div>
   </div>
