@@ -44,17 +44,26 @@ function forEachParticipantHeaderRect(svgElement, callback) {
 }
 
 // Vertical band the ghost box spans: from just above the top header row down to
-// the bottom of the lifelines (approximating the real box, which is full-height).
+// just below the bottom header row (PlantUML repeats participant headers at the
+// bottom of the lifelines), so the ghost fully contains both header rows like
+// the real box, rather than cutting through the lower headers.
 function ghostVerticalExtent(svgElement) {
     let top = Infinity;
+    let bottom = -Infinity;
     forEachParticipantHeaderRect(svgElement, (rect) => {
-        top = Math.min(top, parseFloat(rect.getAttribute('y')));
+        const y = parseFloat(rect.getAttribute('y'));
+        const h = parseFloat(rect.getAttribute('height'));
+        top = Math.min(top, y);
+        bottom = Math.max(bottom, y + h);
     });
-    let bottom = 0;
-    for (const p of participantLifelines) {
-        bottom = Math.max(bottom, p.yBottom);
+    // Fall back to the lifeline extent if no header rects were found.
+    if (!isFinite(top)) {
+        top = 0;
+        for (const p of participantLifelines) {
+            bottom = Math.max(bottom, p.yBottom);
+        }
     }
-    if (!isFinite(top)) top = 0;
+    if (!isFinite(bottom)) bottom = top;
     return {top: top - BOX_PADDING, bottom: bottom + BOX_PADDING};
 }
 
