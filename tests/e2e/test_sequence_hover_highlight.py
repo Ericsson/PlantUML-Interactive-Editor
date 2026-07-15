@@ -100,6 +100,8 @@ class TestSvgToEditorMarkers:
             rect.setAttribute('x', '25');
             rect.setAttribute('width', '50');
             rect.setAttribute('fill', '#E2E2F0');
+            rect.setAttribute('rx', '2.5');
+            rect.setAttribute('ry', '2.5');
             colb.querySelector('g').appendChild(rect);
             setupParticipantHandlers([rect], colb.querySelector('g'), colb);
 
@@ -139,6 +141,8 @@ class TestSvgToEditorMarkers:
             rect.setAttribute('x', '25');
             rect.setAttribute('width', '50');
             rect.setAttribute('fill', '#E2E2F0');
+            rect.setAttribute('rx', '2.5');
+            rect.setAttribute('ry', '2.5');
             colb.querySelector('g').appendChild(rect);
             setupParticipantHandlers([rect], colb.querySelector('g'), colb);
 
@@ -161,8 +165,12 @@ class TestSvgToEditorMarkers:
 
             const body = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             body.setAttribute('fill', '#FEFFDD');
+            body.setAttribute('style', 'stroke:#181818;stroke-width:0.5;');
+            body.setAttribute('d', 'M5,35 L5,60 L136,60 L136,45 L126,35 L5,35 ');
             const fold = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             fold.setAttribute('fill', '#FEFFDD');
+            fold.setAttribute('style', 'stroke:#181818;stroke-width:0.5;');
+            fold.setAttribute('d', 'M126,35 L126,45 L136,45 L126,35 ');
             setupNoteHandlers([body, fold]);
 
             body.dispatchEvent(new MouseEvent('mouseover', {bubbles: true}));
@@ -194,11 +202,21 @@ class TestSvgToEditorMarkers:
             notePositions = [{cy: 40, index: 3}, {cy: 90, index: 5}];
             sequenceHighlighted = [];
 
+            const bodyDs = ['M5,25 L5,50 L136,50 L136,35 L126,25 L5,25 ',
+                             'M5,75 L5,100 L136,100 L136,85 L126,75 L5,75 '];
+            const foldDs = ['M126,25 L126,35 L136,35 L126,25 ',
+                             'M126,75 L126,85 L136,85 L126,75 '];
             const paths = [];
-            for (let i = 0; i < 4; i++) {
-                const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                p.setAttribute('fill', '#FEFFDD');
-                paths.push(p);
+            for (let i = 0; i < 2; i++) {
+                const body = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                body.setAttribute('fill', '#FEFFDD');
+                body.setAttribute('style', 'stroke:#181818;stroke-width:0.5;');
+                body.setAttribute('d', bodyDs[i]);
+                const fold = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                fold.setAttribute('fill', '#FEFFDD');
+                fold.setAttribute('style', 'stroke:#181818;stroke-width:0.5;');
+                fold.setAttribute('d', foldDs[i]);
+                paths.push(body, fold);
             }
             setupNoteHandlers(paths);
 
@@ -296,9 +314,9 @@ class TestEditorToSvgHighlight:
             sequenceHighlighted = [];
             const colb = document.getElementById('colb');
             colb.innerHTML = '<svg><g>' +
-                '<rect fill="#E2E2F0" style="stroke:#181818;stroke-width:0.5;" x="25" width="50" y="5"></rect>' +
-                '<rect fill="#E2E2F0" style="stroke:#181818;stroke-width:0.5;" x="25" width="50" y="120"></rect>' +
-                '<rect fill="#E2E2F0" style="stroke:#181818;stroke-width:0.5;" x="100" width="50" y="5"></rect>' +
+                '<rect fill="#E2E2F0" style="stroke:#181818;stroke-width:0.5;" x="25" width="50" y="5" rx="2.5" ry="2.5"></rect>' +
+                '<rect fill="#E2E2F0" style="stroke:#181818;stroke-width:0.5;" x="25" width="50" y="120" rx="2.5" ry="2.5"></rect>' +
+                '<rect fill="#E2E2F0" style="stroke:#181818;stroke-width:0.5;" x="100" width="50" y="5" rx="2.5" ry="2.5"></rect>' +
                 '</g></svg>';
             const rects = colb.querySelectorAll('rect');
             sequenceRowMap = new Map();
@@ -370,8 +388,8 @@ class TestEditorToSvgHighlight:
             sequenceHighlighted = [];
             const colb = document.getElementById('colb');
             colb.innerHTML = '<svg><g>' +
-                '<path fill="#FEFFDD" d="M0,0"></path>' +
-                '<path fill="#FEFFDD" d="M1,1"></path>' +
+                '<path fill="#FEFFDD" style="stroke:#181818;stroke-width:0.5;" d="M5,25 L5,50 L136,50 L136,35 L126,25 L5,25 "></path>' +
+                '<path fill="#FEFFDD" style="stroke:#181818;stroke-width:0.5;" d="M126,25 L126,35 L136,35 L126,25 "></path>' +
                 '</g></svg>';
             const paths = colb.querySelectorAll('path');
             sequenceRowMap = new Map();

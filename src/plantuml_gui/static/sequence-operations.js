@@ -345,10 +345,14 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
     });
 }
 
-// Identifies participant header rects by their PlantUML-specific style
+// Identifies participant header rects by their PlantUML-specific style.
+// rx/ry (rounded corners) are required to exclude rnote, which shares the
+// same stroke-width:0.5 style but is never rounded.
 function checkIfParticipant(svgelements, index) {
-    return (svgelements[index].tagName.toLowerCase() === 'rect') &&
-        (svgelements[index].getAttribute('style') == "stroke:#181818;stroke-width:0.5;");
+    const el = svgelements[index];
+    return (el.tagName.toLowerCase() === 'rect') &&
+        (el.getAttribute('style') == "stroke:#181818;stroke-width:0.5;") &&
+        el.hasAttribute('rx') && el.hasAttribute('ry');
 }
 
 // Identifies message elements (polygons and lines with stroke-width:1.0, and message text)
@@ -363,10 +367,13 @@ function checkIfMessageElement(svgelement) {
         if (svgelement.getAttribute('font-weight') === 'bold') {
             return false;
         }
-        // Exclude note text (preceded by a #FEFFDD path)
+        // Exclude note text (preceded by a note/hnote/rnote shape, or by
+        // the fold-corner path for "note" specifically)
         let prev = svgelement.previousElementSibling;
-        if (prev && prev.tagName.toLowerCase() === 'path' &&
-            prev.getAttribute('fill') === '#FEFFDD') {
+        if (prev && (prev.tagName.toLowerCase() === 'path' ||
+                     prev.tagName.toLowerCase() === 'polygon' ||
+                     prev.tagName.toLowerCase() === 'rect') &&
+            isNoteCandidate(prev)) {
             return false;
         }
         return true;
@@ -584,55 +591,119 @@ function messageOperationEventListeners() {
 
 // --- Note element handlers ---
 
+// Classifies a single SVG shape as a note type ("note"/"hnote"/"rnote"),
+// or null, by tag + shape structure only - never fill color - mirroring
+// classify_note_shape() in sequence/util.py. For "note", the element must
+// be the first of the two-path pair (the folded rectangle body); the
+// caller skips the second (fold corner) path.
+function classifyNoteShape(svgelement) {
+    const tag = svgelement.tagName.toLowerCase();
+
+    if (tag === 'rect') {
+        return 'rnote';
+    }
+    if (tag === 'polygon') {
+        const points = (svgelement.getAttribute('points') || '').trim();
+        if (!points) return null;
+        const pointCount = points.split(',').filter(p => p.trim() !== '').length / 2;
+        return pointCount === 7 ? 'hnote' : null;
+    }
+    if (tag === 'path') {
+        const d = svgelement.getAttribute('d') || '';
+        const pointCount = (d.match(/L/g) || []).length + 1;
+        return pointCount === 6 ? 'note' : null;
+    }
+    return null;
+}
+
+// Excludes shapes that would otherwise collide with a note's tag/shape
+// signature, mirroring _is_note_candidate() in sequence/util.py:
+// participant header rects (rx/ry, which notes never have), and
+// activation bars / group borders/tabs (different stroke-width - notes
+// always use 0.5, regardless of fill color).
+function isNoteCandidate(svgelement) {
+    const style = svgelement.getAttribute('style') || '';
+    if (!style.includes('stroke-width:0.5')) return false;
+    if (svgelement.hasAttribute('rx') || svgelement.hasAttribute('ry')) return false;
+    return true;
+}
+
 function setupNoteHandlers(svgelements) {
-    // Each note renders two #FEFFDD paths (body + fold) in document order
-    let notePathCount = 0;
+    let noteOrdinal = -1;
+
+    // Attaches the shared context-menu/hover/highlight behavior to one
+    // shape belonging to note number thisNoteOrdinal. Called once for
+    // "hnote"/"rnote" (single shape), and twice for "note" (body path +
+    // fold corner path both map to the same note, matching how PlantUML
+    // renders it as two elements).
+    function attachNoteShapeHandlers(svgelement, thisNoteOrdinal) {
+        const noteInfo = notePositions[thisNoteOrdinal];
+        if (noteInfo) registerSequenceRow(noteInfo.index, svgelement, 'note');
+
+        svgelement.addEventListener('contextmenu', function(e) {
+            lastclickedsvgelement = svgelement;
+            e.preventDefault();
+            e.stopPropagation();
+            var contextMenu = document.getElementById('seq-note-menu');
+            contextMenu.style.display = 'block';
+            contextMenu.style.left = e.pageX + 'px';
+            contextMenu.style.top = e.pageY + 'px';
+        });
+
+        let notecolor = "";
+        svgelement.addEventListener('mouseover', function() {
+            if (isSequenceAddMode()) return;
+            const highlighted = findActiveHighlight(sequenceHighlighted, svgelement);
+            notecolor = highlighted ? highlighted.token.old : svgelement.getAttribute('fill');
+            svgelement.setAttribute('fill', '#d8d8d8');
+            const note = notePositions[thisNoteOrdinal];
+            if (note && note.index >= 0) setEditorMarkers(note.index);
+        });
+
+        svgelement.addEventListener('mouseout', function() {
+            clearMarkers();
+            if (findActiveHighlight(sequenceHighlighted, svgelement)) return;
+            svgelement.setAttribute('fill', notecolor);
+        });
+    }
+
     for (let index = 0; index < svgelements.length; index++) {
         let svgelement = svgelements[index];
         const tag = svgelement.tagName.toLowerCase();
 
-        // Note body paths have fill #FEFFDD
-        if (tag === 'path' && svgelement.getAttribute('fill') === '#FEFFDD') {
-            const noteOrdinal = Math.floor(notePathCount / 2);
-            notePathCount++;
+        if ((tag === 'path' || tag === 'polygon' || tag === 'rect') && isNoteCandidate(svgelement)) {
+            const noteType = classifyNoteShape(svgelement);
+            if (noteType === null) continue;
 
-            // Register this path (body + fold both map to the note) for
-            // editor->diagram highlighting on the note's row.
-            const noteInfo = notePositions[noteOrdinal];
-            if (noteInfo) registerSequenceRow(noteInfo.index, svgelement, 'note');
+            noteOrdinal++;
+            attachNoteShapeHandlers(svgelement, noteOrdinal);
 
-            svgelement.addEventListener('contextmenu', function(e) {
-                lastclickedsvgelement = svgelement;
-                e.preventDefault();
-                e.stopPropagation();
-                var contextMenu = document.getElementById('seq-note-menu');
-                contextMenu.style.display = 'block';
-                contextMenu.style.left = e.pageX + 'px';
-                contextMenu.style.top = e.pageY + 'px';
-            });
-
-            let notecolor = "";
-            svgelement.addEventListener('mouseover', function() {
-                if (isSequenceAddMode()) return;
-                const highlighted = findActiveHighlight(sequenceHighlighted, svgelement);
-                notecolor = highlighted ? highlighted.token.old : svgelement.getAttribute('fill');
-                svgelement.setAttribute('fill', '#d8d8d8');
-                const note = notePositions[noteOrdinal];
-                if (note && note.index >= 0) setEditorMarkers(note.index);
-            });
-
-            svgelement.addEventListener('mouseout', function() {
-                clearMarkers();
-                if (findActiveHighlight(sequenceHighlighted, svgelement)) return;
-                svgelement.setAttribute('fill', notecolor);
-            });
+            // "note" renders as two elements (body path + fold corner
+            // path); both must recolor/highlight together, matching how
+            // a single note is one visual unit. The fold corner itself
+            // is not independently classifiable (4 points), so it is
+            // attached here explicitly rather than via the main loop.
+            if (noteType === 'note') {
+                const next = svgelements[index + 1];
+                if (next && next.tagName.toLowerCase() === 'path' && isNoteCandidate(next)) {
+                    attachNoteShapeHandlers(next, noteOrdinal);
+                    index++;
+                }
+            }
         }
 
-        // Note text should not be hoverable
+        // Note text should not be hoverable. previousElementSibling is
+        // the note's fold-corner path for "note" (which is note-styled
+        // but not independently classifiable as a full note shape - a
+        // path with 4 points), or the single shape itself for "hnote"/
+        // "rnote". isNoteCandidate alone (tag + stroke-width:0.5, no
+        // rx/ry) correctly matches both cases.
         if (tag === 'text' && svgelement.getAttribute('font-size') === '13') {
             let prev = svgelement.previousElementSibling;
-            if (prev && prev.tagName.toLowerCase() === 'path' &&
-                prev.getAttribute('fill') === '#FEFFDD') {
+            if (prev && (prev.tagName.toLowerCase() === 'path' ||
+                         prev.tagName.toLowerCase() === 'polygon' ||
+                         prev.tagName.toLowerCase() === 'rect') &&
+                isNoteCandidate(prev)) {
                 svgelement.style.pointerEvents = 'none';
             }
         }
@@ -653,6 +724,24 @@ function isNoteAddMode() {
 function cancelNoteAddMode() {
     isAddNoteActive = false;
     selectedNoteType = 'note';
+}
+
+// Reads the checked radio in the note modal's type selector. This is the
+// single source of truth for the type sent on submit, for both add and
+// edit modes.
+function getModalNoteType() {
+    var checked = document.querySelector('input[name="seq-note-type-radio"]:checked');
+    return checked ? checked.value : 'note';
+}
+
+// Preselects the modal's type radio to match a given type, defaulting to
+// "note" for an unrecognized value.
+function setModalNoteType(noteType) {
+    var radio = document.getElementById('seq-note-type-' + noteType);
+    if (!radio) {
+        radio = document.getElementById('seq-note-type-note');
+    }
+    radio.checked = true;
 }
 
 function noteOperationEventListeners() {
@@ -719,6 +808,8 @@ function noteOperationEventListeners() {
         isAddNoteActive = true;
         document.querySelector('#seq-note-modalForm .modal-title').textContent = 'Add Note';
         document.getElementById('seq-note-text').value = '';
+        document.getElementById('seq-note-type-group').style.display = 'none';
+        setModalNoteType(selectedNoteType);
         $('#seq-note-modalForm').modal('show');
     });
 
@@ -740,12 +831,14 @@ function noteOperationEventListeners() {
                     svgelement: lastclickedsvgelement.outerHTML
                 })
             });
-            var text = (await response.json()).text;
+            var responseData = await response.json();
             noteEditMode = true;
             isAddNoteActive = false;
             document.querySelector('#seq-note-modalForm .modal-title').textContent = 'Edit Note';
-            document.getElementById('seq-note-text').value = text;
+            document.getElementById('seq-note-text').value = responseData.text;
             document.getElementById('seq-note-second-participant-group').style.display = 'none';
+            document.getElementById('seq-note-type-group').style.display = 'block';
+            setModalNoteType(responseData.noteType);
             $('#seq-note-modalForm').modal('show');
         } catch (error) {
             displayErrorMessage(`Error with fetch API: ${error.message}`, error);
@@ -872,6 +965,7 @@ async function submitNote() {
     var text = document.getElementById('seq-note-text').value;
     if (!text) return;
 
+    var noteType = getModalNoteType();
     var element = document.getElementById('colb');
     var svg = element.querySelector('g');
 
@@ -887,7 +981,8 @@ async function submitNote() {
                     plantuml: plantuml,
                     svg: svg.innerHTML,
                     svgelement: lastclickedsvgelement.outerHTML,
-                    text: text
+                    text: text,
+                    noteType: noteType
                 })
             });
         } else {
@@ -899,7 +994,7 @@ async function submitNote() {
                 text: text,
                 yPosition: firstClickCoordinates[1],
                 xPosition: firstClickCoordinates[0],
-                noteType: selectedNoteType
+                noteType: noteType
             };
             if (notePlacement === 'spanning') {
                 body.secondParticipant = document.getElementById('seq-note-second-participant').value;

@@ -72,6 +72,41 @@ class TestNextParticipantNumber:
         assert _next_participant_number(puml) == 2
 
 
+class TestParticipantParsingIgnoresRnote:
+    """Regression: an rnote's <rect> shares the exact same
+    stroke-width:0.5 style as a participant header rect, but participant
+    headers always have rounded corners (rx/ry) and rnote never does.
+    Without excluding rnote, Diagram.from_svg would misparse it (and its
+    text) as an extra phantom participant.
+
+    Uses short note text deliberately: PlantUML's layout can otherwise
+    make the phantom rnote "participant" coincidentally land at the same
+    cx as a real participant, silently hiding the bug in the results
+    (both collapse into the same dict slot) without actually fixing it.
+    """
+
+    def test_rnote_is_not_parsed_as_a_participant(self):
+        from plantuml_gui.sequence.classes import Diagram
+
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nrnote over Alice : x\n@enduml"
+        svg = extract_g_element(_create_svg_from_uml(puml))
+        diagram = Diagram.from_svg(svg, puml)
+        assert [p.name for p in diagram.participants] == ["Alice", "Bob"]
+
+    def test_multiple_rnotes_do_not_add_phantom_participants(self):
+        from plantuml_gui.sequence.classes import Diagram
+
+        puml = (
+            "@startuml\nparticipant Alice\nparticipant Bob\n"
+            "rnote over Alice : x\n"
+            "rnote over Bob : y\n"
+            "@enduml"
+        )
+        svg = extract_g_element(_create_svg_from_uml(puml))
+        diagram = Diagram.from_svg(svg, puml)
+        assert [p.name for p in diagram.participants] == ["Alice", "Bob"]
+
+
 class TestAppRoutesParticipant:
     def test_add_participant_right(self, client):
         test_data = {

@@ -32,7 +32,7 @@ def _open_sequence_demo(page):
     """Switch the app to sequence mode via the real "Sequence Demo" menu
     item, matching how an end user would do it (not editor.setValue)."""
     page.click(".toolbar-btn.dropdown-toggle")
-    page.wait_for_selector("#sequence", state="visible")
+    page.wait_for_selector("#sequence", state="visible", timeout=15000)
     page.click("#sequence")
     page.wait_for_function(
         "() => participantLifelines && participantLifelines.length === 3",
@@ -59,7 +59,48 @@ def _right_click_lifeline(page, lifeline_index=0, y_offset=60):
         {"index": lifeline_index, "yOffset": y_offset},
     )
     page.mouse.click(x, y, button="right")
-    page.wait_for_selector("#sequence-menu", state="visible")
+    page.wait_for_selector("#sequence-menu", state="visible", timeout=15000)
+
+
+def _create_note_via_real_clicks(page, note_type, text, lifeline_index=0):
+    """Create a note through the real menu flow (type -> placement -> text
+    -> submit) and wait for it to land in the editor and in notePositions."""
+    _right_click_lifeline(page, lifeline_index=lifeline_index)
+    page.click("#seq-addNote")
+    page.click(f'#seq-note-type-menu [data-note-type="{note_type}"]')
+    page.click('#seq-note-placement-menu [data-placement="over"]')
+    page.fill("#seq-note-text", text)
+    page.click("#seq-submit-note")
+    page.wait_for_function(
+        f"() => editor.session.getValue().includes({text!r})",
+        timeout=15000,
+    )
+    page.wait_for_function(
+        "() => notePositions && notePositions.length > 0", timeout=15000
+    )
+
+
+def _right_click_note(page, note_ordinal=0, lifeline_index=0):
+    """Real right-click on a note already present in the diagram.
+
+    Locates the actual rendered note shape (path/polygon/rect) via the
+    same shape classification the frontend uses, then clicks the center
+    of its bounding box - robust regardless of whether the shape's cy
+    convention is its top edge (plain "note") or true center (hnote/
+    rnote), unlike a fixed y-offset from notePositions[].cy."""
+    x, y = page.evaluate(
+        """(args) => {
+            const svg = document.querySelector('#colb svg');
+            const shapes = Array.from(svg.querySelectorAll('path, polygon, rect'))
+                .filter(el => isNoteCandidate(el) && classifyNoteShape(el) !== null);
+            const shape = shapes[args.noteOrdinal];
+            const box = shape.getBoundingClientRect();
+            return [box.x + box.width / 2, box.y + box.height / 2];
+        }""",
+        {"noteOrdinal": note_ordinal},
+    )
+    page.mouse.click(x, y, button="right")
+    page.wait_for_selector("#seq-note-menu", state="visible", timeout=15000)
 
 
 class TestSequenceNoteTypeMenuRealClicks:
@@ -311,3 +352,119 @@ class TestSequenceNoteCreateFlowWithType:
 
         reset_type = page.evaluate("() => selectedNoteType")
         assert reset_type == "note"
+
+
+class TestSequenceNoteModalTypeSelector:
+    """Covers the note modal's type radio selector: hidden during Add
+    (the type was already chosen via the type submenu before the modal
+    ever opens) and visible during Edit, preselected to the note's
+    detected type. The checked radio (internal state, even while hidden)
+    is still the source of truth submitNote() reads from. All driven by
+    real clicks, per the stopPropagation lesson."""
+
+    def test_add_mode_hides_type_selector_but_preselects_submenu_choice(
+        self, app_url, page
+    ):
+        _open_sequence_demo(page)
+        _right_click_lifeline(page)
+
+        page.click("#seq-addNote")
+        page.click('#seq-note-type-menu [data-note-type="rnote"]')
+        page.click('#seq-note-placement-menu [data-placement="over"]')
+
+        assert (
+            page.evaluate(
+                "() => document.getElementById('seq-note-type-group').style.display"
+            )
+            == "none"
+        )
+        assert page.is_checked("#seq-note-type-rnote")
+        assert not page.is_checked("#seq-note-type-note")
+        assert not page.is_checked("#seq-note-type-hnote")
+
+    def test_add_mode_defaults_to_note_when_type_menu_skipped(self, app_url, page):
+        """Defensive: even if the modal were opened without going through
+        the type submenu (selectedNoteType still at its default), the
+        radio should reflect the default "note" type."""
+        _open_sequence_demo(page)
+        page.evaluate("() => { cancelNoteAddMode(); }")
+        _right_click_lifeline(page)
+
+        page.click("#seq-addNote")
+        page.click('#seq-note-type-menu [data-note-type="note"]')
+        page.click('#seq-note-placement-menu [data-placement="over"]')
+
+        assert page.is_checked("#seq-note-type-note")
+
+    def test_edit_mode_shows_type_selector_preselected_to_detected_type(
+        self, app_url, page
+    ):
+        _open_sequence_demo(page)
+        _create_note_via_real_clicks(page, "hnote", "Edit-preselect hex note")
+
+        _right_click_note(page)
+        page.click("#seq-editNote")
+        page.wait_for_selector(
+            "#seq-note-modalForm.show", state="visible", timeout=15000
+        )
+
+        assert (
+            page.evaluate(
+                "() => document.getElementById('seq-note-type-group').style.display"
+            )
+            == "block"
+        )
+        assert page.is_checked("#seq-note-type-hnote")
+        assert not page.is_checked("#seq-note-type-note")
+        assert not page.is_checked("#seq-note-type-rnote")
+        assert page.input_value("#seq-note-text") == "Edit-preselect hex note"
+
+    def test_edit_flow_changes_note_type_end_to_end(self, app_url, page):
+        _open_sequence_demo(page)
+        _create_note_via_real_clicks(page, "note", "Original note text")
+
+        _right_click_note(page)
+        page.click("#seq-editNote")
+        page.wait_for_selector(
+            "#seq-note-modalForm.show", state="visible", timeout=15000
+        )
+
+        # Confirm it preselected "note", then switch to "rnote" and submit.
+        assert page.is_checked("#seq-note-type-note")
+        page.check("#seq-note-type-rnote")
+        page.click("#seq-submit-note")
+        page.wait_for_function(
+            "() => editor.session.getValue().includes('rnote over')",
+            timeout=15000,
+        )
+
+        lines = page.evaluate(
+            "() => editor.session.getValue().split('\\n').map(l => l.trim())"
+        )
+        assert any(
+            line.startswith("rnote over") and "Original note text" in line
+            for line in lines
+        )
+        assert not any(line.startswith("note over") for line in lines)
+
+    def test_edit_flow_keeps_type_when_radio_unchanged(self, app_url, page):
+        _open_sequence_demo(page)
+        _create_note_via_real_clicks(page, "hnote", "Unchanged type note")
+
+        _right_click_note(page)
+        page.click("#seq-editNote")
+        page.wait_for_selector(
+            "#seq-note-modalForm.show", state="visible", timeout=15000
+        )
+
+        page.fill("#seq-note-text", "Unchanged type note edited")
+        page.click("#seq-submit-note")
+        page.wait_for_function(
+            "() => editor.session.getValue().includes('Unchanged type note edited')",
+            timeout=15000,
+        )
+
+        lines = page.evaluate(
+            "() => editor.session.getValue().split('\\n').map(l => l.trim())"
+        )
+        assert "hnote over bob : Unchanged type note edited" in lines

@@ -34,8 +34,13 @@ PARTICIPANT_RECT_STYLE = "stroke:#181818;stroke-width:0.5;"
 
 
 def is_participant_rect(rect: Pq) -> bool:
-    """Return True if an SVG rect is a participant header (not an activation bar)."""
-    return (rect.attr("style") or "") == PARTICIPANT_RECT_STYLE
+    """Return True if an SVG rect is a participant header (not an activation
+    bar or an rnote, which shares the same stroke-width:0.5 style but never
+    has rounded corners).
+    """
+    if (rect.attr("style") or "") != PARTICIPANT_RECT_STYLE:
+        return False
+    return rect.attr("rx") is not None and rect.attr("ry") is not None
 
 
 def _participant_at(participants: List["Participant"], x: float) -> "Participant":
