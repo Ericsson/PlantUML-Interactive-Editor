@@ -284,3 +284,25 @@ def delete_box(puml: str, svg: str, svgelement: str) -> str:
     del lines[end_line]
     del lines[line_index]
     return "\n".join(lines)
+
+
+def get_box_positions(puml: str, svg: str) -> List[Dict[str, int]]:
+    """Return header/end line indexes for each box in SVG document order.
+
+    Box rects render in document order matching puml source order (see
+    :func:`index_of_clicked_box`), so the frontend matches boxes by ordinal for
+    editor<->diagram hover highlighting.
+    """
+    lines = puml.splitlines()
+    d = Pq(svg)
+    bounds = _participant_header_bounds(d)
+    box_count = sum(1 for rect in d("rect").items() if is_box_rect(rect, bounds))
+
+    positions: List[Dict[str, int]] = []
+    for n in range(1, box_count + 1):
+        header_index = _find_box_line_index(puml, n)
+        end_index = (
+            _find_box_end_index(lines, header_index) if header_index != -1 else -1
+        )
+        positions.append({"headerIndex": header_index, "endIndex": end_index})
+    return positions

@@ -31,6 +31,7 @@ validated against the actual renderer output rather than hand-written rects.
 import re
 
 import pytest
+from flask import json
 from plantuml_gui.sequence.box import (
     TEOZ_PRAGMA,
     _participant_header_bounds,
@@ -40,6 +41,7 @@ from plantuml_gui.sequence.box import (
     is_box_rect,
 )
 from plantuml_gui.sequence.classes import is_participant_rect
+from plantuml_gui.sequence.positions import get_sequence_positions
 from plantuml_gui.shared.render import _create_svg_from_uml
 from pyquery import PyQuery as Pq
 
@@ -413,3 +415,97 @@ class TestDeleteBox:
 
         spans = _find_box_spans(result.splitlines())
         assert len(spans) == 1
+
+
+class TestBoxRoutes:
+    def test_add_box_route_returns_modified_puml(self, client):
+        response = client.post(
+            "/addBox",
+            data=json.dumps(
+                {
+                    "plantuml": THREE_PARTICIPANT_PUML,
+                    "startParticipantIndex": ALICE_INDEX,
+                    "endParticipantIndex": BOB_INDEX,
+                }
+            ),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # No title/color supplied -> bare box.
+        assert "box" in data["plantuml"].splitlines()
+        assert "end box" in data["plantuml"].splitlines()
+
+    def test_add_box_route_nested_adds_teoz(self, client):
+        response = client.post(
+            "/addBox",
+            data=json.dumps(
+                {
+                    "plantuml": TestBoxNestingTeoz.NESTED_PUML,
+                    "startParticipantIndex": 3,
+                    "endParticipantIndex": 3,
+                }
+            ),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert TEOZ_PRAGMA in data["plantuml"].splitlines()
+
+    def test_add_box_route_crossing_returns_400(self, client):
+        response = client.post(
+            "/addBox",
+            data=json.dumps(
+                {
+                    "plantuml": TestBoxNestingTeoz.CONTAINING_PUML,
+                    "startParticipantIndex": 1,
+                    "endParticipantIndex": 3,
+                }
+            ),
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert "error" in data
+
+    def test_delete_box_route_unwraps(self, client):
+        svg = _g_inner(SINGLE_BOX_PUML)
+        rect = _nth_box_rect_html(Pq(svg), 0)
+        response = client.post(
+            "/deleteSeqBox",
+            data=json.dumps(
+                {
+                    "plantuml": SINGLE_BOX_PUML,
+                    "svg": svg,
+                    "svgelement": rect,
+                }
+            ),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        lines = data["plantuml"].splitlines()
+        assert 'box "MyBox"' not in lines
+        assert "participant alice" in lines
+
+
+class TestBoxPositions:
+    def test_get_sequence_positions_includes_boxes(self):
+        svg = _g_inner(SINGLE_BOX_PUML)
+        positions = get_sequence_positions(SINGLE_BOX_PUML, svg)
+        assert "boxes" in positions
+        boxes = positions["boxes"]
+        assert len(boxes) == 1
+        assert set(boxes[0].keys()) == {"headerIndex", "endIndex"}
+        # header is the box line, end is its matching end box (after it).
+        assert boxes[0]["headerIndex"] < boxes[0]["endIndex"]
+
+    def test_box_positions_ordered_outer_then_inner(self):
+        svg = _g_inner(NESTED_RENDER_PUML)
+        boxes = get_sequence_positions(NESTED_RENDER_PUML, svg)["boxes"]
+        assert len(boxes) == 2
+        # Outer box header precedes inner box header (document/source order).
+        assert boxes[0]["headerIndex"] < boxes[1]["headerIndex"]
+        # Outer box fully contains the inner box.
+        assert boxes[0]["headerIndex"] < boxes[1]["headerIndex"]
+        assert boxes[1]["endIndex"] < boxes[0]["endIndex"]

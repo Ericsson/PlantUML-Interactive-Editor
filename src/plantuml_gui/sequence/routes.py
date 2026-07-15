@@ -25,6 +25,7 @@
 from flask import Blueprint, jsonify, request
 
 from .activation import add_activation, delete_activation
+from .box import add_box, delete_box
 from .group import add_group, delete_group, get_group_label, rename_group
 from .message import (
     add_message,
@@ -269,3 +270,28 @@ def deleteseqgroup():
     svg = data["svg"]
     svgelement = data["svgelement"]
     return jsonify({"plantuml": delete_group(puml, svg, svgelement)})
+
+
+@sequence_bp.route("/addBox", methods=["POST"])
+def addbox():
+    data = request.get_json()
+    puml = data["plantuml"]
+    # Title and color are optional; the current UI creates a bare box.
+    title = data.get("title", "")
+    color = data.get("color", "none")
+    start_index = data["startParticipantIndex"]
+    end_index = data["endParticipantIndex"]
+    try:
+        result = add_box(puml, title, color, start_index, end_index)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"plantuml": result})
+
+
+@sequence_bp.route("/deleteSeqBox", methods=["POST"])
+def deleteseqbox():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    return jsonify({"plantuml": delete_box(puml, svg, svgelement)})
