@@ -72,10 +72,11 @@ but adding them to the PlantUML code should still work.
   - Self-messages supported (same participant as sender and receiver)
   - Messages inserted at correct vertical position between existing messages
 - Notes
-  - Add note from lifeline context menu (over, left of, right of, spanning)
-  - Edit note text (right-click note → Edit Note)
+  - Add note from lifeline context menu, choosing a type (Note, H Note, or R Note) then a placement (over, left of, right of, spanning)
+  - Edit note text and/or change its type (right-click note → Edit Note)
   - Delete note (right-click note → Delete Note)
   - Notes inserted at correct vertical position based on click Y-coordinate
+  - Right-click, hover, and editor-to-diagram highlighting work for all three note types (previously note-only)
 - Activation bars
   - Activate a participant from the lifeline context menu (hover lifeline → right-click → Activate)
   - Drag down to preview a ghost bar, then left-click and choose Deactivate or Destroy to end it

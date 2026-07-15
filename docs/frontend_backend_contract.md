@@ -70,9 +70,9 @@ Used by: deleteActivity, detachActivity, breakActivity, checkBackward, addNoteAc
 - **getMessageText:** `{plantuml, svg, svgelement}`; returns `{"text": message_label}` — fetches current message label for the edit modal
 - **editMessageText:** `{plantuml, svg, svgelement, text}`; returns `{"plantuml": updated_puml}` — replaces the message label text
 - **deleteMessage:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}` — removes the message line from puml
-- **addNote:** `{plantuml, svg, participant, placement, text, yPosition, secondParticipant?}`; returns `{"plantuml": updated_puml}` — inserts a note at the Y-position; placement is 'over', 'left', 'right', or 'spanning'
-- **getSeqNoteText:** `{plantuml, svg, svgelement}`; returns `{"text": note_text}` — fetches current note text for the edit modal
-- **editSeqNote:** `{plantuml, svg, svgelement, text}`; returns `{"plantuml": updated_puml}` — replaces the note text
+- **addNote:** `{plantuml, svg, participant, placement, text, yPosition, secondParticipant?, noteType?}`; returns `{"plantuml": updated_puml}` — inserts a note at the Y-position; placement is 'over', 'left', 'right', or 'spanning'; noteType is 'note', 'hnote', or 'rnote' (defaults to 'note' if missing/unrecognized); all three types support the same placement grammar
+- **getSeqNoteText:** `{plantuml, svg, svgelement}`; returns `{"text": note_text, "noteType": "note"|"hnote"|"rnote"}` — fetches current note text and detected type for the edit modal
+- **editSeqNote:** `{plantuml, svg, svgelement, text, noteType?}`; returns `{"plantuml": updated_puml}` — replaces the note text and, if `noteType` differs from the note's current type, rewrites its keyword
 - **deleteSeqNote:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}` — removes the note line from puml
 - **addActivation:** `{plantuml, participant, startMessageIndex, endMessageIndex, endType}`; returns `{"plantuml": updated_puml}` — inserts a matched `activate` line after the message at `startMessageIndex` and a closing `deactivate`/`destroy` line after the message at `endMessageIndex`; `endType` is 'deactivate' or 'destroy' (defaults to 'deactivate')
 - **deleteActivation:** `{plantuml, svg, svgelement}`; returns `{"plantuml": updated_puml}` — `svgelement` is the right-clicked activation-bar rect; removes that bar's `activate` line and its paired `deactivate`/`destroy` line (handles nested bars)
@@ -104,7 +104,7 @@ For sequence diagrams, the frontend computes `cx` from the clicked rect's x + wi
 Each render, the frontend fetches all position tables in a single `/getSequencePositions` round-trip and stores them in module-level arrays: `messagePositions`, `participantLifelines`, `notePositions`, `groupPositions`. No further backend round-trip is needed for highlighting itself — both directions are resolved client-side against these cached tables:
 
 - **Diagram → editor**: hovering an SVG element looks up its puml line index from the matching table and calls `setEditorMarkers`/`getmarker` to paint that line.
-- **Editor → diagram**: moving the cursor or mouse over a line in the editor (`highlightSequenceForRow` in `sequence-operations.js`) checks the four tables for that row, then finds the matching SVG element(s) by counting shapes in document order (e.g. the Nth `#FEFFDD` note path, the Nth group box immediately following its `#EEEEEE` tab) and highlights them directly — no fetch involved.
+- **Editor → diagram**: moving the cursor or mouse over a line in the editor (`highlightSequenceForRow` in `sequence-operations.js`) checks the four tables for that row, then finds the matching SVG element(s) by counting shapes in document order (e.g. the Nth note/hnote/rnote shape, identified by tag + shape structure + `stroke-width:0.5` rather than fill color; the Nth group box immediately following its `#EEEEEE` tab) and highlights them directly — no fetch involved.
 
 Highlights applied by the editor→diagram direction are tracked in `sequenceHighlighted` (`{el, kind, old}`) so the original style/fill can be restored exactly, and so that hovering the same element from the diagram side doesn't clobber the recorded original value.
 

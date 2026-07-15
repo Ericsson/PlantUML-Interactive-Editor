@@ -28,10 +28,13 @@ from pyquery import PyQuery as Pq
 
 from .classes import Diagram, Message
 from .util import (
+    NOTE_KEYWORDS,
     _find_note_line_index,
     escape_multiline_text,
     extract_note_positions,
     find_insertion_index,
+    iter_note_shapes,
+    note_line_keyword,
     unescape_multiline_text,
 )
 
@@ -60,21 +63,33 @@ def _find_nearest_message(
     return closest
 
 
+def _normalize_note_type(note_type: str | None) -> str:
+    """Validate and default a note_type value from an untrusted request.
+
+    Falls back to "note" for missing or unrecognized values, since the
+    request body comes directly from client JS.
+    """
+    if note_type in NOTE_KEYWORDS:
+        return note_type
+    return "note"
+
+
 def _build_note_line(
     participant: str,
     placement: str,
     text: str,
     second_participant: str | None = None,
+    note_type: str = "note",
 ) -> str:
     """Build the PlantUML note syntax string."""
     if placement == "over":
-        return f"note over {participant} : {text}"
+        return f"{note_type} over {participant} : {text}"
     if placement == "left":
-        return f"note left of {participant} : {text}"
+        return f"{note_type} left of {participant} : {text}"
     if placement == "right":
-        return f"note right of {participant} : {text}"
+        return f"{note_type} right of {participant} : {text}"
     if placement == "spanning":
-        return f"note over {participant}, {second_participant} : {text}"
+        return f"{note_type} over {participant}, {second_participant} : {text}"
     return ""
 
 
@@ -87,8 +102,13 @@ def add_note(
     y_position: float,
     second_participant: str | None = None,
     x_position: float | None = None,
+    note_type: str | None = None,
 ) -> str:
     """Add a note at the correct Y-position in the sequence diagram.
+
+    note_type selects the PlantUML keyword ("note", "hnote", or "rnote"),
+    defaulting to "note" for missing/unrecognized values. All three types
+    support the same placement grammar identically.
 
     If placement is 'left' or 'right' and the y_position is close to an
     existing message, and x_position falls within the message's horizontal
@@ -98,6 +118,7 @@ def add_note(
     if not text:
         return puml
 
+    note_type = _normalize_note_type(note_type)
     text = escape_multiline_text(text)
     diagram = Diagram.from_svg(svg, puml)
     lines = puml.splitlines()
@@ -106,61 +127,154 @@ def add_note(
     if placement in ("left", "right"):
         nearest = _find_nearest_message(diagram.messages, y_position, x_position)
         if nearest:
-            note_line = f"note {placement} : {text}"
+            note_line = f"{note_type} {placement} : {text}"
             lines.insert(nearest.index + 1, note_line)
             return "\n".join(lines)
 
     insert_at = find_insertion_index(diagram.messages, svg, puml, y_position, lines)
-    note_line = _build_note_line(participant, placement, text, second_participant)
+    note_line = _build_note_line(
+        participant, placement, text, second_participant, note_type
+    )
     lines.insert(insert_at, note_line)
     return "\n".join(lines)
+
+
+def _shapes_match(a: Pq, b: Pq) -> bool:
+    """Return True if two SVG shapes represent the same note element.
+
+    Compares by tag-appropriate identity attribute (never fill color):
+    `d` for <path> (note), `points` for <polygon> (hnote), and x/y/width/
+    height for <rect> (rnote).
+    """
+    tag_a = a[0].tag if a else None
+    tag_b = b[0].tag if b else None
+    if tag_a != tag_b:
+        return False
+
+    if tag_a == "path":
+        return a.attr("d") == b.attr("d")
+    if tag_a == "polygon":
+        return a.attr("points") == b.attr("points")
+    if tag_a == "rect":
+        return (
+            a.attr("x") == b.attr("x")
+            and a.attr("y") == b.attr("y")
+            and a.attr("width") == b.attr("width")
+            and a.attr("height") == b.attr("height")
+        )
+    return False
 
 
 def index_of_clicked_note(svg: str, svgelement: str) -> int:
     """Find the 1-based index of the clicked note in the SVG.
 
-    Notes are rendered as path elements with fill #FEFFDD. Each note
-    has two paths (body + fold corner). We count the body paths (those
-    followed by another #FEFFDD path) and match by the d attribute.
+    Identifies notes by shape (see iter_note_shapes), not fill color, so
+    this keeps working once note colors become user-customizable.
     """
     clicked = Pq(svgelement)
-    clicked_d = clicked.attr("d")
 
-    d = Pq(svg)
-    paths = list(d("path").items())
-    count = 0
-
-    for i, path in enumerate(paths):
-        if path.attr("fill") != "#FEFFDD":
-            continue
-        # A note body path is followed by the fold corner path
-        if i + 1 < len(paths) and paths[i + 1].attr("fill") == "#FEFFDD":
-            count += 1
-            if path.attr("d") == clicked_d:
-                return count
+    for count, (shape, _note_type) in enumerate(iter_note_shapes(svg), start=1):
+        if _shapes_match(shape, clicked):
+            return count
 
     return -1
 
 
-def get_note_text(puml: str, svg: str, svgelement: str) -> str:
-    """Get the text of the clicked note."""
+def _resolve_note_line(puml: str, svg: str, svgelement: str) -> str | None:
+    """Resolve the clicked note's puml source line, or None if not found.
+
+    Shared by get_note_text/get_note_type so the SVG is parsed and the
+    puml scanned once per lookup, and the not-found case is handled in a
+    single place.
+    """
     idx = index_of_clicked_note(svg, svgelement)
     line_index = _find_note_line_index(puml, idx)
-    line = puml.splitlines()[line_index]
+    if line_index == -1:
+        return None
+    return puml.splitlines()[line_index]
+
+
+def _note_text_from_line(line: str) -> str:
+    """Extract a note's display text from its puml line (pure)."""
     colon_pos = line.find(": ")
     text = line[colon_pos + 2 :] if colon_pos != -1 else ""
     return unescape_multiline_text(text)
 
 
-def edit_note(puml: str, svg: str, svgelement: str, text: str) -> str:
-    """Edit the text of the clicked note."""
+def _note_type_from_line(line: str) -> str:
+    """Extract a note's keyword ("note"/"hnote"/"rnote") from its puml line.
+
+    Falls back to "note" for an unrecognized line, matching
+    _normalize_note_type's default so callers always get a valid type.
+    """
+    keyword = note_line_keyword(line.strip())
+    return keyword if keyword is not None else "note"
+
+
+def get_note_text(puml: str, svg: str, svgelement: str) -> str:
+    """Get the text of the clicked note."""
+    line = _resolve_note_line(puml, svg, svgelement)
+    if line is None:
+        return ""
+    return _note_text_from_line(line)
+
+
+def get_note_type(puml: str, svg: str, svgelement: str) -> str:
+    """Get the PlantUML keyword ("note"/"hnote"/"rnote") of the clicked note.
+
+    Falls back to "note" if the note can't be found, matching
+    _normalize_note_type's default so callers always get a valid type.
+    """
+    line = _resolve_note_line(puml, svg, svgelement)
+    if line is None:
+        return "note"
+    return _note_type_from_line(line)
+
+
+def get_note_text_and_type(puml: str, svg: str, svgelement: str) -> tuple[str, str]:
+    """Return (text, note_type) for the clicked note in one lookup.
+
+    Resolves the note's puml line once (parsing the SVG a single time)
+    and derives both fields, so callers needing both - like the
+    /getSeqNoteText route - avoid a redundant parse. Mirrors the
+    individual functions' not-found defaults ("" text, "note" type).
+    """
+    line = _resolve_note_line(puml, svg, svgelement)
+    if line is None:
+        return "", "note"
+    return _note_text_from_line(line), _note_type_from_line(line)
+
+
+def edit_note(
+    puml: str, svg: str, svgelement: str, text: str, note_type: str | None = None
+) -> str:
+    """Edit the text of the clicked note, optionally changing its type.
+
+    note_type selects the PlantUML keyword ("note"/"hnote"/"rnote"). If
+    omitted or unrecognized, the existing keyword is left unchanged (a
+    text-only edit, matching the original behavior).
+    """
     idx = index_of_clicked_note(svg, svgelement)
     line_index = _find_note_line_index(puml, idx)
     lines = puml.splitlines()
     line = lines[line_index]
     colon_pos = line.find(": ")
-    if colon_pos != -1:
-        lines[line_index] = line[: colon_pos + 2] + escape_multiline_text(text)
+    if colon_pos == -1:
+        return puml
+
+    new_line = line[: colon_pos + 2] + escape_multiline_text(text)
+
+    if note_type is not None and note_type in NOTE_KEYWORDS:
+        current_keyword = note_line_keyword(line.strip())
+        if current_keyword is not None and current_keyword != note_type:
+            # Replace only the leading keyword, preserving any leading
+            # whitespace, the placement clause, and an optional #color
+            # token exactly as they were.
+            stripped = new_line.strip()
+            leading_ws = new_line[: len(new_line) - len(stripped)]
+            new_line = leading_ws + note_type + stripped[len(current_keyword) :]
+
+    lines[line_index] = new_line
     return "\n".join(lines)
 
 

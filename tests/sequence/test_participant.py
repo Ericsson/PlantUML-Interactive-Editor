@@ -72,6 +72,41 @@ class TestNextParticipantNumber:
         assert _next_participant_number(puml) == 2
 
 
+class TestParticipantParsingIgnoresRnote:
+    """Regression: an rnote's <rect> shares the exact same
+    stroke-width:0.5 style as a participant header rect, but participant
+    headers always have rounded corners (rx/ry) and rnote never does.
+    Without excluding rnote, Diagram.from_svg would misparse it (and its
+    text) as an extra phantom participant.
+
+    Uses short note text deliberately: PlantUML's layout can otherwise
+    make the phantom rnote "participant" coincidentally land at the same
+    cx as a real participant, silently hiding the bug in the results
+    (both collapse into the same dict slot) without actually fixing it.
+    """
+
+    def test_rnote_is_not_parsed_as_a_participant(self):
+        from plantuml_gui.sequence.classes import Diagram
+
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nrnote over Alice : x\n@enduml"
+        svg = extract_g_element(_create_svg_from_uml(puml))
+        diagram = Diagram.from_svg(svg, puml)
+        assert [p.name for p in diagram.participants] == ["Alice", "Bob"]
+
+    def test_multiple_rnotes_do_not_add_phantom_participants(self):
+        from plantuml_gui.sequence.classes import Diagram
+
+        puml = (
+            "@startuml\nparticipant Alice\nparticipant Bob\n"
+            "rnote over Alice : x\n"
+            "rnote over Bob : y\n"
+            "@enduml"
+        )
+        svg = extract_g_element(_create_svg_from_uml(puml))
+        diagram = Diagram.from_svg(svg, puml)
+        assert [p.name for p in diagram.participants] == ["Alice", "Bob"]
+
+
 class TestAppRoutesParticipant:
     def test_add_participant_right(self, client):
         test_data = {
@@ -365,6 +400,76 @@ Alice -> Bob: Done
             )
             expected_puml = """@startuml
 participant Bob
+@enduml"""
+            assert response.get_json()["plantuml"] == expected_puml
+
+    def test_delete_participant_cascades_hnote(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant Alice
+participant Bob
+hnote over Alice : hex note
+@enduml""",
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        test_data["svgelement"] = extract_participant_rect(test_data["svg"], 0)
+        with client:
+            response = client.post(
+                "/deleteParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant Bob
+@enduml"""
+            assert response.get_json()["plantuml"] == expected_puml
+
+    def test_delete_participant_cascades_rnote(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant Alice
+participant Bob
+rnote over Alice : rect note
+@enduml""",
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        test_data["svgelement"] = extract_participant_rect(test_data["svg"], 0)
+        with client:
+            response = client.post(
+                "/deleteParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant Bob
+@enduml"""
+            assert response.get_json()["plantuml"] == expected_puml
+
+    def test_delete_participant_keeps_hnote_of_other_participant(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant Alice
+participant Bob
+hnote over Bob : keep me
+@enduml""",
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        test_data["svgelement"] = extract_participant_rect(test_data["svg"], 0)
+        with client:
+            response = client.post(
+                "/deleteParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant Bob
+hnote over Bob : keep me
 @enduml"""
             assert response.get_json()["plantuml"] == expected_puml
 

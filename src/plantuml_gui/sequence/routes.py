@@ -32,7 +32,7 @@ from .message import (
     edit_message_text,
     get_message_text,
 )
-from .note import add_note, delete_note, edit_note, get_note_text
+from .note import add_note, delete_note, edit_note, get_note_text_and_type
 from .participant import (
     add_participant,
     delete_participant,
@@ -173,6 +173,7 @@ def addnote():
     y_position = data["yPosition"]
     x_position = data.get("xPosition")
     second_participant = data.get("secondParticipant")
+    note_type = data.get("noteType")
     return jsonify(
         {
             "plantuml": add_note(
@@ -184,6 +185,7 @@ def addnote():
                 y_position,
                 second_participant,
                 x_position,
+                note_type,
             )
         }
     )
@@ -195,7 +197,13 @@ def getseqnotetext():
     puml = data["plantuml"]
     svg = data["svg"]
     svgelement = data["svgelement"]
-    return jsonify({"text": get_note_text(puml, svg, svgelement)})
+    text, note_type = get_note_text_and_type(puml, svg, svgelement)
+    return jsonify(
+        {
+            "text": text,
+            "noteType": note_type,
+        }
+    )
 
 
 @sequence_bp.route("/editSeqNote", methods=["POST"])
@@ -205,7 +213,8 @@ def editseqnote():
     svg = data["svg"]
     svgelement = data["svgelement"]
     text = data["text"]
-    return jsonify({"plantuml": edit_note(puml, svg, svgelement, text)})
+    note_type = data.get("noteType")
+    return jsonify({"plantuml": edit_note(puml, svg, svgelement, text, note_type)})
 
 
 @sequence_bp.route("/deleteSeqNote", methods=["POST"])

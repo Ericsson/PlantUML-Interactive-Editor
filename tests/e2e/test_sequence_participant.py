@@ -53,6 +53,25 @@ class TestCheckIfParticipant:
         }""")
         assert result is False
 
+    def test_rejects_rnote_rect_with_same_style_but_no_rounded_corners(
+        self, app_url, page
+    ):
+        """Regression: an rnote is a plain <rect> with the exact same
+        stroke-width:0.5 style as a participant header, but participant
+        headers always have rx/ry (rounded corners) and rnote never does.
+        Without this check, an rnote's rect (and its text, mistaken for a
+        participant name) would be treated as a participant."""
+        result = page.evaluate("""() => {
+            const container = document.createElement('div');
+            container.innerHTML = `
+                <rect fill="#FEFFDD" height="23"
+                      style="stroke:#181818;stroke-width:0.5;" width="76" x="90" y="164"></rect>
+            `;
+            const elements = container.querySelectorAll('*');
+            return checkIfParticipant(elements, 0);
+        }""")
+        assert result is False
+
     def test_rejects_non_rect_element(self, app_url, page):
         """checkIfParticipant returns false for non-rect elements."""
         result = page.evaluate("""() => {
