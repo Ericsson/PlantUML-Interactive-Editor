@@ -1076,21 +1076,38 @@ function checkIfBoxRect(svgelement, participantBounds) {
 
 // Opens the box context menu, identifying the box by its rect (the backend
 // matches boxes by the rect's x/y).
-function openBoxContextMenu(boxRect, e) {
-    lastclickedsvgelement = boxRect;
-    e.preventDefault();
-    e.stopPropagation();
-    var contextMenu = document.getElementById('seq-box-menu');
-    contextMenu.style.display = 'block';
-    contextMenu.style.left = e.pageX + 'px';
-    contextMenu.style.top = e.pageY + 'px';
+// Box rects recorded during the last setup walk, with their bounds, so the
+// background context menu can hit-test a right-click against them.
+let boxElements = []; // [{rect, x, y, w, h}, ...]
+
+// Return the innermost box enclosing the given point, or null. "Innermost" =
+// smallest-area enclosing box, so a right-click inside a nested box targets the
+// inner box rather than its container.
+function findEnclosingBox(cx, cy) {
+    let best = null;
+    let bestArea = Infinity;
+    for (const b of boxElements) {
+        if (cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h) {
+            const area = b.w * b.h;
+            if (area < bestArea) {
+                bestArea = area;
+                best = b.rect;
+            }
+        }
+    }
+    return best;
 }
 
-// Attaches contextmenu (delete) and hover highlighting to each box rect. Boxes
-// appear in document order matching puml source order (outer before inner), so
-// the ordinal indexes boxPositions.
+// Attaches hover highlighting to each box rect and records its bounds. The box
+// context menu is not attached here: the box rect covers the lifeline area, so
+// a dedicated handler would hijack the lifeline right-click. Instead the
+// background (lifeline) context menu detects an enclosing box via
+// findEnclosingBox and appends Edit Box / Delete Box items. Boxes appear in
+// document order matching puml source order (outer before inner), so the
+// ordinal indexes boxPositions.
 function setupBoxHandlers(svgelements) {
     const participantBounds = participantHeaderBounds(svgelements);
+    boxElements = [];
     let boxOrdinal = -1;
 
     for (let index = 0; index < svgelements.length; index++) {
@@ -1100,6 +1117,14 @@ function setupBoxHandlers(svgelements) {
         boxOrdinal++;
         const box = boxPositions[boxOrdinal];
 
+        boxElements.push({
+            rect: svgelement,
+            x: parseFloat(svgelement.getAttribute('x')),
+            y: parseFloat(svgelement.getAttribute('y')),
+            w: parseFloat(svgelement.getAttribute('width')),
+            h: parseFloat(svgelement.getAttribute('height')),
+        });
+
         // Register for editor->diagram highlighting on both the box header and
         // its end box line (registerSequenceRow drops any -1 line).
         if (box) {
@@ -1108,8 +1133,6 @@ function setupBoxHandlers(svgelements) {
         }
 
         const thisOrdinal = boxOrdinal;
-        svgelement.addEventListener('contextmenu', (e) => openBoxContextMenu(svgelement, e));
-
         svgelement.addEventListener('mouseover', function() {
             if (isSequenceAddMode()) return;
             const b = boxPositions[thisOrdinal];

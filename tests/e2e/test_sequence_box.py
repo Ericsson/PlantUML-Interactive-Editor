@@ -65,13 +65,26 @@ class TestBoxMenus:
         result = page.evaluate("() => document.getElementById('seq-addBox') !== null")
         assert result is True
 
-    def test_box_context_menu_exists(self, app_url, page):
-        """The box context menu and its Delete Box item exist in the DOM."""
+    def test_box_menu_items_exist_in_sequence_menu(self, app_url, page):
+        """Edit/Delete Box items live in the lifeline (sequence) menu and are
+        hidden by default (shown only when the right-click is inside a box)."""
         result = page.evaluate("""() => {
-            return document.getElementById('seq-box-menu') !== null
-                && document.getElementById('seq-deleteBox') !== null;
+            const edit = document.getElementById('seq-editBox');
+            const del = document.getElementById('seq-deleteBox');
+            const menu = document.getElementById('sequence-menu');
+            return {
+                exist: edit !== null && del !== null,
+                insideSequenceMenu: menu.contains(edit) && menu.contains(del),
+                hiddenByDefault:
+                    document.getElementById('seq-editBox-item').style.display === 'none'
+                    && document.getElementById('seq-deleteBox-item').style.display === 'none',
+                noSeparateBoxMenu: document.getElementById('seq-box-menu') === null,
+            };
         }""")
-        assert result is True
+        assert result["exist"] is True
+        assert result["insideSequenceMenu"] is True
+        assert result["hiddenByDefault"] is True
+        assert result["noSeparateBoxMenu"] is True
 
 
 class TestBoxAddMode:
@@ -193,27 +206,129 @@ SETUP_BOX = """() => {
     colb.innerHTML = '';
     colb.appendChild(svg);
     boxPositions = [{headerIndex: 1, endIndex: 4}];
-    return {boxRect: box};
+    return {svg, boxRect: box};
 }"""
 
 
-class TestBoxDelete:
-    def test_contextmenu_opens_box_menu(self, app_url, page):
+class TestBoxContextDetection:
+    def test_findenclosingbox_inside_and_outside(self, app_url, page):
         result = page.evaluate(
             """(setup) => {
-                const {boxRect} = eval('(' + setup + ')')();
+                eval('(' + setup + ')')();
                 setupBoxHandlers(document.querySelectorAll('#colb svg *'));
-                boxRect.dispatchEvent(new MouseEvent('contextmenu', {
-                    bubbles: true, cancelable: true, clientX: 30, clientY: 40}));
+                // Box spans x[10..70], y[6..126].
                 return {
-                    menuDisplay: document.getElementById('seq-box-menu').style.display,
-                    lastClickedIsBox: lastclickedsvgelement === boxRect,
+                    inside: findEnclosingBox(40, 60) !== null,
+                    outsideX: findEnclosingBox(200, 60),
+                    outsideY: findEnclosingBox(40, 300),
                 };
             }""",
             SETUP_BOX,
         )
-        assert result["menuDisplay"] == "block"
-        assert result["lastClickedIsBox"] is True
+        assert result["inside"] is True
+        assert result["outsideX"] is None
+        assert result["outsideY"] is None
+
+    def test_findenclosingbox_picks_innermost(self, app_url, page):
+        result = page.evaluate("""() => {
+            const NS = 'http://www.w3.org/2000/svg';
+            const svg = document.createElementNS(NS, 'svg');
+            const g = document.createElementNS(NS, 'g');
+            svg.appendChild(g);
+            function box(x, y, w, h) {
+                const r = document.createElementNS(NS, 'rect');
+                r.setAttribute('x', x); r.setAttribute('y', y);
+                r.setAttribute('width', w); r.setAttribute('height', h);
+                r.setAttribute('fill', '#DDDDDD');
+                r.setAttribute('style', 'stroke:#181818;stroke-width:0.5;');
+                g.appendChild(r);
+                return r;
+            }
+            function participant(x) {
+                const r = document.createElementNS(NS, 'rect');
+                r.setAttribute('x', x); r.setAttribute('y', 25);
+                r.setAttribute('width', 20); r.setAttribute('height', 30);
+                r.setAttribute('rx', 2.5); r.setAttribute('ry', 2.5);
+                r.setAttribute('style', 'stroke:#181818;stroke-width:0.5;');
+                g.appendChild(r);
+            }
+            const outer = box(10, 6, 200, 120);   // outer, larger
+            participant(20);
+            const inner = box(60, 10, 80, 110);   // inner, smaller
+            participant(70);
+            const colb = document.getElementById('colb');
+            colb.innerHTML = ''; colb.appendChild(svg);
+            boxPositions = [{headerIndex: 1, endIndex: 6}, {headerIndex: 3, endIndex: 5}];
+            setupBoxHandlers(document.querySelectorAll('#colb svg *'));
+            // Point inside both boxes -> innermost (inner) wins.
+            return findEnclosingBox(100, 60) === inner;
+        }""")
+        assert result is True
+
+    def test_inside_box_off_lifeline_shows_only_box_items(self, app_url, page):
+        """Right-clicking inside a box but not on a lifeline shows the Edit/Delete
+        Box items and hides the lifeline-only actions."""
+        result = page.evaluate(
+            """(setup) => {
+                const {svg, boxRect} = eval('(' + setup + ')')();
+                setupBoxHandlers(document.querySelectorAll('#colb svg *'));
+                participantLifelines = [];  // no lifeline near the click
+
+                // Drive the background context menu with a point inside the box
+                // (x[10..70], y[6..126]); stub the screen->svg transform.
+                const realTransform = svgPointFromEvent;
+                svgPointFromEvent = () => ({x: 40, y: 60});
+                try {
+                    backgroundContextMenu(
+                        {preventDefault() {}, target: boxRect, pageX: 5, pageY: 5},
+                        svg);
+                } finally {
+                    svgPointFromEvent = realTransform;
+                }
+
+                const disp = (id) => document.getElementById(id).style.display;
+                const liDisp = (id) =>
+                    document.getElementById(id).closest('li').style.display;
+                return {
+                    menu: document.getElementById('sequence-menu').style.display,
+                    editBox: disp('seq-editBox-item'),
+                    deleteBox: disp('seq-deleteBox-item'),
+                    addMessageHidden: liDisp('addMessageSolid') === 'none',
+                    addGroupHidden: liDisp('seq-addGroup') === 'none',
+                    contextBoxIsBox: contextBoxRect === boxRect,
+                };
+            }""",
+            SETUP_BOX,
+        )
+        assert result["menu"] == "block"
+        assert result["editBox"] == ""
+        assert result["deleteBox"] == ""
+        assert result["addMessageHidden"] is True
+        assert result["addGroupHidden"] is True
+        assert result["contextBoxIsBox"] is True
+
+    def test_outside_box_and_lifeline_shows_no_menu(self, app_url, page):
+        """Right-clicking empty space (no lifeline, no box) shows nothing."""
+        result = page.evaluate(
+            """(setup) => {
+                const {svg} = eval('(' + setup + ')')();
+                setupBoxHandlers(document.querySelectorAll('#colb svg *'));
+                participantLifelines = [];
+                document.getElementById('sequence-menu').style.display = 'none';
+
+                const realTransform = svgPointFromEvent;
+                svgPointFromEvent = () => ({x: 500, y: 500});  // far outside the box
+                try {
+                    backgroundContextMenu(
+                        {preventDefault() {}, target: svg, pageX: 5, pageY: 5}, svg);
+                } finally {
+                    svgPointFromEvent = realTransform;
+                }
+                return document.getElementById('sequence-menu').style.display;
+            }""",
+            SETUP_BOX,
+        )
+        assert result == "none"
 
     def test_delete_box_posts_to_deleteseqbox(self, app_url, page):
         result = page.evaluate(
@@ -221,8 +336,8 @@ class TestBoxDelete:
                 boxEventListeners();
                 const {boxRect} = eval('(' + setup + ')')();
                 setupBoxHandlers(document.querySelectorAll('#colb svg *'));
-                boxRect.dispatchEvent(new MouseEvent('contextmenu', {
-                    bubbles: true, cancelable: true, clientX: 30, clientY: 40}));
+                // The lifeline menu sets contextBoxRect when inside a box.
+                contextBoxRect = boxRect;
 
                 let captured = null;
                 const realFetch = window.fetch;
@@ -250,46 +365,23 @@ class TestBoxDelete:
         assert result["url"].endswith("deleteSeqBox")
         assert 'fill="#DDDDDD"' in result["body"]["svgelement"]
 
-    def test_box_rect_is_not_treated_as_a_note(self, app_url, page):
-        """Right-clicking a box opens only the box menu, never the note menu.
-
-        A box rect and an rnote share the same SVG signature, so
-        setupNoteHandlers must skip box rects (they enclose a participant)."""
+    def test_box_rect_has_no_note_menu(self, app_url, page):
+        """A box rect must not be handled as a note: setupNoteHandlers skips box
+        rects (they enclose a participant), so right-clicking one never opens the
+        note menu."""
         result = page.evaluate(
             """(setup) => {
                 const {boxRect} = eval('(' + setup + ')')();
-                // Run BOTH handler passes over the same nodes, as a render does.
                 const nodes = document.querySelectorAll('#colb svg *');
                 setupNoteHandlers(nodes);
                 setupBoxHandlers(nodes);
-
                 document.getElementById('seq-note-menu').style.display = 'none';
-                document.getElementById('seq-box-menu').style.display = 'none';
-
                 boxRect.dispatchEvent(new MouseEvent('contextmenu', {
                     bubbles: true, cancelable: true, clientX: 30, clientY: 40}));
-
-                return {
-                    boxMenu: document.getElementById('seq-box-menu').style.display,
-                    noteMenu: document.getElementById('seq-note-menu').style.display,
-                };
+                return document.getElementById('seq-note-menu').style.display;
             }""",
             SETUP_BOX,
         )
-        assert result["boxMenu"] == "block"
-        assert result["noteMenu"] == "none"
-
-    def test_box_menu_dismissed_on_click(self, app_url, page):
-        """The box context menu hides on the next document click (e.g. after
-        choosing Delete Box), like the other sequence menus."""
-        result = page.evaluate("""() => {
-            // Wire the sequence menu-dismiss document listener.
-            addSequenceEventListeners();
-            const menu = document.getElementById('seq-box-menu');
-            menu.style.display = 'block';
-            document.body.dispatchEvent(new MouseEvent('click', {bubbles: true}));
-            return menu.style.display;
-        }""")
         assert result == "none"
 
 
@@ -323,8 +415,7 @@ class TestBoxEdit:
                 boxEventListeners();
                 const {boxRect} = eval('(' + setup + ')')();
                 setupBoxHandlers(document.querySelectorAll('#colb svg *'));
-                boxRect.dispatchEvent(new MouseEvent('contextmenu', {
-                    bubbles: true, cancelable: true, clientX: 30, clientY: 40}));
+                contextBoxRect = boxRect;  // set by the lifeline menu when in a box
 
                 const realFetch = window.fetch;
                 window.fetch = () => Promise.resolve({json: () => Promise.resolve(
@@ -353,8 +444,7 @@ class TestBoxEdit:
                 boxEventListeners();
                 const {boxRect} = eval('(' + setup + ')')();
                 setupBoxHandlers(document.querySelectorAll('#colb svg *'));
-                boxRect.dispatchEvent(new MouseEvent('contextmenu', {
-                    bubbles: true, cancelable: true, clientX: 30, clientY: 40}));
+                contextBoxRect = boxRect;
 
                 const realFetch = window.fetch;
                 window.fetch = () => Promise.resolve({json: () => Promise.resolve(
@@ -377,7 +467,7 @@ class TestBoxEdit:
         result = page.evaluate(
             """(setup) => {
                 const {boxRect} = eval('(' + setup + ')')();
-                lastclickedsvgelement = boxRect;
+                contextBoxRect = boxRect;
                 document.getElementById('seq-box-title-text').value = 'My Box';
                 document.getElementById('seq-box-color-select').value = 'LightGreen';
 

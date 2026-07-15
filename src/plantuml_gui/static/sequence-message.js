@@ -155,11 +155,29 @@ function backgroundContextMenu(e, svgElement) {
     if (isSequenceAddMode()) return;
 
     const lifeline = findNearestLifeline(cx, cy, participantLifelines);
+    const enclosingBox =
+        typeof findEnclosingBox === 'function' ? findEnclosingBox(cx, cy) : null;
 
-    if (!lifeline) return;
+    // Show the menu if the click is on a lifeline or inside a box. Right-
+    // clicking empty space that is neither shows nothing.
+    if (!lifeline && !enclosingBox) return;
 
-    firstClickCoordinates = [lifeline.cx, cy];
-    messageOrigin = {cx: lifeline.cx, y: cy, name: lifeline.name};
+    // Lifeline-only actions (add message/activation/note/group) require a
+    // lifeline under the cursor; hide them when the click is inside a box but
+    // not on a lifeline, leaving just the Edit Box / Delete Box items.
+    const lifelineItemIds = [
+        'addMessageSolid', 'addMessageDashed', 'seq-addActivation',
+        'seq-addNote', 'seq-addGroup'
+    ];
+    lifelineItemIds.forEach((id) => {
+        const li = document.getElementById(id).closest('li');
+        if (li) li.style.display = lifeline ? '' : 'none';
+    });
+
+    if (lifeline) {
+        firstClickCoordinates = [lifeline.cx, cy];
+        messageOrigin = {cx: lifeline.cx, y: cy, name: lifeline.name};
+    }
 
     // If the right-click landed on an activation bar (a rect with the
     // stroke:#181818;stroke-width:1.0 style; participant headers use 0.5 and the
@@ -178,6 +196,27 @@ function backgroundContextMenu(e, svgElement) {
     } else {
         deleteItem.style.display = 'none';
         deleteDivider.style.display = 'none';
+    }
+
+    // If the right-click landed inside a participant box, show Edit Box /
+    // Delete Box. The box rect deliberately has no context-menu handler of its
+    // own -- it covers the lifeline area, so a dedicated handler would hijack
+    // the lifeline right-click -- so the box is detected here by hit-testing the
+    // recorded box bounds. When there is no lifeline, only these box items show.
+    const boxDivider = document.getElementById('seq-box-divider');
+    const editBoxItem = document.getElementById('seq-editBox-item');
+    const deleteBoxItem = document.getElementById('seq-deleteBox-item');
+    if (enclosingBox) {
+        contextBoxRect = enclosingBox;
+        // Hide the box divider when there are no lifeline items above it.
+        boxDivider.style.display = lifeline ? '' : 'none';
+        editBoxItem.style.display = '';
+        deleteBoxItem.style.display = '';
+    } else {
+        contextBoxRect = null;
+        boxDivider.style.display = 'none';
+        editBoxItem.style.display = 'none';
+        deleteBoxItem.style.display = 'none';
     }
 
     var contextMenu = document.getElementById('sequence-menu');

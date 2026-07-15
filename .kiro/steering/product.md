@@ -36,7 +36,8 @@ Enterprise developers and technical teams (primarily at Ericsson and similar com
 - Notes (add with a choice of type - Note, H Note, R Note; edit; delete)
 - Activation bars (activate, deactivate, destroy participants)
 - Group blocks (group, alt, opt, loop): add, rename title, delete (unwraps, keeping contents)
-- Bidirectional hover highlighting between the editor and messages, participants, notes, and group blocks
+- Participant boxes: add around contiguous participants (ghost-box gesture), edit title/color, delete (unwraps, keeping participants); nested boxes supported via the teoz engine
+- Bidirectional hover highlighting between the editor and messages, participants, notes, group blocks, and participant boxes
 
 ## Business Objectives
 

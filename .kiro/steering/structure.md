@@ -51,7 +51,7 @@
 │       ├── sequence-message.js  # Sequence add-message interaction (hover, ghost arrow, modal)
 │       ├── sequence-activation.js # Sequence activation-bar interaction (ghost bar, two-click)
 │       ├── sequence-group.js    # Sequence group-block interaction (ghost box, two-click, modal)
-│       ├── sequence-box.js      # Sequence participant-box interaction (horizontal ghost box, two-click add, delete)
+│       ├── sequence-box.js      # Sequence participant-box interaction (horizontal ghost box, two-click add; edit title/color and delete via the lifeline context menu)
 │       ├── sequence-operations.js # Sequence participant operations and orchestration
 │       ├── mode-plantuml.js # Ace editor PlantUML mode
 │       ├── styles.css      # Main stylesheet (imports css/ modules)

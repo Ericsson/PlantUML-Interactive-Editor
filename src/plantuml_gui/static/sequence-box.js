@@ -10,6 +10,10 @@
 let isAddBoxActive = false;
 let boxOrigin = null; // {startParticipantIndex, startCx}
 
+// The box whose Edit/Delete Box menu item is currently actionable. Set by the
+// lifeline (background) context menu when the right-click lands inside a box.
+let contextBoxRect = null;
+
 // Reusable ghost box overlay element (created once, moved on each frame)
 let ghostBox = null;
 
@@ -227,6 +231,7 @@ function boxEventListeners() {
 
     // "Edit Box" in the box context menu opens the title/color modal.
     document.getElementById('seq-editBox').addEventListener('click', async () => {
+        if (!contextBoxRect) return;
         const element = document.getElementById('colb');
         const svg = element.querySelector('g');
         try {
@@ -237,7 +242,7 @@ function boxEventListeners() {
                 body: JSON.stringify({
                     plantuml: plantuml,
                     svg: svg.innerHTML,
-                    svgelement: lastclickedsvgelement.outerHTML,
+                    svgelement: contextBoxRect.outerHTML,
                 }),
             });
             const data = await response.json();
@@ -258,6 +263,7 @@ function boxEventListeners() {
 
     // "Delete Box" in the box context menu unwraps the clicked box.
     document.getElementById('seq-deleteBox').addEventListener('click', async () => {
+        if (!contextBoxRect) return;
         const element = document.getElementById('colb');
         const svg = element.querySelector('g');
         try {
@@ -268,7 +274,7 @@ function boxEventListeners() {
                 body: JSON.stringify({
                     plantuml: plantuml,
                     svg: svg.innerHTML,
-                    svgelement: lastclickedsvgelement.outerHTML,
+                    svgelement: contextBoxRect.outerHTML,
                 }),
             });
             const data = await response.json();
@@ -290,6 +296,7 @@ function boxEventListeners() {
 // Global function called by onclick on the submit-box button. Sends the new
 // title and color for the clicked box to /editSeqBox.
 async function submitBoxEdit() {
+    if (!contextBoxRect) return;
     const element = document.getElementById('colb');
     const svg = element.querySelector('g');
     const title = document.getElementById('seq-box-title-text').value;
@@ -303,7 +310,7 @@ async function submitBoxEdit() {
             body: JSON.stringify({
                 plantuml: plantuml,
                 svg: svg.innerHTML,
-                svgelement: lastclickedsvgelement.outerHTML,
+                svgelement: contextBoxRect.outerHTML,
                 title: title,
                 color: color,
             }),
