@@ -34,7 +34,6 @@ import pytest
 from flask import json
 from plantuml_gui.sequence.box import (
     TEOZ_PRAGMA,
-    _participant_header_bounds,
     add_box,
     delete_box,
     edit_box,
@@ -42,7 +41,10 @@ from plantuml_gui.sequence.box import (
     index_of_clicked_box,
     is_box_rect,
 )
-from plantuml_gui.sequence.classes import is_participant_rect
+from plantuml_gui.sequence.classes import (
+    is_participant_rect,
+    participant_header_bounds,
+)
 from plantuml_gui.sequence.positions import get_sequence_positions
 from plantuml_gui.shared.render import _create_svg_from_uml
 from pyquery import PyQuery as Pq
@@ -66,14 +68,14 @@ def _svg_of(puml):
 
 def _nth_box_rect_html(svg, n):
     """Return the outerHTML of the nth (0-based) box rect in document order."""
-    bounds = _participant_header_bounds(svg)
+    bounds = participant_header_bounds(svg)
     boxes = [rect for rect in svg("rect").items() if is_box_rect(rect, bounds)]
     return str(boxes[n])
 
 
 def _box_rects(svg):
     """Return every rect the classifier flags as a box, in document order."""
-    bounds = _participant_header_bounds(svg)
+    bounds = participant_header_bounds(svg)
     return [rect for rect in svg("rect").items() if is_box_rect(rect, bounds)]
 
 
@@ -148,7 +150,7 @@ class TestBoxRectDetection:
 class TestBoxRectRejections:
     def test_rejects_participant_rects(self):
         svg = _svg_of(COLORED_BOX_PUML)
-        bounds = _participant_header_bounds(svg)
+        bounds = participant_header_bounds(svg)
         participant_rects = [r for r in svg("rect").items() if is_participant_rect(r)]
         assert participant_rects  # sanity: fixture has participants
         for rect in participant_rects:
@@ -159,7 +161,7 @@ class TestBoxRectRejections:
         # rejected: participant headers, the activation bar, the rnote, and the
         # group box (both its visible fill:none rect and the layout rect).
         svg = _svg_of(MIXED_PUML)
-        bounds = _participant_header_bounds(svg)
+        bounds = participant_header_bounds(svg)
         boxes = [rect for rect in svg("rect").items() if is_box_rect(rect, bounds)]
         non_boxes = [
             rect for rect in svg("rect").items() if not is_box_rect(rect, bounds)
@@ -606,6 +608,27 @@ alice -> bob: m1
         rect2 = _nth_box_rect_html(Pq(svg2), 0)
         label = get_box_label(edited, svg2, rect2)
         assert label["title"] == "A & B"
+
+    def test_hash_in_title_not_parsed_as_color(self):
+        # A '#' inside the title must not be mistaken for a color token.
+        svg = _g_inner(self.BARE_BOX_PUML)
+        rect = _nth_box_rect_html(Pq(svg), 0)
+        edited = edit_box(self.BARE_BOX_PUML, svg, rect, "C#", "none")
+        svg2 = _g_inner(edited)
+        rect2 = _nth_box_rect_html(Pq(svg2), 0)
+        label = get_box_label(edited, svg2, rect2)
+        assert label["title"] == "C#"
+        assert label["color"] == ""
+
+    def test_hash_in_title_preserves_real_color(self):
+        svg = _g_inner(self.BARE_BOX_PUML)
+        rect = _nth_box_rect_html(Pq(svg), 0)
+        edited = edit_box(self.BARE_BOX_PUML, svg, rect, "C#", "LightBlue")
+        svg2 = _g_inner(edited)
+        rect2 = _nth_box_rect_html(Pq(svg2), 0)
+        label = get_box_label(edited, svg2, rect2)
+        assert label["title"] == "C#"
+        assert label["color"] == "LightBlue"
 
 
 class TestEditBoxRoutes:

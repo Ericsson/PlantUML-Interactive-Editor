@@ -43,6 +43,42 @@ def is_participant_rect(rect: Pq) -> bool:
     return rect.attr("rx") is not None and rect.attr("ry") is not None
 
 
+def participant_header_bounds(svg: Pq) -> List[Dict[str, float]]:
+    """Return the bounding box of every participant header rect in the SVG.
+
+    Shared participant geometry: used by box detection (a box rect is the one
+    that encloses a participant header) and by note detection (to exclude box
+    rects, which share the rnote signature).
+    """
+    bounds: List[Dict[str, float]] = []
+    for rect in svg("rect").items():
+        if not is_participant_rect(rect):
+            continue
+        bounds.append(
+            {
+                "x": float(rect.attr("x")),
+                "y": float(rect.attr("y")),
+                "width": float(rect.attr("width")),
+                "height": float(rect.attr("height")),
+            }
+        )
+    return bounds
+
+
+def rect_encloses(rect: Pq, bound: Dict[str, float]) -> bool:
+    """Return True if ``rect`` fully contains the participant ``bound``."""
+    x = float(rect.attr("x"))
+    y = float(rect.attr("y"))
+    width = float(rect.attr("width"))
+    height = float(rect.attr("height"))
+    return (
+        x <= bound["x"]
+        and bound["x"] + bound["width"] <= x + width
+        and y <= bound["y"]
+        and bound["y"] + bound["height"] <= y + height
+    )
+
+
 def _participant_at(participants: List["Participant"], x: float) -> "Participant":
     """Return the participant whose header spans ``x``, else the closest by cx.
 

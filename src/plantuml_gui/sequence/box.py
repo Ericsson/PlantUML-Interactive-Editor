@@ -46,7 +46,7 @@ from typing import Dict, List
 
 from pyquery import PyQuery as Pq
 
-from .classes import is_participant_rect
+from .classes import participant_header_bounds, rect_encloses
 
 # Style PlantUML gives box rects. Shared verbatim with participant headers and
 # rnotes; see the module docstring for how the three are told apart.
@@ -157,41 +157,10 @@ def add_box(puml: str, title: str, color: str, start_index: int, end_index: int)
     return "\n".join(lines)
 
 
-def _participant_header_bounds(svg: Pq) -> List[Dict[str, float]]:
-    """Return the bounding box of every participant header rect in the SVG."""
-    bounds: List[Dict[str, float]] = []
-    for rect in svg("rect").items():
-        if not is_participant_rect(rect):
-            continue
-        bounds.append(
-            {
-                "x": float(rect.attr("x")),
-                "y": float(rect.attr("y")),
-                "width": float(rect.attr("width")),
-                "height": float(rect.attr("height")),
-            }
-        )
-    return bounds
-
-
-def _encloses(rect: Pq, bound: Dict[str, float]) -> bool:
-    """Return True if ``rect`` fully contains the participant ``bound``."""
-    x = float(rect.attr("x"))
-    y = float(rect.attr("y"))
-    width = float(rect.attr("width"))
-    height = float(rect.attr("height"))
-    return (
-        x <= bound["x"]
-        and bound["x"] + bound["width"] <= x + width
-        and y <= bound["y"]
-        and bound["y"] + bound["height"] <= y + height
-    )
-
-
 def is_box_rect(rect: Pq, participant_bounds: List[Dict[str, float]]) -> bool:
     """Return True if an SVG rect is a participant box background.
 
-    ``participant_bounds`` is the output of :func:`_participant_header_bounds`
+    ``participant_bounds`` is the output of :func:`participant_header_bounds`
     for the same SVG. A box is a rect with the shared header style, no rounded
     corners, a solid fill, that encloses at least one participant header. That
     enclosure check is what separates a box from an rnote (which shares every
@@ -205,7 +174,7 @@ def is_box_rect(rect: Pq, participant_bounds: List[Dict[str, float]]) -> bool:
     fill = rect.attr("fill")
     if fill is None or fill == "none":
         return False
-    return any(_encloses(rect, bound) for bound in participant_bounds)
+    return any(rect_encloses(rect, bound) for bound in participant_bounds)
 
 
 def index_of_clicked_box(svg: str, svgelement: str) -> int:
@@ -221,7 +190,7 @@ def index_of_clicked_box(svg: str, svgelement: str) -> int:
     clicked_y = clicked.attr("y")
 
     d = Pq(svg)
-    bounds = _participant_header_bounds(d)
+    bounds = participant_header_bounds(d)
     count = 0
     for rect in d("rect").items():
         if not is_box_rect(rect, bounds):
@@ -230,6 +199,15 @@ def index_of_clicked_box(svg: str, svgelement: str) -> int:
         if rect.attr("x") == clicked_x and rect.attr("y") == clicked_y:
             return count
     return -1
+
+
+def _resolve_box_line(puml: str, svg: str, svgelement: str) -> int:
+    """Return the puml line index of the clicked box's header, or -1.
+
+    Shared by get_box_label/edit_box/delete_box, which all need to turn the
+    clicked SVG box rect into its header line before reading or editing it.
+    """
+    return _find_box_line_index(puml, index_of_clicked_box(svg, svgelement))
 
 
 def _find_box_line_index(puml: str, box_index: int) -> int:
@@ -272,8 +250,7 @@ def delete_box(puml: str, svg: str, svgelement: str) -> str:
     pragma, if present, is left untouched so any remaining nested boxes still
     render.
     """
-    idx = index_of_clicked_box(svg, svgelement)
-    line_index = _find_box_line_index(puml, idx)
+    line_index = _resolve_box_line(puml, svg, svgelement)
     if line_index == -1:
         return puml
 
@@ -296,7 +273,7 @@ def get_box_positions(puml: str, svg: str) -> List[Dict[str, int]]:
     """
     lines = puml.splitlines()
     d = Pq(svg)
-    bounds = _participant_header_bounds(d)
+    bounds = participant_header_bounds(d)
     box_count = sum(1 for rect in d("rect").items() if is_box_rect(rect, bounds))
 
     positions: List[Dict[str, int]] = []
@@ -325,7 +302,10 @@ def _parse_box_header(line: str) -> Dict[str, str]:
     title_match = re.search(r'"([^"]*)"', rest)
     title = html.unescape(title_match.group(1)) if title_match else ""
 
-    color_match = re.search(r"#(\S+)", rest)
+    # Search for the color only outside the quoted title, so a '#' inside the
+    # title (e.g. box "C#") is not mistaken for a color token.
+    remainder = rest[title_match.end() :] if title_match else rest
+    color_match = re.search(r"#(\S+)", remainder)
     color = color_match.group(1) if color_match else ""
 
     return {"title": title, "color": color}
@@ -333,8 +313,7 @@ def _parse_box_header(line: str) -> Dict[str, str]:
 
 def get_box_label(puml: str, svg: str, svgelement: str) -> Dict[str, str]:
     """Return the clicked box's current title and color for the edit modal."""
-    idx = index_of_clicked_box(svg, svgelement)
-    line_index = _find_box_line_index(puml, idx)
+    line_index = _resolve_box_line(puml, svg, svgelement)
     if line_index == -1:
         return {"title": "", "color": ""}
     return _parse_box_header(puml.splitlines()[line_index])
@@ -347,8 +326,7 @@ def edit_box(puml: str, svg: str, svgelement: str, title: str, color: str) -> st
     title -> bare ``box``) and the color is appended as a ``#``-prefixed token
     (``""``/``"none"`` -> omitted). The box's contents and nesting are untouched.
     """
-    idx = index_of_clicked_box(svg, svgelement)
-    line_index = _find_box_line_index(puml, idx)
+    line_index = _resolve_box_line(puml, svg, svgelement)
     if line_index == -1:
         return puml
 

@@ -14,7 +14,7 @@
 │   │   └── parse_changelog.py # CHANGELOG.md parser for version history
 │   ├── sequence/           # Sequence diagram package
 │   │   ├── routes.py       # Sequence routes (/addParticipant, /addMessage, etc.)
-│   │   ├── classes.py      # Diagram, Participant, Message data classes
+│   │   ├── classes.py      # Diagram, Participant, Message data classes; shared participant-rect helpers (is_participant_rect, participant_header_bounds, rect_encloses)
 │   │   ├── participant.py  # Participant logic (add, rename, delete, positions)
 │   │   ├── message.py      # Message logic (add message, y-based insertion)
 │   │   ├── activation.py   # Activation bar logic (activate + deactivate/destroy pair)
