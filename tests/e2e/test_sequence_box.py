@@ -293,6 +293,122 @@ class TestBoxDelete:
         assert result == "none"
 
 
+class TestBoxEdit:
+    def test_edit_menu_item_and_modal_exist(self, app_url, page):
+        result = page.evaluate("""() => {
+            return document.getElementById('seq-editBox') !== null
+                && document.getElementById('seq-box-modalForm') !== null
+                && document.getElementById('seq-box-title-text') !== null
+                && document.getElementById('seq-box-color-select') !== null;
+        }""")
+        assert result is True
+
+    def test_color_options_none_first_and_tinted(self, app_url, page):
+        result = page.evaluate("""() => {
+            const opts = document.getElementById('seq-box-color-select').options;
+            // Every non-None option carries a background-color tint.
+            let allTinted = true;
+            for (let i = 1; i < opts.length; i++) {
+                if (!(opts[i].style.backgroundColor)) allTinted = false;
+            }
+            return {count: opts.length, first: opts[0].value, allTinted};
+        }""")
+        assert result["first"] == "none"
+        assert result["count"] > 1
+        assert result["allTinted"] is True
+
+    def test_edit_click_populates_modal_from_label(self, app_url, page):
+        result = page.evaluate(
+            """(setup) => {
+                boxEventListeners();
+                const {boxRect} = eval('(' + setup + ')')();
+                setupBoxHandlers(document.querySelectorAll('#colb svg *'));
+                boxRect.dispatchEvent(new MouseEvent('contextmenu', {
+                    bubbles: true, cancelable: true, clientX: 30, clientY: 40}));
+
+                const realFetch = window.fetch;
+                window.fetch = () => Promise.resolve({json: () => Promise.resolve(
+                    {title: 'Hello', color: 'Wheat'})});
+
+                document.getElementById('seq-editBox').click();
+
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        window.fetch = realFetch;
+                        resolve({
+                            title: document.getElementById('seq-box-title-text').value,
+                            color: document.getElementById('seq-box-color-select').value,
+                        });
+                    }, 60);
+                });
+            }""",
+            SETUP_BOX,
+        )
+        assert result["title"] == "Hello"
+        assert result["color"] == "Wheat"
+
+    def test_edit_click_falls_back_to_none_for_unknown_color(self, app_url, page):
+        result = page.evaluate(
+            """(setup) => {
+                boxEventListeners();
+                const {boxRect} = eval('(' + setup + ')')();
+                setupBoxHandlers(document.querySelectorAll('#colb svg *'));
+                boxRect.dispatchEvent(new MouseEvent('contextmenu', {
+                    bubbles: true, cancelable: true, clientX: 30, clientY: 40}));
+
+                const realFetch = window.fetch;
+                window.fetch = () => Promise.resolve({json: () => Promise.resolve(
+                    {title: '', color: '00FF00'})});  // not in the palette
+
+                document.getElementById('seq-editBox').click();
+
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        window.fetch = realFetch;
+                        resolve(document.getElementById('seq-box-color-select').value);
+                    }, 60);
+                });
+            }""",
+            SETUP_BOX,
+        )
+        assert result == "none"
+
+    def test_submit_posts_title_and_color_to_editseqbox(self, app_url, page):
+        result = page.evaluate(
+            """(setup) => {
+                const {boxRect} = eval('(' + setup + ')')();
+                lastclickedsvgelement = boxRect;
+                document.getElementById('seq-box-title-text').value = 'My Box';
+                document.getElementById('seq-box-color-select').value = 'LightGreen';
+
+                let captured = null;
+                const realFetch = window.fetch;
+                window.fetch = (url, opts) => {
+                    captured = {url, body: JSON.parse(opts.body)};
+                    return Promise.resolve({json: () => Promise.resolve(
+                        {plantuml: '@startuml\\n@enduml'})});
+                };
+                const realSetPuml = window.setPuml;
+                window.setPuml = () => {};
+
+                submitBoxEdit();
+
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        window.fetch = realFetch;
+                        window.setPuml = realSetPuml;
+                        resolve(captured);
+                    }, 60);
+                });
+            }""",
+            SETUP_BOX,
+        )
+        assert result is not None
+        assert result["url"].endswith("editSeqBox")
+        assert result["body"]["title"] == "My Box"
+        assert result["body"]["color"] == "LightGreen"
+
+
 class TestBoxHoverHighlight:
     def test_hovering_box_marks_editor_rows(self, app_url, page):
         result = page.evaluate(

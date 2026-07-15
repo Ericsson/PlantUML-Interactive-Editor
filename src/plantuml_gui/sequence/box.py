@@ -41,6 +41,7 @@ in style and are excluded outright.
 """
 
 import html
+import re
 from typing import Dict, List
 
 from pyquery import PyQuery as Pq
@@ -306,3 +307,51 @@ def get_box_positions(puml: str, svg: str) -> List[Dict[str, int]]:
         )
         positions.append({"headerIndex": header_index, "endIndex": end_index})
     return positions
+
+
+def _parse_box_header(line: str) -> Dict[str, str]:
+    """Extract the title and color from a ``box`` header line.
+
+    The title is the quoted string (HTML-unescaped for display) and the color
+    is the ``#``-prefixed token, both optional and in either order. Returns
+    ``{"title": ..., "color": ...}`` with the color's leading ``#`` stripped
+    (so it matches the frontend's palette option values) and ``""`` for a
+    missing title/color.
+    """
+    rest = line.strip()
+    if rest.startswith("box"):
+        rest = rest[len("box") :]
+
+    title_match = re.search(r'"([^"]*)"', rest)
+    title = html.unescape(title_match.group(1)) if title_match else ""
+
+    color_match = re.search(r"#(\S+)", rest)
+    color = color_match.group(1) if color_match else ""
+
+    return {"title": title, "color": color}
+
+
+def get_box_label(puml: str, svg: str, svgelement: str) -> Dict[str, str]:
+    """Return the clicked box's current title and color for the edit modal."""
+    idx = index_of_clicked_box(svg, svgelement)
+    line_index = _find_box_line_index(puml, idx)
+    if line_index == -1:
+        return {"title": "", "color": ""}
+    return _parse_box_header(puml.splitlines()[line_index])
+
+
+def edit_box(puml: str, svg: str, svgelement: str, title: str, color: str) -> str:
+    """Rewrite the clicked box's header line with a new title and color.
+
+    Reuses :func:`_box_header`, so the title is HTML-escaped and quoted (empty
+    title -> bare ``box``) and the color is appended as a ``#``-prefixed token
+    (``""``/``"none"`` -> omitted). The box's contents and nesting are untouched.
+    """
+    idx = index_of_clicked_box(svg, svgelement)
+    line_index = _find_box_line_index(puml, idx)
+    if line_index == -1:
+        return puml
+
+    lines = puml.splitlines()
+    lines[line_index] = _box_header(title, color)
+    return "\n".join(lines)

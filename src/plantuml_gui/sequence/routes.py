@@ -25,7 +25,7 @@
 from flask import Blueprint, jsonify, request
 
 from .activation import add_activation, delete_activation
-from .box import add_box, delete_box
+from .box import add_box, delete_box, edit_box, get_box_label
 from .group import add_group, delete_group, get_group_label, rename_group
 from .message import (
     add_message,
@@ -295,3 +295,23 @@ def deleteseqbox():
     svg = data["svg"]
     svgelement = data["svgelement"]
     return jsonify({"plantuml": delete_box(puml, svg, svgelement)})
+
+
+@sequence_bp.route("/getSeqBoxLabel", methods=["POST"])
+def getseqboxlabel():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    return jsonify(get_box_label(puml, svg, svgelement))
+
+
+@sequence_bp.route("/editSeqBox", methods=["POST"])
+def editseqbox():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    title = data.get("title", "")
+    color = data.get("color", "none")
+    return jsonify({"plantuml": edit_box(puml, svg, svgelement, title, color)})

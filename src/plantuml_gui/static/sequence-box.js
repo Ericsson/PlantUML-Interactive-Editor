@@ -225,6 +225,37 @@ function boxEventListeners() {
         startBoxAddModeFromContext();
     });
 
+    // "Edit Box" in the box context menu opens the title/color modal.
+    document.getElementById('seq-editBox').addEventListener('click', async () => {
+        const element = document.getElementById('colb');
+        const svg = element.querySelector('g');
+        try {
+            const plantuml = trimlines(editor.session.getValue());
+            const response = await fetch('getSeqBoxLabel', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    plantuml: plantuml,
+                    svg: svg.innerHTML,
+                    svgelement: lastclickedsvgelement.outerHTML,
+                }),
+            });
+            const data = await response.json();
+            document.getElementById('seq-box-title-text').value = data.title || '';
+            const colorSelect = document.getElementById('seq-box-color-select');
+            colorSelect.value = data.color ? data.color : 'none';
+            // A stored color outside the palette leaves the select with no match;
+            // fall back to None so it never shows a blank value.
+            if (colorSelect.selectedIndex === -1) colorSelect.value = 'none';
+            $('#seq-box-modalForm').modal('show');
+            $('#seq-box-modalForm').on('shown.bs.modal', function () {
+                $('#seq-box-title-text').trigger('focus');
+            });
+        } catch (error) {
+            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+        }
+    });
+
     // "Delete Box" in the box context menu unwraps the clicked box.
     document.getElementById('seq-deleteBox').addEventListener('click', async () => {
         const element = document.getElementById('colb');
@@ -253,4 +284,38 @@ function boxEventListeners() {
             cancelBoxAddMode();
         }
     });
+}
+
+
+// Global function called by onclick on the submit-box button. Sends the new
+// title and color for the clicked box to /editSeqBox.
+async function submitBoxEdit() {
+    const element = document.getElementById('colb');
+    const svg = element.querySelector('g');
+    const title = document.getElementById('seq-box-title-text').value;
+    const color = document.getElementById('seq-box-color-select').value;
+
+    try {
+        const plantuml = trimlines(editor.session.getValue());
+        const response = await fetch('editSeqBox', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                plantuml: plantuml,
+                svg: svg.innerHTML,
+                svgelement: lastclickedsvgelement.outerHTML,
+                title: title,
+                color: color,
+            }),
+        });
+        const data = await response.json();
+        if (data.error) {
+            displayErrorMessage(data.error);
+            return;
+        }
+        $('#seq-box-modalForm').modal('hide');
+        setPuml(data.plantuml);
+    } catch (error) {
+        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
+    }
 }

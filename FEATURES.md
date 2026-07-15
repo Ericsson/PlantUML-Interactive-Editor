@@ -96,9 +96,10 @@ but adding them to the PlantUML code should still work.
 - Participant boxes
   - Add a box from the participant context menu (right-click a participant → Box)
   - Hover another participant to grow a live ghost box across the range, then click to create it
-  - Wraps the selected contiguous participants in a `box ... end box` block (created untitled/uncolored for now)
+  - Wraps the selected contiguous participants in a `box ... end box` block (created untitled/uncolored; edit afterwards to add a title or color)
   - Nested boxes supported: when the selected range nests inside or contains an existing box, `!pragma teoz true` is added automatically so PlantUML can render the nesting
   - A range that partially overlaps (crosses) an existing box is rejected with an error, since PlantUML cannot render crossing boxes
+  - Edit a box (right-click the box → Edit Box); a modal lets you set a title and pick a background color from a preset palette (or None)
   - Delete a box (right-click the box → Delete Box); unwraps it, removing only the `box` header and matching `end box` line and keeping the participants
 - Bidirectional hover highlighting
   - Hovering a message, participant, note, group box, or participant box in the diagram highlights its line(s) in the editor

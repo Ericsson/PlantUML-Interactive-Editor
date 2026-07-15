@@ -37,6 +37,8 @@ from plantuml_gui.sequence.box import (
     _participant_header_bounds,
     add_box,
     delete_box,
+    edit_box,
+    get_box_label,
     index_of_clicked_box,
     is_box_rect,
 )
@@ -534,3 +536,117 @@ class TestBoxPositions:
         # Outer box fully contains the inner box.
         assert boxes[0]["headerIndex"] < boxes[1]["headerIndex"]
         assert boxes[1]["endIndex"] < boxes[0]["endIndex"]
+
+
+class TestEditBox:
+    COLORED_TITLED_PUML = """@startuml
+box "Old Title" #LightBlue
+participant alice
+participant bob
+end box
+alice -> bob: m1
+@enduml"""
+
+    BARE_BOX_PUML = """@startuml
+box
+participant alice
+participant bob
+end box
+alice -> bob: m1
+@enduml"""
+
+    def test_get_label_reads_title_and_color(self):
+        svg = _g_inner(self.COLORED_TITLED_PUML)
+        rect = _nth_box_rect_html(Pq(svg), 0)
+        label = get_box_label(self.COLORED_TITLED_PUML, svg, rect)
+        assert label == {"title": "Old Title", "color": "LightBlue"}
+
+    def test_get_label_empty_for_bare_box(self):
+        svg = _g_inner(self.BARE_BOX_PUML)
+        rect = _nth_box_rect_html(Pq(svg), 0)
+        label = get_box_label(self.BARE_BOX_PUML, svg, rect)
+        assert label == {"title": "", "color": ""}
+
+    def test_edit_sets_title_and_color_on_bare_box(self):
+        svg = _g_inner(self.BARE_BOX_PUML)
+        rect = _nth_box_rect_html(Pq(svg), 0)
+        result = edit_box(self.BARE_BOX_PUML, svg, rect, "New", "LightGreen")
+        lines = result.splitlines()
+        assert 'box "New" #LightGreen' in lines
+        # Participants preserved.
+        assert "participant alice" in lines
+
+    def test_edit_changes_existing_title_and_color(self):
+        svg = _g_inner(self.COLORED_TITLED_PUML)
+        rect = _nth_box_rect_html(Pq(svg), 0)
+        result = edit_box(self.COLORED_TITLED_PUML, svg, rect, "Renamed", "Wheat")
+        assert 'box "Renamed" #Wheat' in result.splitlines()
+        assert "Old Title" not in result
+
+    def test_edit_clears_title_and_color(self):
+        svg = _g_inner(self.COLORED_TITLED_PUML)
+        rect = _nth_box_rect_html(Pq(svg), 0)
+        result = edit_box(self.COLORED_TITLED_PUML, svg, rect, "", "none")
+        lines = result.splitlines()
+        assert "box" in lines  # bare box header
+        assert not any("#LightBlue" in ln for ln in lines)
+
+    def test_edit_title_is_html_escaped(self):
+        svg = _g_inner(self.BARE_BOX_PUML)
+        rect = _nth_box_rect_html(Pq(svg), 0)
+        result = edit_box(self.BARE_BOX_PUML, svg, rect, "A & B", "none")
+        assert 'box "A &amp; B"' in result.splitlines()
+
+    def test_get_label_roundtrips_escaped_title(self):
+        # Editing with special chars then reading back gives the original text.
+        svg = _g_inner(self.BARE_BOX_PUML)
+        rect = _nth_box_rect_html(Pq(svg), 0)
+        edited = edit_box(self.BARE_BOX_PUML, svg, rect, "A & B", "none")
+        svg2 = _g_inner(edited)
+        rect2 = _nth_box_rect_html(Pq(svg2), 0)
+        label = get_box_label(edited, svg2, rect2)
+        assert label["title"] == "A & B"
+
+
+class TestEditBoxRoutes:
+    TITLED_PUML = """@startuml
+box "T" #LightBlue
+participant alice
+participant bob
+end box
+alice -> bob: m1
+@enduml"""
+
+    def test_get_box_label_route(self, client):
+        svg = _g_inner(self.TITLED_PUML)
+        rect = _nth_box_rect_html(Pq(svg), 0)
+        response = client.post(
+            "/getSeqBoxLabel",
+            data=json.dumps(
+                {"plantuml": self.TITLED_PUML, "svg": svg, "svgelement": rect}
+            ),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data == {"title": "T", "color": "LightBlue"}
+
+    def test_edit_box_route(self, client):
+        svg = _g_inner(self.TITLED_PUML)
+        rect = _nth_box_rect_html(Pq(svg), 0)
+        response = client.post(
+            "/editSeqBox",
+            data=json.dumps(
+                {
+                    "plantuml": self.TITLED_PUML,
+                    "svg": svg,
+                    "svgelement": rect,
+                    "title": "Updated",
+                    "color": "Khaki",
+                }
+            ),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert 'box "Updated" #Khaki' in data["plantuml"].splitlines()
