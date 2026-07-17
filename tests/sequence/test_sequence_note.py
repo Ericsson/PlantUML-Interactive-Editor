@@ -27,10 +27,13 @@
 import re
 
 from plantuml_gui.sequence.note import (
+    _note_color_from_line,
+    _split_prefix_color,
     add_note,
     delete_note,
     edit_note,
     get_note_text,
+    get_note_text_and_type,
     index_of_clicked_note,
 )
 from plantuml_gui.shared.render import _create_svg_from_uml
@@ -1034,3 +1037,83 @@ note over Bob : second
             assert response.status_code == 200
             positions = response.get_json()["notes"]
             assert [p["index"] for p in positions] == [3, 5]
+
+
+class TestNoteColorHelpers:
+    """Pure-string tests for note color parsing."""
+
+    def test_split_no_color(self):
+        assert _split_prefix_color("note over Alice ") == ("note over Alice", "")
+
+    def test_split_named_color(self):
+        assert _split_prefix_color("note over Alice #LightBlue") == (
+            "note over Alice",
+            "LightBlue",
+        )
+
+    def test_split_hex_color(self):
+        assert _split_prefix_color("note over Alice #FFAAAA") == (
+            "note over Alice",
+            "FFAAAA",
+        )
+
+    def test_split_spanning_color(self):
+        assert _split_prefix_color("note over Alice, Bob #Orange") == (
+            "note over Alice, Bob",
+            "Orange",
+        )
+
+    def test_color_from_line(self):
+        assert (
+            _note_color_from_line("note over Alice #LightGreen : hello") == "LightGreen"
+        )
+
+    def test_color_from_line_absent(self):
+        assert _note_color_from_line("note over Alice : hello") == ""
+
+
+class TestEditNoteColor:
+    def test_edit_note_adds_color(self):
+        puml = "@startuml\nparticipant Alice\nnote over Alice : Text\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 0)
+        result = edit_note(puml, svg, svgelement, "Text", color="LightBlue")
+        expected = (
+            "@startuml\nparticipant Alice\nnote over Alice #LightBlue : Text\n@enduml"
+        )
+        assert result == expected
+
+    def test_edit_note_none_color_param_keeps_existing(self):
+        puml = (
+            "@startuml\nparticipant Alice\nnote over Alice #LightBlue : Text\n@enduml"
+        )
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        # A colored note renders with a non-default fill; find its body path by
+        # shape (6-point path) rather than the default-fill helper.
+        d = Pq(svg)
+        svgelement = next(
+            str(p) for p in d("path").items() if (p.attr("d") or "").count("L") + 1 == 6
+        )
+        result = edit_note(puml, svg, svgelement, "New")
+        expected = (
+            "@startuml\nparticipant Alice\nnote over Alice #LightBlue : New\n@enduml"
+        )
+        assert result == expected
+
+    def test_edit_note_hnote_with_color(self):
+        puml = "@startuml\nparticipant Alice\nhnote over Alice : Text\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        d = Pq(svg)
+        svgelement = next(str(p) for p in d("polygon").items())
+        result = edit_note(puml, svg, svgelement, "Text", color="Khaki")
+        expected = (
+            "@startuml\nparticipant Alice\nhnote over Alice #Khaki : Text\n@enduml"
+        )
+        assert result == expected
+
+    def test_get_note_text_and_type_returns_color(self):
+        puml = "@startuml\nparticipant Alice\nnote over Alice : Text\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 0)
+        text, note_type, color = get_note_text_and_type(puml, svg, svgelement)
+        assert (text, note_type, color) == ("Text", "note", "")

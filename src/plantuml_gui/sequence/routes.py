@@ -31,7 +31,7 @@ from .message import (
     add_message,
     delete_message,
     edit_message_text,
-    get_message_text,
+    get_message_label,
 )
 from .note import add_note, delete_note, edit_note, get_note_text_and_type
 from .participant import (
@@ -141,7 +141,8 @@ def getmessagetext():
     puml = data["plantuml"]
     svg = data["svg"]
     svgelement = data["svgelement"]
-    return jsonify({"text": get_message_text(puml, svg, svgelement)})
+    text, color = get_message_label(puml, svg, svgelement)
+    return jsonify({"text": text, "color": color})
 
 
 @sequence_bp.route("/editMessageText", methods=["POST"])
@@ -151,7 +152,8 @@ def editmessagetext():
     svg = data["svg"]
     svgelement = data["svgelement"]
     text = data["text"]
-    return jsonify({"plantuml": edit_message_text(puml, svg, svgelement, text)})
+    color = data.get("color")
+    return jsonify({"plantuml": edit_message_text(puml, svg, svgelement, text, color)})
 
 
 @sequence_bp.route("/deleteMessage", methods=["POST"])
@@ -198,11 +200,12 @@ def getseqnotetext():
     puml = data["plantuml"]
     svg = data["svg"]
     svgelement = data["svgelement"]
-    text, note_type = get_note_text_and_type(puml, svg, svgelement)
+    text, note_type, color = get_note_text_and_type(puml, svg, svgelement)
     return jsonify(
         {
             "text": text,
             "noteType": note_type,
+            "color": color,
         }
     )
 
@@ -215,7 +218,10 @@ def editseqnote():
     svgelement = data["svgelement"]
     text = data["text"]
     note_type = data.get("noteType")
-    return jsonify({"plantuml": edit_note(puml, svg, svgelement, text, note_type)})
+    color = data.get("color")
+    return jsonify(
+        {"plantuml": edit_note(puml, svg, svgelement, text, note_type, color)}
+    )
 
 
 @sequence_bp.route("/deleteSeqNote", methods=["POST"])

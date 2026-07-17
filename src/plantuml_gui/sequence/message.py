@@ -22,12 +22,18 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import re
 from typing import Dict, List
 
 from pyquery import PyQuery as Pq
 
 from .classes import Diagram, Participant
-from .util import escape_multiline_text, find_insertion_index, unescape_multiline_text
+from .util import (
+    escape_multiline_text,
+    find_insertion_index,
+    resolve_color,
+    unescape_multiline_text,
+)
 
 
 def _find_closest_participant(
@@ -131,19 +137,102 @@ def index_of_clicked_message(svg: str, svgelement: str) -> int:
     return -1
 
 
-def get_message_text(puml: str, svg: str, svgelement: str) -> str:
-    """Get the label text of the clicked message."""
+# A message arrow, matched so its optional embedded color bracket can be read or
+# rewritten. The arrow either starts with ``<`` (a reverse/bidirectional head)
+# or ends with a head (``>``, ``x`` or ``o``); either way it contains at least
+# one dash. Requiring a head keeps a lone ``-`` inside a participant name (e.g.
+# ``Web-Server``) from being mistaken for the arrow. An existing ``[#color]``
+# token may sit anywhere among the dashes.
+_ARROW_RE = re.compile(
+    r"<{1,2}[-\\/]*(?:\[#[^\]]*\])?[-\\/]*(?:>{1,2}|[xo])?"  # starts with '<'
+    r"|[-\\/]+(?:\[#[^\]]*\])?[-\\/]*(?:>{1,2}|[xo])"  # ends with a head
+)
+
+
+def _arrow_color_from_line(line: str) -> str:
+    """Extract a message's arrow color from its puml line (``""`` if none)."""
+    colon_pos = line.find(": ")
+    prefix = line[:colon_pos] if colon_pos != -1 else line
+    match = _ARROW_RE.search(prefix)
+    if not match:
+        return ""
+    color_match = re.search(r"\[#([^\]]+)\]", match.group(0))
+    return color_match.group(1) if color_match else ""
+
+
+def _apply_arrow_color(arrow: str, color: str) -> str:
+    """Return ``arrow`` with its color set to ``color`` (``""`` removes it).
+
+    Any existing ``[#...]`` token is stripped first. A non-empty color is
+    re-inserted as ``[#color]`` immediately after the arrow's first dash, which
+    is PlantUML's canonical placement (``->`` -> ``-[#red]>``, ``-->`` ->
+    ``-[#red]->``, ``<->`` -> ``<-[#red]->``).
+    """
+    arrow = re.sub(r"\[#[^\]]*\]", "", arrow)
+    if not color:
+        return arrow
+    dash = arrow.find("-")
+    if dash == -1:
+        return arrow
+    return f"{arrow[: dash + 1]}[#{color}]{arrow[dash + 1 :]}"
+
+
+def _set_arrow_color(prefix: str, color: str) -> str:
+    """Rewrite the arrow color in a message line's pre-``": "`` prefix."""
+    match = _ARROW_RE.search(prefix)
+    if not match:
+        return prefix
+    new_arrow = _apply_arrow_color(match.group(0), color)
+    return prefix[: match.start()] + new_arrow + prefix[match.end() :]
+
+
+def _clicked_message_line(puml: str, svg: str, svgelement: str) -> str:
+    """Return the puml source line of the clicked message.
+
+    Shared by the label/color getters so the SVG is parsed and the clicked
+    message resolved in one place.
+    """
     diagram = Diagram.from_svg(svg, puml)
     idx = index_of_clicked_message(svg, svgelement)
-    message = diagram.messages[idx - 1]
-    line = puml.splitlines()[message.index]
+    return puml.splitlines()[diagram.messages[idx - 1].index]
+
+
+def _message_text_from_line(line: str) -> str:
+    """Extract a message's display text from its puml line (pure)."""
     colon_pos = line.find(": ")
     text = line[colon_pos + 2 :] if colon_pos != -1 else ""
     return unescape_multiline_text(text)
 
 
-def edit_message_text(puml: str, svg: str, svgelement: str, text: str) -> str:
-    """Edit the label text of the clicked message."""
+def get_message_text(puml: str, svg: str, svgelement: str) -> str:
+    """Get the label text of the clicked message."""
+    return _message_text_from_line(_clicked_message_line(puml, svg, svgelement))
+
+
+def get_message_color(puml: str, svg: str, svgelement: str) -> str:
+    """Get the arrow color of the clicked message (``""`` if uncolored)."""
+    return _arrow_color_from_line(_clicked_message_line(puml, svg, svgelement))
+
+
+def get_message_label(puml: str, svg: str, svgelement: str) -> tuple[str, str]:
+    """Return (text, color) for the clicked message in one lookup.
+
+    Resolves the message's puml line once (parsing the SVG a single time) and
+    derives both fields, so the /getMessageText route avoids a redundant parse.
+    """
+    line = _clicked_message_line(puml, svg, svgelement)
+    return _message_text_from_line(line), _arrow_color_from_line(line)
+
+
+def edit_message_text(
+    puml: str, svg: str, svgelement: str, text: str, color: str | None = None
+) -> str:
+    """Edit the label text of the clicked message, optionally its arrow color.
+
+    color sets the message arrow's color as a ``[#color]`` token. ``None``
+    leaves any existing color unchanged; an empty value or ``"none"`` removes
+    it; any other value replaces it. Named colors and hex both work.
+    """
     diagram = Diagram.from_svg(svg, puml)
     idx = index_of_clicked_message(svg, svgelement)
     message = diagram.messages[idx - 1]
@@ -151,8 +240,13 @@ def edit_message_text(puml: str, svg: str, svgelement: str, text: str) -> str:
     line = lines[message.index]
     # Replace text after ": "
     colon_pos = line.find(": ")
-    if colon_pos != -1:
-        lines[message.index] = line[: colon_pos + 2] + escape_multiline_text(text)
+    if colon_pos == -1:
+        return puml
+    prefix = line[:colon_pos]
+    if color is not None:
+        existing = _arrow_color_from_line(line)
+        prefix = _set_arrow_color(prefix, resolve_color(color, existing))
+    lines[message.index] = prefix + ": " + escape_multiline_text(text)
     return "\n".join(lines)
 
 

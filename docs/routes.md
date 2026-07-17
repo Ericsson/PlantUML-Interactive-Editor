@@ -113,8 +113,8 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 
 ## Sequence Diagram (Messages)
 
-- **POST /getMessageText** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"text": message_label}`.
-- **POST /editMessageText** — Input: `plantuml`, `svg`, `svgelement`, `text`. Returns: JSON `{"plantuml": modified_puml}`.
+- **POST /getMessageText** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"text": message_label, "color": arrow_color}`. `color` is the message arrow's color with the leading `#` stripped (matching the palette option values), `""` when the arrow is uncolored.
+- **POST /editMessageText** — Input: `plantuml`, `svg`, `svgelement`, `text`, optional `color`. Returns: JSON `{"plantuml": modified_puml}`. `color` sets the arrow color as a `[#color]` token (e.g. `A -[#red]> B`); omitting it (or `null`) leaves any existing arrow color unchanged, while `""`/`"none"` removes it.
 - **POST /deleteMessage** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"plantuml": modified_puml}`.
 
 `message`/`text` may contain real newlines (multi-line textarea input); since a message is a single-line puml statement, `addMessage`/`editMessageText` escape newlines to a literal `\n`, and `getMessageText`/`getMessagePositions` unescape `\n` back to real newlines.
@@ -127,8 +127,8 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 ## Sequence Diagram (Notes)
 
 - **POST /addNote** — Input: `plantuml`, `svg`, `participant`, `placement` ('over'/'left'/'right'/'spanning'), `text`, `yPosition`, optional `secondParticipant`, optional `noteType` ('note'/'hnote'/'rnote', defaults to 'note' if missing or unrecognized). Returns: JSON `{"plantuml": modified_puml}`. Y-coordinate determines insertion position. All three note types support the same placement grammar identically.
-- **POST /getSeqNoteText** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"text": note_text, "noteType": "note"|"hnote"|"rnote"}`. `noteType` is the detected keyword of the clicked note, falling back to `"note"` if detection fails.
-- **POST /editSeqNote** — Input: `plantuml`, `svg`, `svgelement`, `text`, optional `noteType` ('note'/'hnote'/'rnote'). Returns: JSON `{"plantuml": modified_puml}`. If `noteType` is omitted or unrecognized, only the text is changed and the note's existing keyword is left as-is.
+- **POST /getSeqNoteText** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"text": note_text, "noteType": "note"|"hnote"|"rnote", "color": note_color}`. `noteType` is the detected keyword of the clicked note, falling back to `"note"` if detection fails. `color` is the note's background color with the leading `#` stripped (matching the palette option values), `""` when uncolored.
+- **POST /editSeqNote** — Input: `plantuml`, `svg`, `svgelement`, `text`, optional `noteType` ('note'/'hnote'/'rnote'), optional `color`. Returns: JSON `{"plantuml": modified_puml}`. If `noteType` is omitted or unrecognized, only the text is changed and the note's existing keyword is left as-is. `color` sets the note background color as a `#color` token placed at the end of the placement clause (e.g. `note over A #LightBlue : text`); omitting it (or `null`) leaves any existing color unchanged, while `""`/`"none"` removes it.
 - **POST /deleteSeqNote** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"plantuml": modified_puml}`.
 
 `text` may contain real newlines (multi-line textarea input); since a note is a single-line puml statement, `addNote`/`editSeqNote` escape newlines to a literal `\n`, and `getSeqNoteText` unescapes `\n` back to real newlines.

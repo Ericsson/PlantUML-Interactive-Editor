@@ -321,6 +321,7 @@ function setupLifelineInteraction() {
         $('#participant-modalForm .modal-title').text(
             'Add message from ' + originName + ' to ' + dest.name);
         $('#participant-message-text').val("");
+        document.getElementById('participant-message-color-group').style.display = 'none';
         $('#participant-modalForm').modal('show');
         $('#participant-modalForm').on('shown.bs.modal', function() {
             $('#participant-message-text').trigger('focus');
@@ -364,7 +365,8 @@ function messageEventListeners() {
                         'plantuml': plantuml,
                         'svg': svg.innerHTML,
                         'svgelement': lastclickedsvgelement.outerHTML,
-                        'text': newmessage
+                        'text': newmessage,
+                        'color': document.getElementById('participant-message-color-select').value
                     }),
                 });
             } else {

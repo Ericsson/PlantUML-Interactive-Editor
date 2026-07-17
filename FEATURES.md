@@ -68,12 +68,14 @@ but adding them to the PlantUML code should still work.
 - Messages
   - Add message between participants (hover lifeline → right-click → ghost arrow → click destination)
   - Edit message text (right-click message → Edit Message)
+  - Edit message arrow color (Edit Message modal → Color dropdown; a preset palette or None); rendered as an `-[#color]>` arrow
   - Delete message (right-click message → Delete Message)
   - Self-messages supported (same participant as sender and receiver)
   - Messages inserted at correct vertical position between existing messages
 - Notes
   - Add note from lifeline context menu, choosing a type (Note, H Note, or R Note) then a placement (over, left of, right of, spanning)
   - Edit note text and/or change its type (right-click note → Edit Note)
+  - Edit note background color (Edit Note modal → Color dropdown; a preset palette or None); works for all three note types
   - Delete note (right-click note → Delete Note)
   - Notes inserted at correct vertical position based on click Y-coordinate
   - Right-click, hover, and editor-to-diagram highlighting work for all three note types (previously note-only)

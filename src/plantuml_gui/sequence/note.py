@@ -22,6 +22,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import re
 from typing import Dict, List
 
 from pyquery import PyQuery as Pq
@@ -35,6 +36,7 @@ from .util import (
     find_insertion_index,
     iter_note_shapes,
     note_line_keyword,
+    resolve_color,
     unescape_multiline_text,
 )
 
@@ -211,6 +213,35 @@ def _note_type_from_line(line: str) -> str:
     return keyword if keyword is not None else "note"
 
 
+# A note's optional background color is a whitespace-separated ``#token`` sitting
+# at the end of the placement clause, right before the ``": "`` text separator
+# (e.g. ``note over A #LightBlue : text``). Requiring a leading space keeps a
+# ``#`` inside a participant name (``note over C#``) from being read as a color.
+_NOTE_COLOR_RE = re.compile(r"\s#([0-9A-Za-z]+)\s*$")
+
+
+def _split_prefix_color(prefix: str) -> tuple[str, str]:
+    """Split a note line's pre-``": "`` prefix into ``(prefix_without_color, color)``.
+
+    ``color`` has its leading ``#`` stripped (so it matches the frontend's
+    palette option values) and is ``""`` when the prefix carries no color. The
+    returned prefix keeps its leading whitespace but has the trailing color
+    token (and its surrounding whitespace) removed.
+    """
+    match = _NOTE_COLOR_RE.search(prefix)
+    if match:
+        return prefix[: match.start()], match.group(1)
+    return prefix.rstrip(), ""
+
+
+def _note_color_from_line(line: str) -> str:
+    """Extract a note's background color from its puml line (``""`` if none)."""
+    colon_pos = line.find(": ")
+    prefix = line[:colon_pos] if colon_pos != -1 else line
+    _, color = _split_prefix_color(prefix)
+    return color
+
+
 def get_note_text(puml: str, svg: str, svgelement: str) -> str:
     """Get the text of the clicked note."""
     line = _resolve_note_line(puml, svg, svgelement)
@@ -231,28 +262,45 @@ def get_note_type(puml: str, svg: str, svgelement: str) -> str:
     return _note_type_from_line(line)
 
 
-def get_note_text_and_type(puml: str, svg: str, svgelement: str) -> tuple[str, str]:
-    """Return (text, note_type) for the clicked note in one lookup.
+def get_note_text_and_type(
+    puml: str, svg: str, svgelement: str
+) -> tuple[str, str, str]:
+    """Return (text, note_type, color) for the clicked note in one lookup.
 
     Resolves the note's puml line once (parsing the SVG a single time)
-    and derives both fields, so callers needing both - like the
+    and derives all three fields, so callers needing them - like the
     /getSeqNoteText route - avoid a redundant parse. Mirrors the
-    individual functions' not-found defaults ("" text, "note" type).
+    individual functions' not-found defaults ("" text, "note" type,
+    "" color).
     """
     line = _resolve_note_line(puml, svg, svgelement)
     if line is None:
-        return "", "note"
-    return _note_text_from_line(line), _note_type_from_line(line)
+        return "", "note", ""
+    return (
+        _note_text_from_line(line),
+        _note_type_from_line(line),
+        _note_color_from_line(line),
+    )
 
 
 def edit_note(
-    puml: str, svg: str, svgelement: str, text: str, note_type: str | None = None
+    puml: str,
+    svg: str,
+    svgelement: str,
+    text: str,
+    note_type: str | None = None,
+    color: str | None = None,
 ) -> str:
-    """Edit the text of the clicked note, optionally changing its type.
+    """Edit the text of the clicked note, optionally changing its type/color.
 
     note_type selects the PlantUML keyword ("note"/"hnote"/"rnote"). If
     omitted or unrecognized, the existing keyword is left unchanged (a
     text-only edit, matching the original behavior).
+
+    color sets the note's background color (a ``#``-prefixed token placed at
+    the end of the placement clause). ``None`` leaves any existing color
+    untouched; an empty value or ``"none"`` removes it; any other value
+    replaces it. Named colors and hex both work (a leading ``#`` is optional).
     """
     idx = index_of_clicked_note(svg, svgelement)
     line_index = _find_note_line_index(puml, idx)
@@ -262,19 +310,23 @@ def edit_note(
     if colon_pos == -1:
         return puml
 
-    new_line = line[: colon_pos + 2] + escape_multiline_text(text)
+    prefix, existing_color = _split_prefix_color(line[:colon_pos])
 
     if note_type is not None and note_type in NOTE_KEYWORDS:
-        current_keyword = note_line_keyword(line.strip())
+        current_keyword = note_line_keyword(prefix.strip())
         if current_keyword is not None and current_keyword != note_type:
             # Replace only the leading keyword, preserving any leading
-            # whitespace, the placement clause, and an optional #color
-            # token exactly as they were.
-            stripped = new_line.strip()
-            leading_ws = new_line[: len(new_line) - len(stripped)]
-            new_line = leading_ws + note_type + stripped[len(current_keyword) :]
+            # whitespace and the placement clause exactly as they were.
+            stripped = prefix.strip()
+            leading_ws = prefix[: len(prefix) - len(prefix.lstrip())]
+            prefix = leading_ws + note_type + stripped[len(current_keyword) :]
 
-    lines[line_index] = new_line
+    new_color = resolve_color(color, existing_color)
+    new_prefix = prefix.rstrip()
+    if new_color:
+        new_prefix += f" #{new_color}"
+
+    lines[line_index] = new_prefix + " : " + escape_multiline_text(text)
     return "\n".join(lines)
 
 
