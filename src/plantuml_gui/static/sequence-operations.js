@@ -556,10 +556,12 @@ function messageOperationEventListeners() {
                     'svgelement': lastclickedsvgelement.outerHTML
                 })
             });
-            const text = (await response.json()).text;
+            const data = await response.json();
             messageEditMode = true;
             $('#participant-modalForm .modal-title').text('Edit Message');
-            $('#participant-message-text').val(text);
+            $('#participant-message-text').val(data.text);
+            document.getElementById('participant-message-color-group').style.display = 'block';
+            setColorSelect(document.getElementById('participant-message-color-select'), data.color);
             $('#participant-modalForm').modal('show');
             $('#participant-modalForm').on('shown.bs.modal', function() {
                 $('#participant-message-text').trigger('focus');
@@ -774,6 +776,51 @@ function setModalNoteType(noteType) {
     radio.checked = true;
 }
 
+// Set a palette <select> to a stored color, shared by the Box/Note/Message
+// edit modals. An empty/missing color selects "None". Palette options are
+// matched case-insensitively (PlantUML color names are case-insensitive), so a
+// color like "red" selects the canonical "Red" option. A color that is not in
+// the palette at all (e.g. a hex value, or a name we don't list) is preserved
+// by injecting it as a temporary option, so editing round-trips the color
+// instead of silently resetting it to None (which would then clear it on save).
+// Only one such custom option is kept at a time.
+function setColorSelect(select, color) {
+    const existingCustom = select.querySelector('option[data-custom-color]');
+    if (existingCustom) existingCustom.remove();
+
+    if (!color) {
+        select.value = 'none';
+        return;
+    }
+
+    const match = Array.from(select.options).find(
+        (opt) => opt.value.toLowerCase() === color.toLowerCase()
+    );
+    if (match) {
+        select.value = match.value;
+        return;
+    }
+
+    const option = document.createElement('option');
+    option.setAttribute('data-custom-color', '');
+    option.value = color;
+    option.textContent = color;
+    // Colors are stored without the leading '#', so a hex value needs it
+    // re-added to be valid CSS for the swatch; named colors are valid as-is.
+    option.style.backgroundColor = cssColorValue(color);
+    select.appendChild(option);
+    select.value = color;
+}
+
+// Return a value usable as a CSS color: hex codes (3/6/8 hex digits, stored
+// without '#') get the '#' re-added; anything else (a named color) is returned
+// unchanged.
+function cssColorValue(color) {
+    return /^[0-9A-Fa-f]{3}(?:[0-9A-Fa-f]{3}(?:[0-9A-Fa-f]{2})?)?$/.test(color)
+        ? '#' + color
+        : color;
+}
+
 function noteOperationEventListeners() {
     // "Add Note" in sequence-menu shows the note type submenu
     document.getElementById('seq-addNote').addEventListener('click', function(e) {
@@ -839,6 +886,7 @@ function noteOperationEventListeners() {
         document.querySelector('#seq-note-modalForm .modal-title').textContent = 'Add Note';
         document.getElementById('seq-note-text').value = '';
         document.getElementById('seq-note-type-group').style.display = 'none';
+        document.getElementById('seq-note-color-group').style.display = 'none';
         setModalNoteType(selectedNoteType);
         $('#seq-note-modalForm').modal('show');
     });
@@ -868,6 +916,8 @@ function noteOperationEventListeners() {
             document.getElementById('seq-note-text').value = responseData.text;
             document.getElementById('seq-note-second-participant-group').style.display = 'none';
             document.getElementById('seq-note-type-group').style.display = 'block';
+            document.getElementById('seq-note-color-group').style.display = 'block';
+            setColorSelect(document.getElementById('seq-note-color-select'), responseData.color);
             setModalNoteType(responseData.noteType);
             $('#seq-note-modalForm').modal('show');
         } catch (error) {
@@ -1012,7 +1062,8 @@ async function submitNote() {
                     svg: svg.innerHTML,
                     svgelement: lastclickedsvgelement.outerHTML,
                     text: text,
-                    noteType: noteType
+                    noteType: noteType,
+                    color: document.getElementById('seq-note-color-select').value
                 })
             });
         } else {

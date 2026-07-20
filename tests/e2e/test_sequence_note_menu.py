@@ -27,6 +27,29 @@ UX): clicking "Add Note" swaps the context menu in place for a Note/H Note/
 R Note choice, which itself swaps in place for the existing placement menu.
 """
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+
+def _right_click_until_menu(page, locate_xy, menu_selector, attempts=5):
+    """Right-click at freshly computed coordinates, retrying until the menu
+    appears (or the attempts run out, re-raising the timeout).
+
+    The sequence demo re-renders the diagram a few times right after it loads,
+    which can move the lifelines/notes between when a coordinate is computed
+    and when the click lands - so a single click occasionally misses the
+    target and the context menu never opens. Recomputing the coordinate and
+    retrying makes the gesture robust against that render race without hiding
+    a genuine failure (the final attempt still raises)."""
+    for attempt in range(attempts):
+        x, y = locate_xy()
+        page.mouse.click(x, y, button="right")
+        try:
+            page.wait_for_selector(menu_selector, state="visible", timeout=3000)
+            return
+        except PlaywrightTimeoutError:
+            if attempt == attempts - 1:
+                raise
+
 
 def _open_sequence_demo(page):
     """Switch the app to sequence mode via the real "Sequence Demo" menu
@@ -46,20 +69,22 @@ def _right_click_lifeline(page, lifeline_index=0, y_offset=60):
     so this exercises the actual DOM event/bubbling pipeline (unlike
     dispatchEvent, which does not interact with Bootstrap's document-level
     click handlers)."""
-    x, y = page.evaluate(
-        """(args) => {
-            const svg = document.querySelector('#colb svg');
-            const lifeline = participantLifelines[args.index];
-            const pt = svg.createSVGPoint();
-            pt.x = lifeline.cx;
-            pt.y = args.yOffset;
-            const screenPt = pt.matrixTransform(svg.getScreenCTM());
-            return [screenPt.x, screenPt.y];
-        }""",
-        {"index": lifeline_index, "yOffset": y_offset},
-    )
-    page.mouse.click(x, y, button="right")
-    page.wait_for_selector("#sequence-menu", state="visible", timeout=15000)
+
+    def locate():
+        return page.evaluate(
+            """(args) => {
+                const svg = document.querySelector('#colb svg');
+                const lifeline = participantLifelines[args.index];
+                const pt = svg.createSVGPoint();
+                pt.x = lifeline.cx;
+                pt.y = args.yOffset;
+                const screenPt = pt.matrixTransform(svg.getScreenCTM());
+                return [screenPt.x, screenPt.y];
+            }""",
+            {"index": lifeline_index, "yOffset": y_offset},
+        )
+
+    _right_click_until_menu(page, locate, "#sequence-menu")
 
 
 def _create_note_via_real_clicks(page, note_type, text, lifeline_index=0):
@@ -88,19 +113,21 @@ def _right_click_note(page, note_ordinal=0, lifeline_index=0):
     of its bounding box - robust regardless of whether the shape's cy
     convention is its top edge (plain "note") or true center (hnote/
     rnote), unlike a fixed y-offset from notePositions[].cy."""
-    x, y = page.evaluate(
-        """(args) => {
-            const svg = document.querySelector('#colb svg');
-            const shapes = Array.from(svg.querySelectorAll('path, polygon, rect'))
-                .filter(el => isNoteCandidate(el) && classifyNoteShape(el) !== null);
-            const shape = shapes[args.noteOrdinal];
-            const box = shape.getBoundingClientRect();
-            return [box.x + box.width / 2, box.y + box.height / 2];
-        }""",
-        {"noteOrdinal": note_ordinal},
-    )
-    page.mouse.click(x, y, button="right")
-    page.wait_for_selector("#seq-note-menu", state="visible", timeout=15000)
+
+    def locate():
+        return page.evaluate(
+            """(args) => {
+                const svg = document.querySelector('#colb svg');
+                const shapes = Array.from(svg.querySelectorAll('path, polygon, rect'))
+                    .filter(el => isNoteCandidate(el) && classifyNoteShape(el) !== null);
+                const shape = shapes[args.noteOrdinal];
+                const box = shape.getBoundingClientRect();
+                return [box.x + box.width / 2, box.y + box.height / 2];
+            }""",
+            {"noteOrdinal": note_ordinal},
+        )
+
+    _right_click_until_menu(page, locate, "#seq-note-menu")
 
 
 class TestSequenceNoteTypeMenuRealClicks:

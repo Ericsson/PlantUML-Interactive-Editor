@@ -438,7 +438,7 @@ class TestBoxEdit:
         assert result["title"] == "Hello"
         assert result["color"] == "Wheat"
 
-    def test_edit_click_falls_back_to_none_for_unknown_color(self, app_url, page):
+    def test_edit_click_preserves_out_of_palette_color(self, app_url, page):
         result = page.evaluate(
             """(setup) => {
                 boxEventListeners();
@@ -461,7 +461,38 @@ class TestBoxEdit:
             }""",
             SETUP_BOX,
         )
-        assert result == "none"
+        # A color not in the preset palette is preserved (injected as a custom
+        # option) so editing round-trips it, instead of silently resetting to
+        # None and clearing it on save.
+        assert result == "00FF00"
+
+    def test_edit_click_matches_palette_color_case_insensitively(self, app_url, page):
+        result = page.evaluate(
+            """(setup) => {
+                boxEventListeners();
+                const {boxRect} = eval('(' + setup + ')')();
+                setupBoxHandlers(document.querySelectorAll('#colb svg *'));
+                contextBoxRect = boxRect;
+
+                const realFetch = window.fetch;
+                window.fetch = () => Promise.resolve({json: () => Promise.resolve(
+                    {title: '', color: 'lightblue'})});  // palette 'LightBlue', other case
+
+                document.getElementById('seq-editBox').click();
+
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        window.fetch = realFetch;
+                        resolve(document.getElementById('seq-box-color-select').value);
+                    }, 60);
+                });
+            }""",
+            SETUP_BOX,
+        )
+        # A palette color in a different case selects the canonical option
+        # instead of being treated as out-of-palette (which previously forced
+        # None and cleared the color on save).
+        assert result == "LightBlue"
 
     def test_submit_posts_title_and_color_to_editseqbox(self, app_url, page):
         result = page.evaluate(

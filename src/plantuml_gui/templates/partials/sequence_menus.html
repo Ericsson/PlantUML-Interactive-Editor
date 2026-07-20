@@ -1,4 +1,24 @@
 
+{# Shared color palette for the Box / Note / Message edit modals. Defined once
+   here so the option list lives in a single place; callers pass the <select>'s
+   id. "none" maps to PlantUML's default color. #}
+{% macro color_select(select_id) %}
+<select class="form-control" id="{{ select_id }}">
+    <option value="none">None</option>
+    <option value="LightBlue" style="background-color:LightBlue">LightBlue</option>
+    <option value="LightGreen" style="background-color:LightGreen">LightGreen</option>
+    <option value="Red" style="background-color:Red">Red</option>
+    <option value="LightPink" style="background-color:LightPink">LightPink</option>
+    <option value="LightGray" style="background-color:LightGray">LightGray</option>
+    <option value="Wheat" style="background-color:Wheat">Wheat</option>
+    <option value="Khaki" style="background-color:Khaki">Khaki</option>
+    <option value="Orange" style="background-color:Orange">Orange</option>
+    <option value="LightCoral" style="background-color:LightCoral">LightCoral</option>
+    <option value="Blue" style="background-color:Blue">Blue</option>
+    <option value="Thistle" style="background-color:Thistle">Thistle</option>
+</select>
+{% endmacro %}
+
 <div class="modal fade" id="participant-modalForm" tabindex="-1" role="dialog" aria-labelledby="myModalLabel"
   aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered" role="document">
@@ -14,6 +34,10 @@
                   <div class="form-group">
                       <label for="participant-message-text" class="col-form-label">Message:</label>
                       <textarea class="form-control" id="participant-message-text"></textarea>
+                  </div>
+                  <div class="form-group" id="participant-message-color-group" style="display:none">
+                      <label for="participant-message-color-select" class="col-form-label">Color:</label>
+                      {{ color_select('participant-message-color-select') }}
                   </div>
               </form>
           </div>
@@ -132,6 +156,10 @@
                   <label for="seq-note-text" class="col-form-label">Note text:</label>
                   <textarea class="form-control" id="seq-note-text"></textarea>
               </div>
+              <div class="form-group" id="seq-note-color-group" style="display:none">
+                  <label for="seq-note-color-select" class="col-form-label">Color:</label>
+                  {{ color_select('seq-note-color-select') }}
+              </div>
               <div class="form-group" id="seq-note-second-participant-group" style="display:none">
                   <label for="seq-note-second-participant" class="col-form-label">Second participant:</label>
                   <select class="form-control" id="seq-note-second-participant"></select>
@@ -198,20 +226,7 @@
               </div>
               <div class="form-group">
                   <label for="seq-box-color-select" class="col-form-label">Color:</label>
-                  <select class="form-control" id="seq-box-color-select">
-                      <option value="none">None</option>
-                      <option value="LightBlue" style="background-color:LightBlue">LightBlue</option>
-                      <option value="LightGreen" style="background-color:LightGreen">LightGreen</option>
-                      <option value="LightYellow" style="background-color:LightYellow">LightYellow</option>
-                      <option value="LightPink" style="background-color:LightPink">LightPink</option>
-                      <option value="LightGray" style="background-color:LightGray">LightGray</option>
-                      <option value="Wheat" style="background-color:Wheat">Wheat</option>
-                      <option value="Khaki" style="background-color:Khaki">Khaki</option>
-                      <option value="Orange" style="background-color:Orange">Orange</option>
-                      <option value="LightCoral" style="background-color:LightCoral">LightCoral</option>
-                      <option value="LightCyan" style="background-color:LightCyan">LightCyan</option>
-                      <option value="Thistle" style="background-color:Thistle">Thistle</option>
-                  </select>
+                  {{ color_select('seq-box-color-select') }}
               </div>
           </div>
           <div class="modal-footer">

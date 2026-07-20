@@ -22,6 +22,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List
 
@@ -301,6 +302,12 @@ class Diagram:
             # contain "->" in their free text, but only after (or without)
             # a colon, since they aren't built with that arrow-then-colon
             # shape.
+            #
+            # A colored arrow embeds a "[#color]" token between the dash and
+            # the head (e.g. "-[#red]>"), which would otherwise hide the
+            # "->" substring; strip such tokens first so colored messages are
+            # still recognized.
+            line = re.sub(r"\[#[^\]]*\]", "", line)
             arrow_pos = line.find("->")
             colon_pos = line.find(":")
             return arrow_pos != -1 and colon_pos != -1 and arrow_pos < colon_pos

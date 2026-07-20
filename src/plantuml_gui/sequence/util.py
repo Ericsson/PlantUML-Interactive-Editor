@@ -248,6 +248,23 @@ def extract_note_positions(svg: str, puml: str) -> List[tuple[float, int]]:
     return positions
 
 
+def resolve_color(new_color: Optional[str], existing_color: str) -> str:
+    """Resolve an edit-request color value against the element's existing color.
+
+    Centralizes the color-edit semantics shared by messages and notes:
+    ``None`` leaves the existing color unchanged; an empty value or ``"none"``
+    (the palette's default option) clears it; any other value replaces it. The
+    returned token has no leading ``#`` (callers add it), matching the frontend
+    palette option values.
+    """
+    if new_color is None:
+        return existing_color
+    token = new_color.strip()
+    if token.lower() in ("", "none"):
+        return ""
+    return token.lstrip("#")
+
+
 def escape_multiline_text(text: str) -> str:
     """Convert real newlines to a literal \\n so the text stays one PlantUML line."""
     return text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\\n")
