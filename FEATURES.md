@@ -75,6 +75,7 @@ but adding them to the PlantUML code should still work.
 - Notes
   - Add note from lifeline context menu, choosing a type (Note, H Note, or R Note) then a placement (over, left of, right of, spanning)
   - Edit note text and/or change its type (right-click note → Edit Note)
+  - Both single-line (`note over A : text`) and multi-line block (`note over A` ... `end note`) syntax are supported for editing and deleting
   - Edit note background color (Edit Note modal → Color dropdown; a preset palette or None); works for all three note types
   - Delete note (right-click note → Delete Note)
   - Notes inserted at correct vertical position based on click Y-coordinate

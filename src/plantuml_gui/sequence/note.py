@@ -30,10 +30,10 @@ from pyquery import PyQuery as Pq
 from .classes import Diagram, Message
 from .util import (
     NOTE_KEYWORDS,
-    _find_note_line_index,
     escape_multiline_text,
     extract_note_positions,
     find_insertion_index,
+    find_note_region,
     iter_note_shapes,
     note_line_keyword,
     resolve_color,
@@ -182,25 +182,46 @@ def index_of_clicked_note(svg: str, svgelement: str) -> int:
     return -1
 
 
-def _resolve_note_line(puml: str, svg: str, svgelement: str) -> str | None:
-    """Resolve the clicked note's puml source line, or None if not found.
+def _resolve_note_region(
+    puml: str, svg: str, svgelement: str
+) -> tuple[List[str], int, int] | None:
+    """Resolve the clicked note to ``(lines, start, end)`` or ``None``.
 
-    Shared by get_note_text/get_note_type so the SVG is parsed and the
-    puml scanned once per lookup, and the not-found case is handled in a
-    single place.
+    ``start``/``end`` are the note's line range (see
+    :func:`find_note_region`): equal for a single-line note, or the opening
+    ``note`` line and its ``end note`` line for a block note. Shared by the
+    getters and editors so the SVG is parsed and the note located once per
+    lookup, and the not-found case is handled in a single place.
     """
     idx = index_of_clicked_note(svg, svgelement)
-    line_index = _find_note_line_index(puml, idx)
-    if line_index == -1:
+    start, end = find_note_region(puml, idx)
+    if start == -1:
         return None
-    return puml.splitlines()[line_index]
+    return puml.splitlines(), start, end
+
+
+def _leading_ws(line: str) -> str:
+    """Return the leading whitespace of a line."""
+    return line[: len(line) - len(line.lstrip())]
 
 
 def _note_text_from_line(line: str) -> str:
-    """Extract a note's display text from its puml line (pure)."""
+    """Extract a single-line note's display text from its puml line (pure)."""
     colon_pos = line.find(": ")
     text = line[colon_pos + 2 :] if colon_pos != -1 else ""
     return unescape_multiline_text(text)
+
+
+def _note_text_from_region(lines: List[str], start: int, end: int) -> str:
+    """Extract a note's display text from its resolved line range.
+
+    Single-line notes (``start == end``) keep their inline ``\\n``-escaped
+    text; block notes return the body lines (between the opening line and the
+    ``end note`` line) joined with real newlines.
+    """
+    if start == end:
+        return _note_text_from_line(lines[start])
+    return "\n".join(lines[start + 1 : end])
 
 
 def _note_type_from_line(line: str) -> str:
@@ -211,6 +232,19 @@ def _note_type_from_line(line: str) -> str:
     """
     keyword = note_line_keyword(line.strip())
     return keyword if keyword is not None else "note"
+
+
+def _swap_note_keyword(prefix: str, note_type: str) -> str:
+    """Return ``prefix`` with its leading note keyword replaced by ``note_type``.
+
+    Preserves any leading whitespace and the placement clause exactly. Returns
+    the prefix unchanged when it has no recognizable note keyword or already
+    uses ``note_type``.
+    """
+    current = note_line_keyword(prefix.strip())
+    if current is None or current == note_type:
+        return prefix
+    return _leading_ws(prefix) + note_type + prefix.strip()[len(current) :]
 
 
 # A note's optional background color is a whitespace-separated ``#token`` sitting
@@ -243,11 +277,11 @@ def _note_color_from_line(line: str) -> str:
 
 
 def get_note_text(puml: str, svg: str, svgelement: str) -> str:
-    """Get the text of the clicked note."""
-    line = _resolve_note_line(puml, svg, svgelement)
-    if line is None:
+    """Get the text of the clicked note (single-line or block form)."""
+    region = _resolve_note_region(puml, svg, svgelement)
+    if region is None:
         return ""
-    return _note_text_from_line(line)
+    return _note_text_from_region(*region)
 
 
 def get_note_type(puml: str, svg: str, svgelement: str) -> str:
@@ -256,10 +290,11 @@ def get_note_type(puml: str, svg: str, svgelement: str) -> str:
     Falls back to "note" if the note can't be found, matching
     _normalize_note_type's default so callers always get a valid type.
     """
-    line = _resolve_note_line(puml, svg, svgelement)
-    if line is None:
+    region = _resolve_note_region(puml, svg, svgelement)
+    if region is None:
         return "note"
-    return _note_type_from_line(line)
+    lines, start, _ = region
+    return _note_type_from_line(lines[start])
 
 
 def get_note_text_and_type(
@@ -267,19 +302,22 @@ def get_note_text_and_type(
 ) -> tuple[str, str, str]:
     """Return (text, note_type, color) for the clicked note in one lookup.
 
-    Resolves the note's puml line once (parsing the SVG a single time)
-    and derives all three fields, so callers needing them - like the
-    /getSeqNoteText route - avoid a redundant parse. Mirrors the
-    individual functions' not-found defaults ("" text, "note" type,
-    "" color).
+    Resolves the note's puml line range once (parsing the SVG a single
+    time) and derives all three fields, so callers needing them - like the
+    /getSeqNoteText route - avoid a redundant parse. The type and color come
+    from the opening ``note`` line for both single-line and block forms.
+    Mirrors the individual functions' not-found defaults ("" text, "note"
+    type, "" color).
     """
-    line = _resolve_note_line(puml, svg, svgelement)
-    if line is None:
+    region = _resolve_note_region(puml, svg, svgelement)
+    if region is None:
         return "", "note", ""
+    lines, start, end = region
+    opening = lines[start]
     return (
-        _note_text_from_line(line),
-        _note_type_from_line(line),
-        _note_color_from_line(line),
+        _note_text_from_region(lines, start, end),
+        _note_type_from_line(opening),
+        _note_color_from_line(opening),
     )
 
 
@@ -293,6 +331,12 @@ def edit_note(
 ) -> str:
     """Edit the text of the clicked note, optionally changing its type/color.
 
+    Handles both note forms: single-line (``note over A : text``) and block
+    (``note over A`` ... ``end note``). For a block note the opening line
+    carries the type/color and the body lines carry the text, so the incoming
+    (possibly multi-line) text replaces the body while the opening and
+    ``end note`` lines are preserved.
+
     note_type selects the PlantUML keyword ("note"/"hnote"/"rnote"). If
     omitted or unrecognized, the existing keyword is left unchanged (a
     text-only edit, matching the original behavior).
@@ -303,30 +347,42 @@ def edit_note(
     replaces it. Named colors and hex both work (a leading ``#`` is optional).
     """
     idx = index_of_clicked_note(svg, svgelement)
-    line_index = _find_note_line_index(puml, idx)
-    lines = puml.splitlines()
-    line = lines[line_index]
-    colon_pos = line.find(": ")
-    if colon_pos == -1:
+    start, end = find_note_region(puml, idx)
+    if start == -1:
         return puml
+    lines = puml.splitlines()
+    opening = lines[start]
+    is_block = end > start
 
-    prefix, existing_color = _split_prefix_color(line[:colon_pos])
+    if is_block:
+        # The whole opening line is the placement prefix (no inline text).
+        prefix_raw = opening
+    else:
+        colon_pos = opening.find(": ")
+        if colon_pos == -1:
+            return puml
+        prefix_raw = opening[:colon_pos]
+
+    prefix, existing_color = _split_prefix_color(prefix_raw)
 
     if note_type is not None and note_type in NOTE_KEYWORDS:
-        current_keyword = note_line_keyword(prefix.strip())
-        if current_keyword is not None and current_keyword != note_type:
-            # Replace only the leading keyword, preserving any leading
-            # whitespace and the placement clause exactly as they were.
-            stripped = prefix.strip()
-            leading_ws = prefix[: len(prefix) - len(prefix.lstrip())]
-            prefix = leading_ws + note_type + stripped[len(current_keyword) :]
+        prefix = _swap_note_keyword(prefix, note_type)
 
     new_color = resolve_color(color, existing_color)
     new_prefix = prefix.rstrip()
     if new_color:
         new_prefix += f" #{new_color}"
 
-    lines[line_index] = new_prefix + " : " + escape_multiline_text(text)
+    if is_block:
+        # Real newlines in the incoming text become separate body lines; the
+        # opening line (index ``start``) and the ``end note`` line (index
+        # ``end``) are preserved. Body lines are written verbatim - the editor
+        # flattens per-line indentation before every request, and PlantUML
+        # ignores leading whitespace in a note body anyway.
+        new_body = text.split("\n")
+        lines[start:end] = [new_prefix, *new_body]
+    else:
+        lines[start] = new_prefix + " : " + escape_multiline_text(text)
     return "\n".join(lines)
 
 
@@ -343,9 +399,12 @@ def get_note_positions(puml: str, svg: str) -> List[Dict[str, object]]:
 
 
 def delete_note(puml: str, svg: str, svgelement: str) -> str:
-    """Delete the clicked note."""
+    """Delete the clicked note (the whole ``note`` ... ``end note`` block for
+    block-form notes, or the single line for inline notes)."""
     idx = index_of_clicked_note(svg, svgelement)
-    line_index = _find_note_line_index(puml, idx)
+    start, end = find_note_region(puml, idx)
+    if start == -1:
+        return puml
     lines = puml.splitlines()
-    del lines[line_index]
+    del lines[start : end + 1]
     return "\n".join(lines)

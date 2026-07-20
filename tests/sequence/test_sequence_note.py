@@ -1117,3 +1117,169 @@ class TestEditNoteColor:
         svgelement = extract_note_path(svg, 0)
         text, note_type, color = get_note_text_and_type(puml, svg, svgelement)
         assert (text, note_type, color) == ("Text", "note", "")
+
+
+class TestSwapNoteKeyword:
+    """Pure keyword-swap helper used by edit_note for type changes."""
+
+    def test_swaps_leading_keyword(self):
+        from plantuml_gui.sequence.note import _swap_note_keyword
+
+        assert _swap_note_keyword("note over A", "hnote") == "hnote over A"
+
+    def test_preserves_placement_and_color(self):
+        from plantuml_gui.sequence.note import _swap_note_keyword
+
+        assert (
+            _swap_note_keyword("rnote left of A #Blue", "note")
+            == "note left of A #Blue"
+        )
+
+    def test_preserves_leading_whitespace(self):
+        from plantuml_gui.sequence.note import _swap_note_keyword
+
+        assert _swap_note_keyword("  note over A", "hnote") == "  hnote over A"
+
+    def test_noop_when_same_type(self):
+        from plantuml_gui.sequence.note import _swap_note_keyword
+
+        assert _swap_note_keyword("note over A", "note") == "note over A"
+
+    def test_noop_when_no_keyword(self):
+        from plantuml_gui.sequence.note import _swap_note_keyword
+
+        assert _swap_note_keyword("over A", "hnote") == "over A"
+
+
+class TestNoteRegions:
+    """Block-form note region parsing (pure, no rendering).
+
+    Regression: block notes (``note over X`` ... ``end note``) were not
+    recognized, so their text/type/color could not be read or edited.
+    """
+
+    def test_single_line_regions(self):
+        from plantuml_gui.sequence.util import note_regions
+
+        puml = "@startuml\nnote over A : one\nnote over B : two\n@enduml"
+        assert note_regions(puml) == [(1, 1), (2, 2)]
+
+    def test_block_note_region(self):
+        from plantuml_gui.sequence.util import note_regions
+
+        puml = "@startuml\nnote over A\nbody 1\nbody 2\nend note\n@enduml"
+        assert note_regions(puml) == [(1, 4)]
+
+    def test_body_line_starting_with_note_is_not_miscounted(self):
+        from plantuml_gui.sequence.util import note_regions
+
+        # The body line "note this down" must not be counted as its own note.
+        puml = "@startuml\nnote over A\nnote this down\nend note\n@enduml"
+        assert note_regions(puml) == [(1, 3)]
+
+    def test_mixed_single_and_block(self):
+        from plantuml_gui.sequence.util import note_regions
+
+        puml = (
+            "@startuml\nnote over A : inline\n"
+            "note over B\nblock body\nend note\n"
+            "hnote over A : inline2\n@enduml"
+        )
+        assert note_regions(puml) == [(1, 1), (2, 4), (5, 5)]
+
+    def test_end_note_variants(self):
+        from plantuml_gui.sequence.util import is_note_end_line
+
+        for closing in (
+            "end note",
+            "endnote",
+            "end hnote",
+            "endhnote",
+            "end rnote",
+            "END NOTE",
+        ):
+            assert is_note_end_line(closing), closing
+        for other in ("end", "note", "end group", "endif", "note over A"):
+            assert not is_note_end_line(other), other
+
+
+class TestBlockFormNotes:
+    """note ... end note (block/multi-line) form: get text, edit, delete.
+
+    Regression for larger diagrams that use the block form exclusively - the
+    parser previously understood only the single-line 'note ... : text' form,
+    so the edit modal loaded empty and edits were silent no-ops.
+    """
+
+    BLOCK = (
+        "@startuml\nparticipant Alice\nparticipant Bob\n"
+        "note over Alice\nfirst line\nsecond line\nend note\n@enduml"
+    )
+
+    def test_get_block_note_text(self):
+        svg = extract_g_inner(_create_svg_from_uml(self.BLOCK))
+        svgelement = extract_note_path(svg, 0)
+        assert get_note_text(self.BLOCK, svg, svgelement) == "first line\nsecond line"
+
+    def test_get_block_note_text_and_type(self):
+        svg = extract_g_inner(_create_svg_from_uml(self.BLOCK))
+        svgelement = extract_note_path(svg, 0)
+        text, note_type, color = get_note_text_and_type(self.BLOCK, svg, svgelement)
+        assert (text, note_type, color) == ("first line\nsecond line", "note", "")
+
+    def test_edit_block_note_text_only_preserves_block(self):
+        svg = extract_g_inner(_create_svg_from_uml(self.BLOCK))
+        svgelement = extract_note_path(svg, 0)
+        result = edit_note(self.BLOCK, svg, svgelement, "only line")
+        expected = (
+            "@startuml\nparticipant Alice\nparticipant Bob\n"
+            "note over Alice\nonly line\nend note\n@enduml"
+        )
+        assert result == expected
+
+    def test_edit_block_note_multiline_text_stays_block(self):
+        svg = extract_g_inner(_create_svg_from_uml(self.BLOCK))
+        svgelement = extract_note_path(svg, 0)
+        result = edit_note(self.BLOCK, svg, svgelement, "a\nb\nc")
+        expected = (
+            "@startuml\nparticipant Alice\nparticipant Bob\n"
+            "note over Alice\na\nb\nc\nend note\n@enduml"
+        )
+        assert result == expected
+        # Block bodies keep real newlines; they are not \n-escaped.
+        assert "\\n" not in result
+
+    def test_edit_block_note_change_type_and_color(self):
+        svg = extract_g_inner(_create_svg_from_uml(self.BLOCK))
+        svgelement = extract_note_path(svg, 0)
+        result = edit_note(
+            self.BLOCK, svg, svgelement, "body", note_type="hnote", color="LightBlue"
+        )
+        expected = (
+            "@startuml\nparticipant Alice\nparticipant Bob\n"
+            "hnote over Alice #LightBlue\nbody\nend note\n@enduml"
+        )
+        assert result == expected
+
+    def test_delete_block_note_removes_whole_region(self):
+        svg = extract_g_inner(_create_svg_from_uml(self.BLOCK))
+        svgelement = extract_note_path(svg, 0)
+        result = delete_note(self.BLOCK, svg, svgelement)
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\n@enduml"
+        assert result == expected
+
+    def test_spanning_block_note_second_in_mixed_diagram(self):
+        puml = (
+            "@startuml\nparticipant Alice\nparticipant Bob\n"
+            "note over Alice : inline first\n"
+            "note over Alice, Bob\nspanning body\nmore\nend note\n@enduml"
+        )
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_note_path(svg, 1)
+        assert get_note_text(puml, svg, svgelement) == "spanning body\nmore"
+        result = delete_note(puml, svg, svgelement)
+        expected = (
+            "@startuml\nparticipant Alice\nparticipant Bob\n"
+            "note over Alice : inline first\n@enduml"
+        )
+        assert result == expected
