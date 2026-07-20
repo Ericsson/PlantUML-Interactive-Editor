@@ -797,10 +797,22 @@ function setColorSelect(select, color) {
         option.setAttribute('data-custom-color', '');
         option.value = color;
         option.textContent = color;
-        option.style.backgroundColor = color;
+        // Colors are stored without the leading '#' (matching the palette
+        // option values), so a hex value needs it re-added to be valid CSS for
+        // the swatch; named colors are already valid as-is.
+        option.style.backgroundColor = cssColorValue(color);
         select.appendChild(option);
         select.value = color;
     }
+}
+
+// Return a value usable as a CSS color: hex codes (3/6/8 hex digits, stored
+// without '#') get the '#' re-added; anything else (a named color) is returned
+// unchanged.
+function cssColorValue(color) {
+    return /^[0-9A-Fa-f]{3}(?:[0-9A-Fa-f]{3}(?:[0-9A-Fa-f]{2})?)?$/.test(color)
+        ? '#' + color
+        : color;
 }
 
 function noteOperationEventListeners() {
