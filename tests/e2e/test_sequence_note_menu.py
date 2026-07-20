@@ -61,6 +61,20 @@ def _open_sequence_demo(page):
         "() => participantLifelines && participantLifelines.length === 3",
         timeout=15000,
     )
+    # Switching diagrams fires a burst of background requests: the activity
+    # diagram being replaced is still finishing its render/positions calls
+    # while the sequence demo issues its own renders, and each response
+    # rebuilds the SVG and reattaches the per-element handlers. If the first
+    # real right-click lands mid-burst it hits an element whose context-menu
+    # handler is not attached yet, so #sequence-menu never opens (the flaky
+    # failure this guards against). Wait for that churn to drain, then
+    # re-confirm the lifelines survived the final render, so interactions run
+    # against a settled SVG.
+    page.wait_for_load_state("networkidle")
+    page.wait_for_function(
+        "() => participantLifelines && participantLifelines.length === 3",
+        timeout=15000,
+    )
 
 
 def _right_click_lifeline(page, lifeline_index=0, y_offset=60):
