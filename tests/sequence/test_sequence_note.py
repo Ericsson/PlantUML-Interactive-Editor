@@ -1119,6 +1119,38 @@ class TestEditNoteColor:
         assert (text, note_type, color) == ("Text", "note", "")
 
 
+class TestSwapNoteKeyword:
+    """Pure keyword-swap helper used by edit_note for type changes."""
+
+    def test_swaps_leading_keyword(self):
+        from plantuml_gui.sequence.note import _swap_note_keyword
+
+        assert _swap_note_keyword("note over A", "hnote") == "hnote over A"
+
+    def test_preserves_placement_and_color(self):
+        from plantuml_gui.sequence.note import _swap_note_keyword
+
+        assert (
+            _swap_note_keyword("rnote left of A #Blue", "note")
+            == "note left of A #Blue"
+        )
+
+    def test_preserves_leading_whitespace(self):
+        from plantuml_gui.sequence.note import _swap_note_keyword
+
+        assert _swap_note_keyword("  note over A", "hnote") == "  hnote over A"
+
+    def test_noop_when_same_type(self):
+        from plantuml_gui.sequence.note import _swap_note_keyword
+
+        assert _swap_note_keyword("note over A", "note") == "note over A"
+
+    def test_noop_when_no_keyword(self):
+        from plantuml_gui.sequence.note import _swap_note_keyword
+
+        assert _swap_note_keyword("over A", "hnote") == "over A"
+
+
 class TestNoteRegions:
     """Block-form note region parsing (pure, no rendering).
 

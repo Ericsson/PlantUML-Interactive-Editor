@@ -234,6 +234,19 @@ def _note_type_from_line(line: str) -> str:
     return keyword if keyword is not None else "note"
 
 
+def _swap_note_keyword(prefix: str, note_type: str) -> str:
+    """Return ``prefix`` with its leading note keyword replaced by ``note_type``.
+
+    Preserves any leading whitespace and the placement clause exactly. Returns
+    the prefix unchanged when it has no recognizable note keyword or already
+    uses ``note_type``.
+    """
+    current = note_line_keyword(prefix.strip())
+    if current is None or current == note_type:
+        return prefix
+    return _leading_ws(prefix) + note_type + prefix.strip()[len(current) :]
+
+
 # A note's optional background color is a whitespace-separated ``#token`` sitting
 # at the end of the placement clause, right before the ``": "`` text separator
 # (e.g. ``note over A #LightBlue : text``). Requiring a leading space keeps a
@@ -353,13 +366,7 @@ def edit_note(
     prefix, existing_color = _split_prefix_color(prefix_raw)
 
     if note_type is not None and note_type in NOTE_KEYWORDS:
-        current_keyword = note_line_keyword(prefix.strip())
-        if current_keyword is not None and current_keyword != note_type:
-            # Replace only the leading keyword, preserving any leading
-            # whitespace and the placement clause exactly as they were.
-            stripped = prefix.strip()
-            leading_ws = _leading_ws(prefix)
-            prefix = leading_ws + note_type + stripped[len(current_keyword) :]
+        prefix = _swap_note_keyword(prefix, note_type)
 
     new_color = resolve_color(color, existing_color)
     new_prefix = prefix.rstrip()
