@@ -466,6 +466,34 @@ class TestBoxEdit:
         # None and clearing it on save.
         assert result == "00FF00"
 
+    def test_edit_click_matches_palette_color_case_insensitively(self, app_url, page):
+        result = page.evaluate(
+            """(setup) => {
+                boxEventListeners();
+                const {boxRect} = eval('(' + setup + ')')();
+                setupBoxHandlers(document.querySelectorAll('#colb svg *'));
+                contextBoxRect = boxRect;
+
+                const realFetch = window.fetch;
+                window.fetch = () => Promise.resolve({json: () => Promise.resolve(
+                    {title: '', color: 'lightblue'})});  // palette 'LightBlue', other case
+
+                document.getElementById('seq-editBox').click();
+
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        window.fetch = realFetch;
+                        resolve(document.getElementById('seq-box-color-select').value);
+                    }, 60);
+                });
+            }""",
+            SETUP_BOX,
+        )
+        # A palette color in a different case selects the canonical option
+        # instead of being treated as out-of-palette (which previously forced
+        # None and cleared the color on save).
+        assert result == "LightBlue"
+
     def test_submit_posts_title_and_color_to_editseqbox(self, app_url, page):
         result = page.evaluate(
             """(setup) => {

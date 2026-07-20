@@ -777,11 +777,13 @@ function setModalNoteType(noteType) {
 }
 
 // Set a palette <select> to a stored color, shared by the Box/Note/Message
-// edit modals. An empty/missing color selects "None". A color that is not one
-// of the preset palette options (e.g. a hex value, or a named color not in the
-// curated list) is preserved by injecting it as a temporary option, so editing
-// round-trips the color instead of silently resetting it to None (which would
-// then clear it on save). Only one such custom option is kept at a time.
+// edit modals. An empty/missing color selects "None". Palette options are
+// matched case-insensitively (PlantUML color names are case-insensitive), so a
+// color like "red" selects the canonical "Red" option. A color that is not in
+// the palette at all (e.g. a hex value, or a name we don't list) is preserved
+// by injecting it as a temporary option, so editing round-trips the color
+// instead of silently resetting it to None (which would then clear it on save).
+// Only one such custom option is kept at a time.
 function setColorSelect(select, color) {
     const existingCustom = select.querySelector('option[data-custom-color]');
     if (existingCustom) existingCustom.remove();
@@ -791,19 +793,23 @@ function setColorSelect(select, color) {
         return;
     }
 
-    select.value = color;
-    if (select.selectedIndex === -1) {
-        const option = document.createElement('option');
-        option.setAttribute('data-custom-color', '');
-        option.value = color;
-        option.textContent = color;
-        // Colors are stored without the leading '#' (matching the palette
-        // option values), so a hex value needs it re-added to be valid CSS for
-        // the swatch; named colors are already valid as-is.
-        option.style.backgroundColor = cssColorValue(color);
-        select.appendChild(option);
-        select.value = color;
+    const match = Array.from(select.options).find(
+        (opt) => opt.value.toLowerCase() === color.toLowerCase()
+    );
+    if (match) {
+        select.value = match.value;
+        return;
     }
+
+    const option = document.createElement('option');
+    option.setAttribute('data-custom-color', '');
+    option.value = color;
+    option.textContent = color;
+    // Colors are stored without the leading '#', so a hex value needs it
+    // re-added to be valid CSS for the swatch; named colors are valid as-is.
+    option.style.backgroundColor = cssColorValue(color);
+    select.appendChild(option);
+    select.value = color;
 }
 
 // Return a value usable as a CSS color: hex codes (3/6/8 hex digits, stored
