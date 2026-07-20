@@ -22,6 +22,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import re
 from typing import List, Optional
 
 from pyquery import PyQuery as Pq
@@ -175,24 +176,85 @@ def note_line_keyword(stripped_line: str) -> Optional[str]:
 
 
 def is_note_line(stripped_line: str) -> bool:
-    """Return True if a puml line is a note/hnote/rnote line."""
+    """Return True if a puml line opens a note/hnote/rnote."""
     return note_line_keyword(stripped_line) is not None
 
 
-def _find_note_line_index(puml: str, note_index: int) -> int:
-    """Find the puml line index of the nth note (1-based).
+# The closing keyword of a block (multi-line) note: "end note", "endnote",
+# "end hnote", "end rnote", etc. PlantUML accepts a single note-type suffix
+# after "end" (optionally without a space) and lets "end note" close any note
+# type. Matching is case-insensitive.
+_NOTE_END_RE = re.compile(r"^end\s?(?:note|hnote|rnote)$", re.IGNORECASE)
 
-    Matches "note", "hnote", and "rnote" lines uniformly.
+
+def is_note_end_line(stripped_line: str) -> bool:
+    """Return True if a puml line closes a block note ("end note" etc.)."""
+    return bool(_NOTE_END_RE.match(stripped_line))
+
+
+def _is_single_line_note(stripped_opening: str) -> bool:
+    """Return True if a note opening line carries its text inline.
+
+    Single-line notes put the text after a ``": "`` separator
+    (``note over A : text``). Block notes have no separator on the opening
+    line (``note over A`` followed by body lines and an ``end note``).
+    """
+    return ": " in stripped_opening
+
+
+def note_regions(puml: str) -> List[tuple[int, int]]:
+    """Return the ``(start, end)`` line range of every note, in source order.
+
+    ``start`` is the opening ``note``/``hnote``/``rnote`` line. For a
+    single-line note ``end == start``. For a block note ``end`` is the
+    matching ``end note`` line (or the last line if it is never closed).
+
+    Block bodies are skipped while scanning, so a body line that happens to
+    start with ``note `` is never miscounted as its own note. This keeps the
+    note count aligned with the one-shape-per-note count from
+    :func:`iter_note_shapes`.
     """
     lines = puml.splitlines()
-    count = 0
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if is_note_line(stripped):
-            count += 1
-            if count == note_index:
-                return i
-    return -1
+    regions: List[tuple[int, int]] = []
+    i = 0
+    n = len(lines)
+    while i < n:
+        stripped = lines[i].strip()
+        if note_line_keyword(stripped) is None:
+            i += 1
+            continue
+        if _is_single_line_note(stripped):
+            regions.append((i, i))
+            i += 1
+            continue
+        # Block note: scan forward to the matching close.
+        j = i + 1
+        while j < n and not is_note_end_line(lines[j].strip()):
+            j += 1
+        end = j if j < n else n - 1
+        regions.append((i, end))
+        i = end + 1
+    return regions
+
+
+def find_note_region(puml: str, note_index: int) -> tuple[int, int]:
+    """Return the ``(start, end)`` line range of the nth note (1-based).
+
+    Returns ``(-1, -1)`` when there is no such note.
+    """
+    regions = note_regions(puml)
+    if 1 <= note_index <= len(regions):
+        return regions[note_index - 1]
+    return (-1, -1)
+
+
+def _find_note_line_index(puml: str, note_index: int) -> int:
+    """Find the opening puml line index of the nth note (1-based).
+
+    Matches "note", "hnote", and "rnote", both single-line and block form;
+    returns -1 when there is no such note.
+    """
+    return find_note_region(puml, note_index)[0]
 
 
 def _shape_cy(shape: Pq) -> float:

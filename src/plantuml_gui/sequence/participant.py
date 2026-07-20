@@ -29,7 +29,7 @@ from typing import Dict, List
 from pyquery import PyQuery as Pq
 
 from .classes import Diagram, is_participant_rect
-from .util import is_note_line
+from .util import note_regions
 
 
 def index_of_clicked_participant(svg: str, svgelement: str) -> int:
@@ -111,12 +111,13 @@ def delete_participant(puml: str, svg: str, svgelement: str) -> str:
     for msg in diagram.messages:
         if msg.from_participant == participant or msg.to_participant == participant:
             lines_to_remove.add(msg.index)
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if is_note_line(stripped):
-            header = stripped.split(" : ", 1)[0]
-            if participant.name in header:
-                lines_to_remove.add(i)
+    # Remove notes that reference the participant. For block notes (note ...
+    # end note) the whole region must go, not just the opening line, or the
+    # orphaned body and "end note" break the diagram.
+    for start, end in note_regions(puml):
+        header = lines[start].strip().split(" : ", 1)[0]
+        if participant.name in header:
+            lines_to_remove.update(range(start, end + 1))
 
     lines = [line for i, line in enumerate(lines) if i not in lines_to_remove]
     return "\n".join(lines)
