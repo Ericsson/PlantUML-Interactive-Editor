@@ -30,7 +30,7 @@ R Note choice, which itself swaps in place for the existing placement menu.
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 
-def _right_click_until_menu(page, locate_xy, menu_selector, attempts=5):
+def _right_click_until_menu(page, locate_xy, menu_selector, attempts=8):
     """Right-click at freshly computed coordinates, retrying until the menu
     appears (or the attempts run out, re-raising the timeout).
 
@@ -44,7 +44,7 @@ def _right_click_until_menu(page, locate_xy, menu_selector, attempts=5):
         x, y = locate_xy()
         page.mouse.click(x, y, button="right")
         try:
-            page.wait_for_selector(menu_selector, state="visible", timeout=3000)
+            page.wait_for_selector(menu_selector, state="visible", timeout=5000)
             return
         except PlaywrightTimeoutError:
             if attempt == attempts - 1:
