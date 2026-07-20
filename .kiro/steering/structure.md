@@ -92,6 +92,7 @@
 │       ├── conftest.py     # Live server fixture
 │       ├── test_app_loads.py  # App loads correctly
 │       ├── test_js_logic.py   # JS function logic tests
+│       ├── test_render_race.py # Render-generation race regression (slow render can't clobber a newer diagram)
 │       ├── test_ribbon.py     # Toolbar ribbon UI tests
 │       ├── test_sequence_activation.py       # Activation bar e2e tests
 │       ├── test_sequence_box.py              # Participant box add/delete/hover e2e tests

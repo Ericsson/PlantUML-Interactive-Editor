@@ -28,6 +28,21 @@ let history = [];
 let historyPointer = -1;
 let editor;
 let currentDiagramType = "unknown";
+// Monotonic render token. Each renderPlantUml() call takes the next value; the
+// async SVG fetch/apply in the diagram handlers checks it before writing into
+// #colb so a slow render (e.g. a cold PlantUML JAR) that resolves after the
+// user has already switched diagrams cannot clobber the newer diagram.
+let renderGeneration = 0;
+// One-time guards for the static (non-SVG) event listeners wired by
+// addActivityEventListeners / addSequenceEventListeners. checkDiagramType()
+// calls these on every render, but they only bind to static template elements
+// (context-menu items, toolbar buttons, and a document-level menu-dismiss
+// click). Native addEventListener with a fresh closure each render stacks
+// duplicate handlers, so after N renders a single click would fire N identical
+// fetches that race on setPuml/history. Attach them once. (Per-render SVG
+// element handlers are bound separately in setHandlersFor*Diagram.)
+let activityListenersAttached = false;
+let sequenceListenersAttached = false;
 var Range = ace.require("ace/range").Range
 
 async function initeditor() {
@@ -446,6 +461,8 @@ function addUtilEventListeners() {
 }
 
 function addActivityEventListeners() {
+    if (activityListenersAttached) return;
+    activityListenersAttached = true;
     activityEventListeners();
     ifEventListeners();
     ellipseEventListeners();
@@ -492,6 +509,8 @@ function addActivityEventListeners() {
 
 
 function addSequenceEventListeners() {
+    if (sequenceListenersAttached) return;
+    sequenceListenersAttached = true;
     sequenceEventListeners()
 
     document.addEventListener('click', function(e) {
@@ -563,12 +582,26 @@ async function fetchSvgFromPlantUml() {
     }
 }
 
-function toggleLoadingOverlay() {
-    const overlay = document.getElementById('loading-overlay');
-    if (overlay.style.display === 'none' || overlay.style.display === '') {
-        overlay.style.display = 'block';
-    } else {
-        overlay.style.display = 'none';
+// Loading overlay visibility is reference-counted, not toggled: renders can
+// overlap (a slow render still in flight when the next one starts, or requests
+// resolving out of order), and a plain boolean toggle would desync - an even
+// number of overlapping show/hide flips could leave the overlay stuck visible
+// or hidden. Each render increments on start (showLoadingOverlay) and
+// decrements on every completion/bail path (hideLoadingOverlay); the overlay is
+// visible while any render is outstanding and hidden only once all finish.
+let loadingOverlayCount = 0;
+
+function showLoadingOverlay() {
+    loadingOverlayCount++;
+    document.getElementById('loading-overlay').style.display = 'block';
+}
+
+function hideLoadingOverlay() {
+    // Clamp at zero so an unexpected extra hide can't drive the count negative
+    // and wedge the overlay permanently visible.
+    loadingOverlayCount = Math.max(0, loadingOverlayCount - 1);
+    if (loadingOverlayCount === 0) {
+        document.getElementById('loading-overlay').style.display = 'none';
     }
 }
 
@@ -578,7 +611,7 @@ async function renderPlantUml() {
     if (document.getElementById('popup').style.visibility = "visible") {
         document.getElementById('popup').style.visibility = "hidden"; // Hide the error popup when rendering again.
     }
-    toggleLoadingOverlay();
+    showLoadingOverlay();
     let element = document.getElementById('colb')
     const pumlcontent = trimlines(editor.session.getValue());
     saveToHistory(pumlcontent);
@@ -606,18 +639,21 @@ async function renderPlantUml() {
     }
 
     currentDiagramType = checkDiagramType(pumlcontent);
+    const renderId = ++renderGeneration;
     switch (currentDiagramType) {
         case "activity":
-            setHandlersForActivityDiagram(pumlcontent, element);
+            setHandlersForActivityDiagram(pumlcontent, element, renderId);
             break;
         case "sequence":
-            setHandlersForSequenceDiagram(pumlcontent, element);
+            setHandlersForSequenceDiagram(pumlcontent, element, renderId);
             break;
         default:
             fetchSvgFromPlantUml().then((svgContent) => {
+                // Drop the result if a newer render has since started.
+                if (renderId !== renderGeneration) return;
                 element.innerHTML = svgContent;
             });
-            toggleLoadingOverlay();
+            hideLoadingOverlay();
     }
 }
 

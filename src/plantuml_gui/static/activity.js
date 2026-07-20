@@ -1761,17 +1761,25 @@ function resetActivityHighlight() {
     activityHighlighted = clearHoverHighlight(activityHighlighted);
 }
 
-async function setHandlersForActivityDiagram(pumlcontent, element) {
+async function setHandlersForActivityDiagram(pumlcontent, element, renderId) {
     removeBackgroundMenuListener();
 
     fetchSvgFromPlantUml().then(async (svgContent) => {
+        // A newer render started while this SVG was being fetched (e.g. the
+        // user switched diagrams); drop this result so it can't clobber the
+        // current diagram. Balance the loading overlay toggle that
+        // renderPlantUml did for this render before bailing.
+        if (renderId !== renderGeneration) {
+            hideLoadingOverlay();
+            return;
+        }
         element.innerHTML = svgContent;
         activityHoverTargets = newActivityHoverTargets();
         activityHighlighted = []; // old DOM discarded with innerHTML
         activityRowMap = new Map();
         const svg = element.querySelector('g');
         if (!svg) {
-            toggleLoadingOverlay()
+            hideLoadingOverlay()
             return
         }
         // Clear the editor hover marker when the pointer leaves a diagram
@@ -2383,9 +2391,13 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
         // After the walk so the svg sent reflects its mutations (e.g. the
         // pointer-events flags note counting depends on)
         await fetchActivityPositions();
-        toggleLoadingOverlay()
+        hideLoadingOverlay()
 
     }).catch((error) => {
+        // Balance the showLoadingOverlay() from renderPlantUml on the error
+        // path too; otherwise the ref count leaks and wedges the overlay
+        // visible. Mutually exclusive with the success hide above.
+        hideLoadingOverlay();
         displayErrorMessage(`Error rendering SVG: ${error.message}`, error);
     });
 }
