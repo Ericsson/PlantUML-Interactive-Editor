@@ -247,11 +247,7 @@ function boxEventListeners() {
             });
             const data = await response.json();
             document.getElementById('seq-box-title-text').value = data.title || '';
-            const colorSelect = document.getElementById('seq-box-color-select');
-            colorSelect.value = data.color ? data.color : 'none';
-            // A stored color outside the palette leaves the select with no match;
-            // fall back to None so it never shows a blank value.
-            if (colorSelect.selectedIndex === -1) colorSelect.value = 'none';
+            setColorSelect(document.getElementById('seq-box-color-select'), data.color);
             $('#seq-box-modalForm').modal('show');
             $('#seq-box-modalForm').on('shown.bs.modal', function () {
                 $('#seq-box-title-text').trigger('focus');

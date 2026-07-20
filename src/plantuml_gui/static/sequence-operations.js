@@ -776,13 +776,31 @@ function setModalNoteType(noteType) {
     radio.checked = true;
 }
 
-// Set a palette <select> to a stored color, mirroring the Box edit modal:
-// an empty/missing color falls back to "None", and a stored color outside the
-// palette (e.g. a hex value) also falls back to "None" rather than showing a
-// blank value.
+// Set a palette <select> to a stored color, shared by the Box/Note/Message
+// edit modals. An empty/missing color selects "None". A color that is not one
+// of the preset palette options (e.g. a hex value, or a named color not in the
+// curated list) is preserved by injecting it as a temporary option, so editing
+// round-trips the color instead of silently resetting it to None (which would
+// then clear it on save). Only one such custom option is kept at a time.
 function setColorSelect(select, color) {
-    select.value = color ? color : 'none';
-    if (select.selectedIndex === -1) select.value = 'none';
+    const existingCustom = select.querySelector('option[data-custom-color]');
+    if (existingCustom) existingCustom.remove();
+
+    if (!color) {
+        select.value = 'none';
+        return;
+    }
+
+    select.value = color;
+    if (select.selectedIndex === -1) {
+        const option = document.createElement('option');
+        option.setAttribute('data-custom-color', '');
+        option.value = color;
+        option.textContent = color;
+        option.style.backgroundColor = color;
+        select.appendChild(option);
+        select.value = color;
+    }
 }
 
 function noteOperationEventListeners() {
