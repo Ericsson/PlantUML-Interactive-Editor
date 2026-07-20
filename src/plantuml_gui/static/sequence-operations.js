@@ -697,6 +697,12 @@ function setupNoteHandlers(svgelements) {
 
         svgelement.addEventListener('mouseout', function() {
             clearMarkers();
+            // Mirror the mouseover guard: during an add-mode gesture (e.g. the
+            // group ghost box) mouseover bails out before capturing the
+            // original fill, leaving notecolor "". Restoring that empty fill
+            // would blank the paint attribute and render the note black, so
+            // skip the restore entirely while an add-mode gesture is active.
+            if (isSequenceAddMode()) return;
             if (findActiveHighlight(sequenceHighlighted, svgelement)) return;
             svgelement.setAttribute('fill', notecolor);
         });
