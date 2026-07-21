@@ -30,7 +30,16 @@ def _probe_message_interaction(page, mode):
             const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             const message = document.createElementNS('http://www.w3.org/2000/svg', 'line');
             message.setAttribute('style', 'stroke:#181818;stroke-width:1.0;');
+            message.setAttribute('y1', '40');
             svg.appendChild(message);
+            // The diagram-side hover bolds the whole message via sequenceRowMap,
+            // which setupMessageHandlers builds from messagePositions (always
+            // populated before setup in a real render). Reset the shared hover
+            // state so leftover entries from other tests can't leak in.
+            messagePositions = [{cy: 40, index: 1, text: 'm'}];
+            sequenceRowMap = new Map();
+            sequenceHighlighted = [];
+            sequenceDiagramHover = [];
             setupMessageHandlers([message], svg);
 
             const initialState = {
@@ -134,7 +143,16 @@ class TestSequenceMessageInteractions:
             const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             const message = document.createElementNS('http://www.w3.org/2000/svg', 'line');
             message.setAttribute('style', 'stroke:#181818;stroke-width:1.0;');
+            message.setAttribute('y1', '40');
             svg.appendChild(message);
+            // The diagram-side hover bolds the whole message via sequenceRowMap,
+            // which setupMessageHandlers builds from messagePositions (always
+            // populated before setup in a real render). Reset the shared hover
+            // state so leftover entries from other tests can't leak in.
+            messagePositions = [{cy: 40, index: 1, text: 'm'}];
+            sequenceRowMap = new Map();
+            sequenceHighlighted = [];
+            sequenceDiagramHover = [];
             setupMessageHandlers([message], svg);
 
             cancelMessageAddMode();

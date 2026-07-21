@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### External
 
+- Fixed hovering a sequence-diagram message in the rendered diagram bolding only the single shape under the pointer (just the label text, or just the arrow line): a message is drawn as several SVG elements (label text line(s), the arrow line, and the arrowhead), so it now bolds and thickens as one entity no matter which part is hovered, matching the whole-message highlight the editor side already showed.
 - Fixed the diagram sometimes showing the wrong (previous) diagram after switching between an activity and a sequence diagram, especially when the first render was slow (e.g. a cold PlantUML server): each render's SVG is fetched asynchronously, and a slow earlier render could resolve after a newer one and paint over it. Each render is now tagged, and a superseded result is discarded instead of clobbering the current diagram.
 - Fixed the "Loading…" overlay occasionally getting stuck (shown or hidden) when renders overlapped: it was toggled on/off, so overlapping renders could leave the toggle out of balance. It is now shown while any render is in flight and hidden only once all of them finish.
 - Fixed right-click menu and toolbar actions in sequence and activity diagrams firing duplicate backend requests after several re-renders: the static context-menu, button, and menu-dismiss listeners were re-registered on every render and stacked up, so a single click triggered as many requests as there had been renders. They are now registered once.
