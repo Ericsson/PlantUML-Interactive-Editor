@@ -216,12 +216,37 @@ stop
 
 function setSequence() {
     puml = `@startuml
-participant bob
-participant fred
-participant participant3
-bob -> fred: hello
-bob -> participant3: hello!
-participant3 -> participant3: test
+title
+This is the Sequence Diagram demo!
+Try double-click me to change the title!
+endtitle
+box "Right-click this box to edit\\nits title, color, or delete it" #LightBlue
+participant Alice
+participant Bob
+end box
+participant Server
+participant Database
+Alice -> Bob: Right-click a participant to add another\\nbeside it, or double-click it to rename it
+Bob -[#green]> Server: Right-click a message (the arrow or its text)\\nto edit the text or change the arrow color
+activate Server
+Server -> Database: Right-click a lifeline for Add Message,\\nActivate, Add Note, or Add Group
+activate Database
+Database --> Server: result
+deactivate Database
+note right of Server #LightPink: Add a note from the lifeline menu.\\nRight-click a note to edit or delete it
+Server --> Bob: response
+destroy Server
+group Add Group from the lifeline menu, then click two messages to wrap them (group / alt / opt / loop)
+Bob -> Alice: request
+alt success
+Alice -> Bob: granted
+else failure
+Alice -> Bob: denied
+end
+end
+Alice -> Alice: Self-messages are supported too!
+hnote over Bob #LightGreen: This is an "H Note"
+rnote over Alice, Bob: An "R Note" can span participants
 @enduml`;
         setPuml(puml)
 }
