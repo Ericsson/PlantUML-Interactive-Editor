@@ -852,76 +852,6 @@ function bottomForkEventListeners() {
     });
 }
 
-function titleEventListeners() {
-    $('#submit-title').on('click', async () => {
-        var text = $('#title-text').val();
-        try {
-            const plantuml = trimlines(editor.session.getValue());
-            const response = await fetch("editTitle", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    'plantuml': plantuml,
-                    'title': text
-                }),
-            });
-            const pumlcontentcode = await response.text()
-            setPuml(pumlcontentcode)
-        } catch (error) {
-            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-        }
-    })
-
-    document.getElementById('editTitle').addEventListener('click', async () => {
-        try {
-            const plantuml = trimlines(editor.session.getValue());
-            const response = await fetch("getTextTitle", {
-
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    'plantuml': plantuml,
-                })
-            });
-            const text = await response.text();
-
-            $('#title-text').val(text);
-            $('#modalFormTitle').modal('show');
-            $('#modalFormTitle').on('shown.bs.modal', function() {
-                $('#title-text').trigger('focus')
-            })
-
-        } catch (error) {
-            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-        }
-
-    });
-
-    document.getElementById('deleteTitle').addEventListener('click', async () => {
-        try {
-            const plantuml = trimlines(editor.session.getValue());
-            const response = await fetch("deleteTitle", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    'plantuml': plantuml,
-                }),
-            });
-            const pumlcontentcode = await response.text()
-            setPuml(pumlcontentcode)
-        } catch (error) {
-            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-        }
-    })
-
-}
-
 function noteEventListeners() {
     $('#submit-note').on('click', async () => {
         const element = document.getElementById('colb')
@@ -2332,37 +2262,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element, renderId) {
 
             if (checkIfTitleRect(svgelements, index)) {
                 activityHoverTargets.title.push(svgelement);
-                svgelement.setAttribute('fill', 'transparent')
-                svgelement.setAttribute('style', '"stroke:#00000000;stroke-width:1.0;fill:transparent;"')
-
-                svgelement.addEventListener('dblclick', async () => {
-                    try {
-
-                        const response = await fetch("getTextTitle", {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                'plantuml': pumlcontent,
-                                'svg': svg.innerHTML,
-                                'svgelement': svgelement.outerHTML
-                            })
-                        });
-                        const text = await response.text();
-
-                        $('#title-text').val(text);
-                        $('#modalFormTitle').modal('show');
-                        $('#modalFormTitle').on('shown.bs.modal', function() {
-                            $('#title-text').trigger('focus')
-                        })
-
-                    } catch (error) {
-                        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-                    }
-
-
-                });
+                makeTitleDoubleClickable(svgelement, svg, pumlcontent);
 
                 svgelement.addEventListener('contextmenu', function(e) {
                     lastclickedsvgelement = svgelement
@@ -2468,13 +2368,6 @@ function checkIfMergePoly(svgelements, index) {
 function checkIfActivity(svgelements, index) {
     return (svgelements[index].tagName.toLowerCase() === 'rect') && parseFloat(svgelements[index].getAttribute('height')) > 6 &&
         (svgelements[index].getAttribute('style') == "stroke:#181818;stroke-width:0.5;")
-}
-
-function checkIfTitleRect(svgelements, index) {
-    if (svgelements[index]) {
-        return (svgelements[index].tagName.toLowerCase() === 'rect') && parseFloat(svgelements[index].getAttribute('height')) > 6 &&
-            (svgelements[index].getAttribute('style') == "stroke:#00000000;stroke-width:1.0;fill:none;")
-    }
 }
 
 function checkIfFork(svgelements, index) {

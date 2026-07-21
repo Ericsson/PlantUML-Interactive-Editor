@@ -87,12 +87,6 @@ from .note import (
     note_toggle,
 )
 from .positions import get_activity_positions
-from .title import (
-    add_title,
-    delete_title,
-    edit_title_text,
-    get_title_text,
-)
 from .whilepoly import (
     delete_while,
     editwhile,
@@ -342,35 +336,6 @@ def deleteellipse():
     clickedelement = Ellipse.from_svg(clickedsvg)
     svgchunklist = svgtochunklistellipse(svg)
     return delete_ellipse_element(puml, svgchunklist, clickedelement)
-
-
-@activity_bp.route("/addTitle", methods=["POST"])
-def addtitle():
-    data = request.get_json()
-    puml = data["plantuml"]
-    return add_title(puml)
-
-
-@activity_bp.route("/getTextTitle", methods=["POST"])
-def gettexttile():
-    data = request.get_json()
-    puml = data["plantuml"]
-    return get_title_text(puml)
-
-
-@activity_bp.route("/editTitle", methods=["POST"])
-def edittitle():
-    data = request.get_json()
-    puml = data["plantuml"]
-    title = data["title"]
-    return edit_title_text(puml, title)
-
-
-@activity_bp.route("/deleteTitle", methods=["POST"])
-def deletetitle():
-    data = request.get_json()
-    puml = data["plantuml"]
-    return delete_title(puml)
 
 
 @activity_bp.route("/deleteFork", methods=["POST"])

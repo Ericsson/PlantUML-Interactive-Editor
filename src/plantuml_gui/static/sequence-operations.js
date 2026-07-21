@@ -369,6 +369,7 @@ async function setHandlersForSequenceDiagram(pumlcontent, element, renderId) {
 
         handleContextMenuBackground(svgContainer);
         setupLifelineInteraction();
+        setupTitleHandler(svg.querySelectorAll('*'), svg, pumlcontent);
         setupParticipantHandlers(svg.querySelectorAll('*'), svg, element);
         setupMessageHandlers(svg.querySelectorAll('*'), svg);
         setupNoteHandlers(svg.querySelectorAll('*'));
