@@ -49,14 +49,21 @@ function svgPointFromEvent(e, svgElement) {
 // render). The backend bundles participant lifelines, messages, notes and
 // groups into a single response so a render costs one request instead of four;
 // each sub-table keeps its own shape (see getSequencePositions). A failed fetch
-// leaves every table empty, disabling hover/gesture snapping for that render.
+// yields every table empty, disabling hover/gesture snapping for that render.
+//
+// Returns the tables rather than assigning the shared globals directly: the
+// caller assigns them only after re-checking the render generation, so a stale
+// render whose fetch resolves late can't overwrite the current diagram's
+// positions (see setHandlersForSequenceDiagram).
 async function fetchSequencePositions() {
     const data = await fetchDiagramData("getSequencePositions");
-    participantLifelines = data ? data.participants : [];
-    messagePositions = data ? data.messages : [];
-    notePositions = data ? data.notes : [];
-    groupPositions = data ? data.groups : [];
-    boxPositions = data ? data.boxes : [];
+    return {
+        participants: data ? data.participants : [],
+        messages: data ? data.messages : [],
+        notes: data ? data.notes : [],
+        groups: data ? data.groups : [],
+        boxes: data ? data.boxes : [],
+    };
 }
 
 // Vertical position of a message SVG element, comparable to messagePositions cy
@@ -318,19 +325,42 @@ function sequenceEventListeners() {
 }
 
 // Called on every render when diagram type is sequence
-async function setHandlersForSequenceDiagram(pumlcontent, element) {
+async function setHandlersForSequenceDiagram(pumlcontent, element, renderId) {
     fetchSvgFromPlantUml().then(async (svgContent) => {
+        // A newer render started while this SVG was being fetched (e.g. the
+        // user switched diagrams); drop this result so it can't clobber the
+        // current diagram. Balance the loading overlay toggle that
+        // renderPlantUml did for this render before bailing.
+        if (renderId !== renderGeneration) {
+            hideLoadingOverlay();
+            return;
+        }
         element.innerHTML = svgContent;
         sequenceHighlighted = []; // old SVG is gone; drop stale references
         sequenceRowMap = new Map(); // rebuilt below by the setup*Handlers walk
         const svgContainer = element.querySelector('svg');
         const svg = element.querySelector('g');
         if (!svg) {
-            toggleLoadingOverlay();
+            hideLoadingOverlay();
             return;
         }
 
-        await fetchSequencePositions();
+        const positions = await fetchSequencePositions();
+        // fetchSequencePositions is a second async hop: a newer render can
+        // complete during it, replacing #colb's SVG and the shared position
+        // state. Re-check before we publish these positions and bind handlers,
+        // so a stale render can't clobber the current diagram's positions or
+        // stack a duplicate set of handlers onto the newer SVG.
+        if (renderId !== renderGeneration) {
+            hideLoadingOverlay();
+            return;
+        }
+        participantLifelines = positions.participants;
+        messagePositions = positions.messages;
+        notePositions = positions.notes;
+        groupPositions = positions.groups;
+        boxPositions = positions.boxes;
+
         cancelMessageAddMode();
         cancelActivationAddMode();
         cancelGroupAddMode();
@@ -345,8 +375,12 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
         setupGroupHandlers(svg.querySelectorAll('*'));
         setupBoxHandlers(svg.querySelectorAll('*'));
 
-        toggleLoadingOverlay();
+        hideLoadingOverlay();
     }).catch((error) => {
+        // Balance the showLoadingOverlay() from renderPlantUml on the error
+        // path too; otherwise the ref count leaks and wedges the overlay
+        // visible. Mutually exclusive with the success hide above.
+        hideLoadingOverlay();
         displayErrorMessage(`Error rendering SVG: ${error.message}`, error);
     });
 }
