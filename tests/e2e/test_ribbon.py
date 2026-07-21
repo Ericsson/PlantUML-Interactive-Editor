@@ -62,6 +62,31 @@ def test_divider_toggle_visible(app_url, page):
     assert page.locator(".divider #divider-toggle").count() == 1
 
 
+def test_divider_toggle_collapses_and_expands_pane(app_url, page):
+    """Clicking the toggle collapses the left pane to a thin strip, and clicking
+    again restores its previous width."""
+    page.wait_for_timeout(1000)
+    initial_width = page.evaluate(
+        "() => document.querySelector('.left-pane').offsetWidth"
+    )
+
+    page.locator("#divider-toggle").click()
+    page.wait_for_timeout(100)
+    collapsed_width = page.evaluate(
+        "() => document.querySelector('.left-pane').offsetWidth"
+    )
+    assert collapsed_width < 200
+    assert "collapsed" in page.locator(".left-pane").get_attribute("class")
+
+    page.locator("#divider-toggle").click()
+    page.wait_for_timeout(100)
+    restored_width = page.evaluate(
+        "() => document.querySelector('.left-pane').offsetWidth"
+    )
+    assert abs(restored_width - initial_width) <= 1
+    assert "collapsed" not in page.locator(".left-pane").get_attribute("class")
+
+
 def test_split_container_visible(app_url, page):
     """The split container wraps both panes."""
     container = page.locator(".split-container")
@@ -207,8 +232,9 @@ def test_divider_drag_resizes_panes(app_url, page):
     assert new_width > initial_width
 
 
-def test_divider_respects_min_width(app_url, page):
-    """Divider cannot shrink a pane below 200px."""
+def test_divider_drag_past_threshold_collapses_pane(app_url, page):
+    """Dragging the divider far enough to the left collapses the pane instead of
+    stopping at the old 200px minimum."""
     page.wait_for_timeout(2000)
     divider = page.locator("#pane-divider")
     box = divider.bounding_box()
@@ -219,7 +245,27 @@ def test_divider_respects_min_width(app_url, page):
     page.mouse.up()
     page.wait_for_timeout(100)
     width = page.evaluate("() => document.querySelector('.left-pane').offsetWidth")
-    assert width >= 200
+    assert width < 200
+    assert "collapsed" in page.locator(".left-pane").get_attribute("class")
+
+
+def test_divider_drag_out_of_collapsed_expands_pane(app_url, page):
+    """Dragging the divider to the right while collapsed expands the pane again."""
+    page.wait_for_timeout(2000)
+    page.locator("#divider-toggle").click()
+    page.wait_for_timeout(100)
+    assert "collapsed" in page.locator(".left-pane").get_attribute("class")
+
+    divider = page.locator("#pane-divider")
+    box = divider.bounding_box()
+    page.mouse.move(box["x"] + 2, box["y"] + box["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(box["x"] + 300, box["y"] + box["height"] / 2)
+    page.mouse.up()
+    page.wait_for_timeout(100)
+    width = page.evaluate("() => document.querySelector('.left-pane').offsetWidth")
+    assert width > 200
+    assert "collapsed" not in page.locator(".left-pane").get_attribute("class")
 
 
 def test_version_panel_opens(app_url, page):

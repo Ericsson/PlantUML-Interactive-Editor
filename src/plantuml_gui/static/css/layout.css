@@ -34,6 +34,10 @@ html, body {
     overflow: hidden;
 }
 
+.left-pane.collapsed {
+    min-width: 0;
+}
+
 .right-pane {
     display: flex;
     flex-direction: column;
@@ -61,6 +65,7 @@ html, body {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
+    z-index: 20;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -82,4 +87,9 @@ html, body {
 .divider-toggle svg {
     width: 12px;
     height: 12px;
+    transition: transform 0.15s;
+}
+
+.divider.collapsed .divider-toggle svg {
+    transform: rotate(180deg);
 }

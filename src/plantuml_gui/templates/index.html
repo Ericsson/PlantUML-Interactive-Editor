@@ -209,25 +209,68 @@ SOFTWARE.
     // Resizable divider
     (function() {
       const divider = document.getElementById('pane-divider');
+      const toggle = document.getElementById('divider-toggle');
       const left = document.querySelector('.left-pane');
       const right = document.querySelector('.right-pane');
       const container = document.querySelector('.split-container');
       let dragging = false;
+      let collapsed = false;
+      let expandedWidth = null;
+      const collapsedWidth = 24;
+      const minWidth = 200;
+      const collapseThreshold = minWidth - 40;
+
+      let dragMoved = false;
+
+      function expand() {
+        left.style.flex = 'none';
+        left.style.width = (expandedWidth || left.getBoundingClientRect().width) + 'px';
+        left.classList.remove('collapsed');
+        divider.classList.remove('collapsed');
+        toggle.setAttribute('aria-label', 'Collapse code editor');
+        right.style.flex = '1';
+        collapsed = false;
+        editor.resize();
+      }
+
+      function collapse() {
+        expandedWidth = left.getBoundingClientRect().width;
+        if (expandedWidth < minWidth) expandedWidth = null;
+        left.style.flex = 'none';
+        left.style.width = collapsedWidth + 'px';
+        left.classList.add('collapsed');
+        divider.classList.add('collapsed');
+        toggle.setAttribute('aria-label', 'Expand code editor');
+        right.style.flex = '1';
+        collapsed = true;
+        editor.resize();
+      }
 
       divider.addEventListener('mousedown', (e) => {
         e.preventDefault();
         dragging = true;
+        dragMoved = false;
         divider.classList.add('dragging');
         document.body.style.cursor = 'col-resize';
       });
 
       document.addEventListener('mousemove', (e) => {
         if (!dragging) return;
+        dragMoved = true;
         const rect = container.getBoundingClientRect();
         const x = e.clientX - rect.left;
-        const min = 200;
-        const max = rect.width - 200 - 4;
-        const clamped = Math.min(Math.max(x, min), max);
+        if (x < collapseThreshold) {
+          if (!collapsed) collapse();
+          return;
+        }
+        const max = rect.width - minWidth - 4;
+        const clamped = Math.min(Math.max(x, minWidth), max);
+        if (collapsed) {
+          left.classList.remove('collapsed');
+          divider.classList.remove('collapsed');
+          toggle.setAttribute('aria-label', 'Collapse code editor');
+          collapsed = false;
+        }
         left.style.flex = 'none';
         left.style.width = clamped + 'px';
         right.style.flex = '1';
@@ -239,6 +282,19 @@ SOFTWARE.
         dragging = false;
         divider.classList.remove('dragging');
         document.body.style.cursor = '';
+      });
+
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (dragMoved) {
+          dragMoved = false;
+          return;
+        }
+        if (collapsed) {
+          expand();
+        } else {
+          collapse();
+        }
       });
     })();
 

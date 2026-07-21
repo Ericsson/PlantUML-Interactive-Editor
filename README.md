@@ -22,6 +22,7 @@ With PlantUML Interactive Editor, you can:
 - To share a diagram, just copy the URL in the address bar
 - Hover over elements to see the corresponding line highlighted in the editor
 - Clicking on, or hovering over, a line in the editor highlights the corresponding element in the diagram — all element types in both activity and sequence diagrams
+- Collapse the code editor pane by clicking the chevron on the pane divider (or dragging the divider past its minimum width) to give the diagram more space; expand it again the same way
 
 ## Detailed list of supported and unsupported features
 
