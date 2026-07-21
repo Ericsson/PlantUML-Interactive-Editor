@@ -220,7 +220,7 @@ title
 This is the Sequence Diagram demo!
 Try double-click me to change the title!
 endtitle
-box "Right-click this box's border to edit\\nits title, color, or delete it" #LightBlue
+box "Right-click this box to edit\\nits title, color, or delete it" #LightBlue
 participant Alice
 participant Bob
 end box
@@ -233,7 +233,7 @@ Server -> Database: Right-click a lifeline for Add Message,\\nActivate, Add Note
 activate Database
 Database --> Server: result
 deactivate Database
-note right of Server #LightYellow: Add a note from the lifeline menu.\\nRight-click a note to edit or delete it
+note right of Server #LightPink: Add a note from the lifeline menu.\\nRight-click a note to edit or delete it
 Server --> Bob: response
 destroy Server
 group Add Group from the lifeline menu, then click two messages to wrap them (group / alt / opt / loop)
@@ -245,7 +245,7 @@ Alice -> Bob: denied
 end
 end
 Alice -> Alice: Self-messages are supported too!
-hnote over Bob: This is an "H Note"
+hnote over Bob #LightGreen: This is an "H Note"
 rnote over Alice, Bob: An "R Note" can span participants
 @enduml`;
         setPuml(puml)
