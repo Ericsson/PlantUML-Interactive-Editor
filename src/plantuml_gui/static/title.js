@@ -28,9 +28,16 @@
 // getTextTitle/editTitle/deleteTitle routes are diagram-agnostic (see
 // shared/routes.py), so nothing here is specific to a diagram type.
 
-// Identify PlantUML's invisible title bounding rect. It is the only rect with
-// this exact transparent-stroke / no-fill style; height > 6 excludes hairline
-// rects. Shared verbatim by the activity and sequence handlers.
+// Identify PlantUML's title, across renderer versions.
+//
+// Older PlantUML wrapped the title in an invisible bounding <rect>
+// (stroke:#00000000;...;fill:none;). Newer PlantUML (>= ~1.2024) dropped that
+// rect and renders the title only as bold, font-size-14 <text> element(s) at
+// the top of the diagram. Both detectors are used so the title stays editable
+// regardless of the installed PlantUML version.
+
+// Old-PlantUML title bounding rect. It is the only rect with this exact
+// transparent-stroke / no-fill style; height > 6 excludes hairline rects.
 function checkIfTitleRect(svgelements, index) {
     if (svgelements[index]) {
         return (svgelements[index].tagName.toLowerCase() === 'rect') && parseFloat(svgelements[index].getAttribute('height')) > 6 &&
@@ -38,15 +45,35 @@ function checkIfTitleRect(svgelements, index) {
     }
 }
 
-// Make a title bounding rect open the shared title modal on double-click.
-// PlantUML gives the rect fill:none (whose interior does not capture pointer
-// events) and the title text drawn on top is set pointer-events:none by the
-// diagram handlers. Set a transparent fill via the fill *attribute* (and drop
-// fill from the style) so the whole rect area becomes a click target while a
-// caller can still recolor it on hover by changing the fill attribute.
+// New-PlantUML title text. Title lines are bold and font-size 14; participant
+// names are font-size 14 but not bold, and group labels / messages use
+// font-size 13/11, so bold + size 14 uniquely identifies title text in both
+// activity and sequence diagrams. (Old PlantUML also emits the title this way,
+// so this matches there too - the rect and the text both map to the title.)
+function isTitleText(svgelement) {
+    return !!svgelement && svgelement.tagName.toLowerCase() === 'text' &&
+        svgelement.getAttribute('font-size') === '14' &&
+        svgelement.getAttribute('font-weight') === 'bold';
+}
+
+// Make a title element open the shared title modal on double-click.
+//
+// For the old bounding rect: PlantUML gives it fill:none (whose interior does
+// not capture pointer events), so set a transparent fill via the fill
+// *attribute* (dropping fill from the style) - the whole rect area becomes a
+// click target while a caller can still recolor it on hover.
+//
+// For the title text: diagram handlers set font-size-14 text to
+// pointer-events:none (participant names), so re-enable pointer events on the
+// title text explicitly and show a pointer cursor.
 function makeTitleDoubleClickable(svgelement, svg, pumlcontent) {
-    svgelement.setAttribute('fill', 'transparent');
-    svgelement.setAttribute('style', 'stroke:#00000000;stroke-width:1.0;');
+    if (svgelement.tagName.toLowerCase() === 'rect') {
+        svgelement.setAttribute('fill', 'transparent');
+        svgelement.setAttribute('style', 'stroke:#00000000;stroke-width:1.0;');
+    } else {
+        svgelement.style.pointerEvents = 'auto';
+        svgelement.style.cursor = 'pointer';
+    }
     svgelement.addEventListener('dblclick', async () => {
         lastclickedsvgelement = svgelement;
         try {
@@ -73,13 +100,13 @@ function makeTitleDoubleClickable(svgelement, svg, pumlcontent) {
     });
 }
 
-// Find the title rect among svgelements and make it double-click editable.
-// Used by the sequence handler (which has no single element-walk of its own for
-// the title); the activity handler calls makeTitleDoubleClickable directly from
-// its existing element walk so it can also attach its context menu and hover.
+// Find the title (bounding rect on old PlantUML, or bold font-size-14 text on
+// newer PlantUML) among svgelements and make it double-click editable. A
+// multi-line title yields one text element per line, all of which become
+// editable. Used by both the activity and sequence render handlers.
 function setupTitleHandler(svgelements, svg, pumlcontent) {
     for (let index = 0; index < svgelements.length; index++) {
-        if (checkIfTitleRect(svgelements, index)) {
+        if (checkIfTitleRect(svgelements, index) || isTitleText(svgelements[index])) {
             makeTitleDoubleClickable(svgelements[index], svg, pumlcontent);
         }
     }
