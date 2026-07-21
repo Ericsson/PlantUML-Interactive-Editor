@@ -38,6 +38,12 @@ html, body {
     min-width: 0;
 }
 
+.left-pane.collapsed .code-toolbar,
+.left-pane.collapsed #editor {
+    opacity: 0;
+    pointer-events: none;
+}
+
 .right-pane {
     display: flex;
     flex-direction: column;

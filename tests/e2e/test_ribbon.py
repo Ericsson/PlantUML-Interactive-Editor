@@ -87,6 +87,50 @@ def test_divider_toggle_collapses_and_expands_pane(app_url, page):
     assert "collapsed" not in page.locator(".left-pane").get_attribute("class")
 
 
+def test_collapsed_pane_hides_editor_content_but_preserves_ace_state(app_url, page):
+    """While collapsed, the code toolbar and Ace editor are visually hidden, but
+    the Ace instance stays mounted and its content/cursor position survive an
+    expand."""
+    page.wait_for_timeout(1000)
+    page.evaluate(
+        "() => { editor.session.setValue('@startuml\\nAlice -> Bob\\n@enduml'); "
+        "editor.moveCursorTo(1, 5); }"
+    )
+    content_before = page.evaluate("() => editor.session.getValue()")
+    cursor_before = page.evaluate(
+        "() => { const c = editor.getCursorPosition(); return [c.row, c.column]; }"
+    )
+
+    page.locator("#divider-toggle").click()
+    page.wait_for_timeout(100)
+    toolbar_opacity = page.evaluate(
+        "() => getComputedStyle(document.querySelector('.code-toolbar')).opacity"
+    )
+    editor_opacity = page.evaluate(
+        "() => getComputedStyle(document.getElementById('editor')).opacity"
+    )
+    assert toolbar_opacity == "0"
+    assert editor_opacity == "0"
+
+    page.locator("#divider-toggle").click()
+    page.wait_for_timeout(100)
+    toolbar_opacity = page.evaluate(
+        "() => getComputedStyle(document.querySelector('.code-toolbar')).opacity"
+    )
+    editor_opacity = page.evaluate(
+        "() => getComputedStyle(document.getElementById('editor')).opacity"
+    )
+    assert toolbar_opacity == "1"
+    assert editor_opacity == "1"
+
+    content_after = page.evaluate("() => editor.session.getValue()")
+    cursor_after = page.evaluate(
+        "() => { const c = editor.getCursorPosition(); return [c.row, c.column]; }"
+    )
+    assert content_after == content_before
+    assert cursor_after == cursor_before
+
+
 def test_split_container_visible(app_url, page):
     """The split container wraps both panes."""
     container = page.locator(".split-container")
