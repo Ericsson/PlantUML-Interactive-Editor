@@ -457,6 +457,12 @@ function commandEventListeners() {
 function addUtilEventListeners() {
     buttonEventListeners();
     commandEventListeners();
+    // Title editing (modal submit, edit/delete menu items) is diagram-agnostic:
+    // the getTextTitle/editTitle/deleteTitle routes operate on the puml title
+    // block regardless of diagram type. Wire it here, once, so both activity
+    // and sequence diagrams can edit the title (e.g. via double-click) without
+    // double-binding the submit handler when a user switches diagram types.
+    titleEventListeners();
 
 }
 
@@ -466,7 +472,6 @@ function addActivityEventListeners() {
     activityEventListeners();
     ifEventListeners();
     ellipseEventListeners();
-    titleEventListeners();
     forkEventListeners();
     noteEventListeners();
     groupEventListeners();

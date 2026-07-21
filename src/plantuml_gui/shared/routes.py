@@ -33,6 +33,7 @@ from ..__about__ import __version__
 from .parse_changelog import parse_changelog
 from .puml_encoder import plantuml_decode, plantuml_encode
 from .render import _create_png_from_uml, _create_svg_from_uml
+from .title import add_title, delete_title, edit_title_text, get_title_text
 
 shared_bp = Blueprint(
     "shared",
@@ -115,3 +116,36 @@ def decode():
 @shared_bp.route("/changelog")
 def changelog():
     return jsonify(parse_changelog())
+
+
+# Diagram title routes. The title block (title ... endtitle) is diagram-agnostic
+# puml, edited the same way for activity and sequence diagrams, so these live in
+# the shared blueprint. URLs are unchanged from when they lived on activity_bp
+# (no blueprint carries a url_prefix).
+@shared_bp.route("/addTitle", methods=["POST"])
+def addtitle():
+    data = request.get_json()
+    puml = data["plantuml"]
+    return add_title(puml)
+
+
+@shared_bp.route("/getTextTitle", methods=["POST"])
+def gettexttile():
+    data = request.get_json()
+    puml = data["plantuml"]
+    return get_title_text(puml)
+
+
+@shared_bp.route("/editTitle", methods=["POST"])
+def edittitle():
+    data = request.get_json()
+    puml = data["plantuml"]
+    title = data["title"]
+    return edit_title_text(puml, title)
+
+
+@shared_bp.route("/deleteTitle", methods=["POST"])
+def deletetitle():
+    data = request.get_json()
+    puml = data["plantuml"]
+    return delete_title(puml)
