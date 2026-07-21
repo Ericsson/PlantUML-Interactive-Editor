@@ -11,6 +11,11 @@ let boxPositions = []; // [{headerIndex, endIndex}, ...]
 // Elements highlighted from the editor side, with how to restore them
 let sequenceHighlighted = []; // [{el, style, token}, ...] (see hover-highlight.js)
 
+// Elements highlighted by a diagram-side message hover, kept separate from the
+// editor-side state so a diagram hover-out only undoes what the hover applied
+// and never clears an editor-owned highlight (see setupMessageHandlers).
+let sequenceDiagramHover = []; // [{el, style, token}, ...] (see hover-highlight.js)
+
 // Editor-row -> diagram elements to highlight, built once per render during the
 // setup walk (mirrors the activity diagram's activityRowMap). Lets
 // highlightSequenceForRow be a map lookup instead of re-walking the whole SVG
@@ -89,19 +94,6 @@ function messageElementCy(svgelement) {
 }
 
 // --- Editor -> diagram highlighting ---
-
-// Restore the literal style attribute (used by the message diagram-side
-// mouseout). Mutating el.style re-serializes the attribute and loses the exact
-// "stroke-width:1.0" string that the element classifiers (e.g.
-// checkIfMessageElement) match on, so unhighlighting must put back the original
-// attribute rather than clear style properties.
-function restoreStyleAttribute(el, old) {
-    if (old) {
-        el.setAttribute('style', old);
-    } else {
-        el.removeAttribute('style');
-    }
-}
 
 function resetSequenceHighlight() {
     sequenceHighlighted = clearHoverHighlight(sequenceHighlighted);
@@ -340,6 +332,7 @@ async function setHandlersForSequenceDiagram(pumlcontent, element, renderId) {
         }
         element.innerHTML = svgContent;
         sequenceHighlighted = []; // old SVG is gone; drop stale references
+        sequenceDiagramHover = []; // old SVG is gone; drop stale references
         sequenceRowMap = new Map(); // rebuilt below by the setup*Handlers walk
         const svgContainer = element.querySelector('svg');
         const svg = element.querySelector('g');
@@ -539,25 +532,33 @@ function setupMessageHandlers(svgelements, svg) {
         const nearestMessage = findNearestMessage(messageElementCy(svgelement));
         if (nearestMessage) registerSequenceRow(nearestMessage.index, svgelement, 'message');
 
-        let originalstyle; // undefined while no hover is in progress
         svgelement.addEventListener('mouseover', function() {
             if (isSequenceAddMode()) return;
-            // If already highlighted from the editor side, keep the original style
-            const highlighted = findActiveHighlight(sequenceHighlighted, svgelement);
-            originalstyle = highlighted ? highlighted.token.old : svgelement.getAttribute('style');
-            svgelement.style.fontWeight = 'bold';
-            svgelement.style.strokeWidth = '2.0';
+            // Highlight the WHOLE message, not just the hovered shape, so it
+            // reads as one entity. Every element of a message was registered in
+            // sequenceRowMap under the same message index during setup (the same
+            // grouping the editor-side hover uses), so bold/thicken all of them.
             const nearest = findNearestMessage(messageElementCy(svgelement));
-            if (nearest) setEditorMarkers(nearest.index);
+            if (!nearest) return;
+            const entries = sequenceRowMap.get(nearest.index) || [];
+            for (const entry of entries) {
+                // Leave editor-owned highlights alone (they restore the true
+                // original on their own) and skip anything this hover already
+                // applied, so tokens capture the real pre-hover style.
+                if (findActiveHighlight(sequenceHighlighted, entry.el)) continue;
+                if (findActiveHighlight(sequenceDiagramHover, entry.el)) continue;
+                const token = entry.style.apply(entry.el);
+                if (token === null) continue;
+                sequenceDiagramHover.push({el: entry.el, style: entry.style, token: token});
+            }
+            setEditorMarkers(nearest.index);
         });
 
         svgelement.addEventListener('mouseout', function() {
             clearMarkers();
-            if (originalstyle === undefined) return;
-            // Keep styles if the element is highlighted from the editor side
-            if (findActiveHighlight(sequenceHighlighted, svgelement)) return;
-            restoreStyleAttribute(svgelement, originalstyle);
-            originalstyle = undefined;
+            // Undo only what this diagram-side hover applied; editor-owned
+            // highlights were skipped above and stay untouched.
+            sequenceDiagramHover = clearHoverHighlight(sequenceDiagramHover);
         });
 
         svgelement.addEventListener('contextmenu', function(e) {
