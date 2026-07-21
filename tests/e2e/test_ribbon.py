@@ -87,6 +87,28 @@ def test_divider_toggle_collapses_and_expands_pane(app_url, page):
     assert "collapsed" not in page.locator(".left-pane").get_attribute("class")
 
 
+def test_divider_toggle_before_any_drag_restores_default_split(app_url, page):
+    """Collapsing and expanding on a fresh page load, without ever dragging the
+    divider first, restores the original CSS-driven 40% default width (not a
+    fallback to the collapsed width or an unset value)."""
+    page.wait_for_timeout(1000)
+    container_width = page.evaluate(
+        "() => document.querySelector('.split-container').offsetWidth"
+    )
+    expected_default = container_width * 0.4
+
+    page.locator("#divider-toggle").click()
+    page.wait_for_timeout(100)
+    page.locator("#divider-toggle").click()
+    page.wait_for_timeout(100)
+
+    restored_width = page.evaluate(
+        "() => document.querySelector('.left-pane').offsetWidth"
+    )
+    assert abs(restored_width - expected_default) <= 5
+    assert "collapsed" not in page.locator(".left-pane").get_attribute("class")
+
+
 def test_collapsed_pane_hides_editor_content_but_preserves_ace_state(app_url, page):
     """While collapsed, the code toolbar and Ace editor are visually hidden, but
     the Ace instance stays mounted and its content/cursor position survive an
