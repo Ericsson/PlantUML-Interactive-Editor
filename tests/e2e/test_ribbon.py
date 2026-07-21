@@ -312,6 +312,55 @@ def test_divider_drag_out_of_collapsed_expands_pane(app_url, page):
     assert "collapsed" not in page.locator(".left-pane").get_attribute("class")
 
 
+def test_divider_small_drag_while_collapsed_stays_collapsed(app_url, page):
+    """A small drag on the divider that never crosses back past the collapse
+    threshold leaves the pane collapsed, with no intermediate jump."""
+    page.wait_for_timeout(2000)
+    page.locator("#divider-toggle").click()
+    page.wait_for_timeout(100)
+
+    divider = page.locator("#pane-divider")
+    box = divider.bounding_box()
+    y = box["y"] + box["height"] / 2
+    page.mouse.move(box["x"] + 2, y)
+    page.mouse.down()
+    page.mouse.move(box["x"] + 5, y)
+    page.mouse.move(box["x"] + 1, y)
+    page.mouse.up()
+    page.wait_for_timeout(100)
+    width = page.evaluate("() => document.querySelector('.left-pane').offsetWidth")
+    assert width < 200
+    assert "collapsed" in page.locator(".left-pane").get_attribute("class")
+
+
+def test_divider_drag_oscillating_across_threshold_ends_in_correct_state(app_url, page):
+    """Repeatedly crossing the collapse threshold during a single drag ends in
+    whichever state matches the final cursor position, without corrupting the
+    remembered expanded width for a later drag-out."""
+    page.wait_for_timeout(2000)
+    divider = page.locator("#pane-divider")
+    box = divider.bounding_box()
+    y = box["y"] + box["height"] / 2
+    page.mouse.move(box["x"] + 2, y)
+    page.mouse.down()
+    for x in [50, 300, 20, 400, 10, 500, 5]:
+        page.mouse.move(x, y)
+        page.wait_for_timeout(20)
+    page.mouse.up()
+    page.wait_for_timeout(100)
+    assert "collapsed" in page.locator(".left-pane").get_attribute("class")
+
+    box2 = divider.bounding_box()
+    page.mouse.move(box2["x"] + 2, y)
+    page.mouse.down()
+    page.mouse.move(600, y)
+    page.mouse.up()
+    page.wait_for_timeout(100)
+    width = page.evaluate("() => document.querySelector('.left-pane').offsetWidth")
+    assert abs(width - 600) <= 5
+    assert "collapsed" not in page.locator(".left-pane").get_attribute("class")
+
+
 def test_version_panel_opens(app_url, page):
     """Clicking version badge opens the version history panel."""
     page.wait_for_timeout(2000)
