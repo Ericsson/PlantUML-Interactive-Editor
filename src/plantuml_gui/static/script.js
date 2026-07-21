@@ -28,6 +28,21 @@ let history = [];
 let historyPointer = -1;
 let editor;
 let currentDiagramType = "unknown";
+// Monotonic render token. Each renderPlantUml() call takes the next value; the
+// async SVG fetch/apply in the diagram handlers checks it before writing into
+// #colb so a slow render (e.g. a cold PlantUML JAR) that resolves after the
+// user has already switched diagrams cannot clobber the newer diagram.
+let renderGeneration = 0;
+// One-time guards for the static (non-SVG) event listeners wired by
+// addActivityEventListeners / addSequenceEventListeners. checkDiagramType()
+// calls these on every render, but they only bind to static template elements
+// (context-menu items, toolbar buttons, and a document-level menu-dismiss
+// click). Native addEventListener with a fresh closure each render stacks
+// duplicate handlers, so after N renders a single click would fire N identical
+// fetches that race on setPuml/history. Attach them once. (Per-render SVG
+// element handlers are bound separately in setHandlersFor*Diagram.)
+let activityListenersAttached = false;
+let sequenceListenersAttached = false;
 var Range = ace.require("ace/range").Range
 
 async function initeditor() {
@@ -201,12 +216,37 @@ stop
 
 function setSequence() {
     puml = `@startuml
-participant bob
-participant fred
-participant participant3
-bob -> fred: hello
-bob -> participant3: hello!
-participant3 -> participant3: test
+title
+This is the Sequence Diagram demo!
+Try double-click me to change the title!
+endtitle
+box "Right-click this box's border to edit\\nits title, color, or delete it" #LightBlue
+participant Alice
+participant Bob
+end box
+participant Server
+participant Database
+Alice -> Bob: Right-click a participant to add another\\nbeside it, or double-click it to rename it
+Bob -[#green]> Server: Right-click a message (the arrow or its text)\\nto edit the text or change the arrow color
+activate Server
+Server -> Database: Right-click a lifeline for Add Message,\\nActivate, Add Note, or Add Group
+activate Database
+Database --> Server: result
+deactivate Database
+note right of Server #LightYellow: Add a note from the lifeline menu.\\nRight-click a note to edit or delete it
+Server --> Bob: response
+destroy Server
+group Add Group from the lifeline menu, then click two messages to wrap them (group / alt / opt / loop)
+Bob -> Alice: request
+alt success
+Alice -> Bob: granted
+else failure
+Alice -> Bob: denied
+end
+end
+Alice -> Alice: Self-messages are supported too!
+hnote over Bob: This is an "H Note"
+rnote over Alice, Bob: An "R Note" can span participants
 @enduml`;
         setPuml(puml)
 }
@@ -442,14 +482,21 @@ function commandEventListeners() {
 function addUtilEventListeners() {
     buttonEventListeners();
     commandEventListeners();
+    // Title editing (modal submit, edit/delete menu items) is diagram-agnostic:
+    // the getTextTitle/editTitle/deleteTitle routes operate on the puml title
+    // block regardless of diagram type. Wire it here, once, so both activity
+    // and sequence diagrams can edit the title (e.g. via double-click) without
+    // double-binding the submit handler when a user switches diagram types.
+    titleEventListeners();
 
 }
 
 function addActivityEventListeners() {
+    if (activityListenersAttached) return;
+    activityListenersAttached = true;
     activityEventListeners();
     ifEventListeners();
     ellipseEventListeners();
-    titleEventListeners();
     forkEventListeners();
     noteEventListeners();
     groupEventListeners();
@@ -492,6 +539,8 @@ function addActivityEventListeners() {
 
 
 function addSequenceEventListeners() {
+    if (sequenceListenersAttached) return;
+    sequenceListenersAttached = true;
     sequenceEventListeners()
 
     document.addEventListener('click', function(e) {
@@ -563,12 +612,26 @@ async function fetchSvgFromPlantUml() {
     }
 }
 
-function toggleLoadingOverlay() {
-    const overlay = document.getElementById('loading-overlay');
-    if (overlay.style.display === 'none' || overlay.style.display === '') {
-        overlay.style.display = 'block';
-    } else {
-        overlay.style.display = 'none';
+// Loading overlay visibility is reference-counted, not toggled: renders can
+// overlap (a slow render still in flight when the next one starts, or requests
+// resolving out of order), and a plain boolean toggle would desync - an even
+// number of overlapping show/hide flips could leave the overlay stuck visible
+// or hidden. Each render increments on start (showLoadingOverlay) and
+// decrements on every completion/bail path (hideLoadingOverlay); the overlay is
+// visible while any render is outstanding and hidden only once all finish.
+let loadingOverlayCount = 0;
+
+function showLoadingOverlay() {
+    loadingOverlayCount++;
+    document.getElementById('loading-overlay').style.display = 'block';
+}
+
+function hideLoadingOverlay() {
+    // Clamp at zero so an unexpected extra hide can't drive the count negative
+    // and wedge the overlay permanently visible.
+    loadingOverlayCount = Math.max(0, loadingOverlayCount - 1);
+    if (loadingOverlayCount === 0) {
+        document.getElementById('loading-overlay').style.display = 'none';
     }
 }
 
@@ -578,7 +641,7 @@ async function renderPlantUml() {
     if (document.getElementById('popup').style.visibility = "visible") {
         document.getElementById('popup').style.visibility = "hidden"; // Hide the error popup when rendering again.
     }
-    toggleLoadingOverlay();
+    showLoadingOverlay();
     let element = document.getElementById('colb')
     const pumlcontent = trimlines(editor.session.getValue());
     saveToHistory(pumlcontent);
@@ -606,18 +669,21 @@ async function renderPlantUml() {
     }
 
     currentDiagramType = checkDiagramType(pumlcontent);
+    const renderId = ++renderGeneration;
     switch (currentDiagramType) {
         case "activity":
-            setHandlersForActivityDiagram(pumlcontent, element);
+            setHandlersForActivityDiagram(pumlcontent, element, renderId);
             break;
         case "sequence":
-            setHandlersForSequenceDiagram(pumlcontent, element);
+            setHandlersForSequenceDiagram(pumlcontent, element, renderId);
             break;
         default:
             fetchSvgFromPlantUml().then((svgContent) => {
+                // Drop the result if a newer render has since started.
+                if (renderId !== renderGeneration) return;
                 element.innerHTML = svgContent;
             });
-            toggleLoadingOverlay();
+            hideLoadingOverlay();
     }
 }
 

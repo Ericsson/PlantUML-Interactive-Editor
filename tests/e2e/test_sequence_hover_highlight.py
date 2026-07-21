@@ -551,3 +551,123 @@ class TestEditorToSvgHighlight:
         assert result["whileHovering"] is True
         assert result["afterLeaving"] is False
         assert result["count"] == 0
+
+
+class TestDiagramHoverBoldsWholeMessage:
+    """Hovering any single element of a message in the rendered diagram should
+    bold the whole message (all label text lines + the arrow line + the
+    arrowhead), matching the editor-side hover, so it reads as one entity."""
+
+    def test_hovering_one_element_bolds_the_whole_message(self, app_url, page):
+        result = page.evaluate(
+            """() => {"""
+            + HOVER_MARKER_HELPERS
+            + """
+            resetAddModes();
+            clearMarkers();
+            messagePositions = [
+                {cy: 40, index: 3, text: 'm1'},
+                {cy: 80, index: 4, text: 'm2'}
+            ];
+            sequenceHighlighted = [];
+            const colb = document.getElementById('colb');
+            colb.innerHTML = '<svg><g>' +
+                '<polygon fill="#181818" points="70,38,80,42,70,46" style="stroke:#181818;stroke-width:1.0;"></polygon>' +
+                '<line style="stroke:#181818;stroke-width:1.0;" x1="25" x2="76" y1="40" y2="40"></line>' +
+                '<text font-size="13" x="32" y="36">m1</text>' +
+                '<line style="stroke:#181818;stroke-width:1.0;" x1="25" x2="76" y1="80" y2="80"></line>' +
+                '<text font-size="13" x="32" y="76">m2</text>' +
+                '</g></svg>';
+            const els = colb.querySelectorAll('g *');
+            sequenceRowMap = new Map();
+            setupMessageHandlers(els, colb.querySelector('g'));
+
+            // Hover only the arrow LINE of message m1; the whole message
+            // (arrowhead + line + label) must bold, m2 must stay untouched.
+            els[1].dispatchEvent(new MouseEvent('mouseover', {bubbles: true}));
+            const duringHover = Array.from(els).map(el => el.style.fontWeight === 'bold');
+            els[1].dispatchEvent(new MouseEvent('mouseout', {bubbles: true}));
+            const afterMouseout = Array.from(els).map(el => el.style.fontWeight === 'bold');
+
+            return {duringHover, afterMouseout};
+        }"""
+        )
+
+        # All three elements of m1 (arrowhead, line, label) bold together;
+        # m2's line and label stay unbolded.
+        assert result["duringHover"] == [True, True, True, False, False]
+        assert result["afterMouseout"] == [False, False, False, False, False]
+
+    def test_hovering_the_text_also_bolds_line_and_arrowhead(self, app_url, page):
+        result = page.evaluate(
+            """() => {"""
+            + HOVER_MARKER_HELPERS
+            + """
+            resetAddModes();
+            clearMarkers();
+            messagePositions = [{cy: 40, index: 3, text: 'm1'}];
+            sequenceHighlighted = [];
+            const colb = document.getElementById('colb');
+            colb.innerHTML = '<svg><g>' +
+                '<polygon fill="#181818" points="70,38,80,42,70,46" style="stroke:#181818;stroke-width:1.0;"></polygon>' +
+                '<line style="stroke:#181818;stroke-width:1.0;" x1="25" x2="76" y1="40" y2="40"></line>' +
+                '<text font-size="13" x="32" y="36">m1</text>' +
+                '</g></svg>';
+            const els = colb.querySelectorAll('g *');
+            sequenceRowMap = new Map();
+            setupMessageHandlers(els, colb.querySelector('g'));
+
+            // Hover the LABEL text: the line and arrowhead must also thicken.
+            els[2].dispatchEvent(new MouseEvent('mouseover', {bubbles: true}));
+            const strokeWidths = Array.from(els).map(el => el.style.strokeWidth);
+            els[2].dispatchEvent(new MouseEvent('mouseout', {bubbles: true}));
+            const afterMouseout = Array.from(els).map(el => el.style.strokeWidth);
+
+            return {strokeWidths, afterMouseout};
+        }"""
+        )
+
+        assert result["strokeWidths"] == ["2", "2", "2"]
+        # Restore puts back each element's literal original style attribute: the
+        # arrowhead and line carried stroke-width:1.0, the label had none.
+        assert result["afterMouseout"] == ["1", "1", ""]
+
+    def test_diagram_hover_out_keeps_editor_highlight_on_whole_message(
+        self, app_url, page
+    ):
+        # A message highlighted from the editor side (whole message bold) that
+        # is then hovered and un-hovered on the diagram side must stay bold
+        # after diagram mouseout, since the editor side still owns it.
+        result = page.evaluate(
+            """() => {"""
+            + HOVER_MARKER_HELPERS
+            + """
+            resetAddModes();
+            clearMarkers();
+            messagePositions = [{cy: 40, index: 3, text: 'm1'}];
+            sequenceHighlighted = [];
+            const colb = document.getElementById('colb');
+            colb.innerHTML = '<svg><g>' +
+                '<polygon fill="#181818" points="70,38,80,42,70,46" style="stroke:#181818;stroke-width:1.0;"></polygon>' +
+                '<line style="stroke:#181818;stroke-width:1.0;" x1="25" x2="76" y1="40" y2="40"></line>' +
+                '<text font-size="13" x="32" y="36">m1</text>' +
+                '</g></svg>';
+            const els = colb.querySelectorAll('g *');
+            sequenceRowMap = new Map();
+            setupMessageHandlers(els, colb.querySelector('g'));
+
+            // Editor owns the highlight first, then a diagram hover comes and goes.
+            highlightSequenceForRow(3);
+            els[1].dispatchEvent(new MouseEvent('mouseover', {bubbles: true}));
+            els[1].dispatchEvent(new MouseEvent('mouseout', {bubbles: true}));
+            const stillBold = Array.from(els).map(el => el.style.fontWeight === 'bold');
+            resetSequenceHighlight();
+            const afterReset = Array.from(els).map(el => el.style.fontWeight === 'bold');
+
+            return {stillBold, afterReset};
+        }"""
+        )
+
+        # Editor-owned highlight survives the diagram mouseout for every element.
+        assert result["stillBold"] == [True, True, True]
+        assert result["afterReset"] == [False, False, False]

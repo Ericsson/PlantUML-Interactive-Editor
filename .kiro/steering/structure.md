@@ -8,9 +8,10 @@
 │   ├── __about__.py        # Version info
 │   ├── app.py              # Flask app factory, blueprint registration only
 │   ├── shared/             # Shared infrastructure (used by all diagram types)
-│   │   ├── routes.py       # Shared routes (/, /render, /renderPNG, /encode, /decode)
+│   │   ├── routes.py       # Shared routes (/, /render, /renderPNG, /encode, /decode, /addTitle, /getTextTitle, /editTitle, /deleteTitle)
 │   │   ├── render.py       # PlantUML JAR invocation for PNG/SVG
 │   │   ├── puml_encoder.py # URL encoding/decoding for diagram sharing
+│   │   ├── title.py        # Diagram titles (shared by activity & sequence)
 │   │   └── parse_changelog.py # CHANGELOG.md parser for version history
 │   ├── sequence/           # Sequence diagram package
 │   │   ├── routes.py       # Sequence routes (/addParticipant, /addMessage, etc.)
@@ -31,7 +32,6 @@
 │   │   ├── fork.py         # Parallel processing (fork/join)
 │   │   ├── whilepoly.py    # While loops
 │   │   ├── note.py         # Note annotations
-│   │   ├── title.py        # Diagram titles
 │   │   ├── group.py        # Groups and partitions
 │   │   ├── arrow.py        # Arrow/connection handling
 │   │   ├── connector.py    # Connector elements
@@ -47,6 +47,7 @@
 │   └── static/             # Frontend assets
 │       ├── script.js       # Main activity diagram JS
 │       ├── activity.js     # Activity-specific interactions
+│       ├── title.js        # Shared diagram-title editing (double-click to edit, modal + edit/delete wiring), used by activity.js and sequence-operations.js
 │       ├── hover-highlight.js # Shared editor->diagram hover-highlight core (row map, highlight styles, and editor hover/cursor dispatch), used by activity.js and sequence-operations.js
 │       ├── sequence-message.js  # Sequence add-message interaction (hover, ghost arrow, modal)
 │       ├── sequence-activation.js # Sequence activation-bar interaction (ghost bar, two-click)
@@ -77,10 +78,10 @@
 │   │   ├── test_activity_note.py
 │   │   ├── test_repeat_while.py
 │   │   ├── test_switch.py
-│   │   ├── test_title.py
 │   │   └── test_while.py
-│   ├── shared/             # Shared route tests (render, encode/decode)
-│   │   └── test_render.py
+│   ├── shared/             # Shared route tests (render, encode/decode, title)
+│   │   ├── test_render.py
+│   │   └── test_title.py
 │   ├── sequence/           # Sequence diagram tests
 │   │   ├── test_participant.py
 │   │   ├── test_message.py
@@ -92,6 +93,7 @@
 │       ├── conftest.py     # Live server fixture
 │       ├── test_app_loads.py  # App loads correctly
 │       ├── test_js_logic.py   # JS function logic tests
+│       ├── test_render_race.py # Render-generation race regression (slow render can't clobber a newer diagram)
 │       ├── test_ribbon.py     # Toolbar ribbon UI tests
 │       ├── test_sequence_activation.py       # Activation bar e2e tests
 │       ├── test_sequence_box.py              # Participant box add/delete/hover e2e tests
@@ -99,7 +101,8 @@
 │       ├── test_sequence_message_interactions.py # Message add/edit/delete e2e tests
 │       ├── test_sequence_note_menu.py         # Note type menu, modal type selector & create/edit flow e2e tests
 │       ├── test_sequence_note_group_hover.py  # Note hover during add-mode gestures (regression: note turned black during group ghost box)
-│       └── test_sequence_participant.py      # Participant add/rename/delete e2e tests
+│       ├── test_sequence_participant.py      # Participant add/rename/delete e2e tests
+│       └── test_sequence_title.py            # Double-click title editing e2e tests (shared by activity & sequence)
 └── .kiro/steering/         # Kiro steering files
 ```
 
@@ -111,7 +114,7 @@ Each diagram element type has its own Python module:
 - `fork.py` - Parallel processing (fork/join)
 - `whilepoly.py` - While loops
 - `note.py` - Note annotations
-- `title.py` - Diagram titles
+- `title.py` - Diagram titles (in `shared/`; used by both activity & sequence)
 - `group.py` - Groups and partitions
 - `arrow.py` - Arrow/connection handling
 - `connector.py` - Connector elements

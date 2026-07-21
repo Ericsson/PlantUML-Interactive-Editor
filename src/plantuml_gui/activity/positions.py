@@ -36,6 +36,7 @@ from typing import Dict, List
 
 from pyquery import PyQuery as Pq
 
+from ..shared.title import find_title_bounds
 from .activity import find_text_bounds, svgtochunklist
 from .arrow import find_arrow_bounds
 from .classes import PolyElement
@@ -45,7 +46,6 @@ from .group import find_group_bounds
 from .if_statements import get_if_line, svgtochunklistpolygon
 from .merge import find_merge_index
 from .note import find_note_bounds
-from .title import find_title_bounds
 from .util import checkifwhile
 from .whilepoly import get_while_line
 

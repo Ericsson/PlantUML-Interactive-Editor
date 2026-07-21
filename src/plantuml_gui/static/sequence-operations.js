@@ -11,6 +11,11 @@ let boxPositions = []; // [{headerIndex, endIndex}, ...]
 // Elements highlighted from the editor side, with how to restore them
 let sequenceHighlighted = []; // [{el, style, token}, ...] (see hover-highlight.js)
 
+// Elements highlighted by a diagram-side message hover, kept separate from the
+// editor-side state so a diagram hover-out only undoes what the hover applied
+// and never clears an editor-owned highlight (see setupMessageHandlers).
+let sequenceDiagramHover = []; // [{el, style, token}, ...] (see hover-highlight.js)
+
 // Editor-row -> diagram elements to highlight, built once per render during the
 // setup walk (mirrors the activity diagram's activityRowMap). Lets
 // highlightSequenceForRow be a map lookup instead of re-walking the whole SVG
@@ -49,14 +54,21 @@ function svgPointFromEvent(e, svgElement) {
 // render). The backend bundles participant lifelines, messages, notes and
 // groups into a single response so a render costs one request instead of four;
 // each sub-table keeps its own shape (see getSequencePositions). A failed fetch
-// leaves every table empty, disabling hover/gesture snapping for that render.
+// yields every table empty, disabling hover/gesture snapping for that render.
+//
+// Returns the tables rather than assigning the shared globals directly: the
+// caller assigns them only after re-checking the render generation, so a stale
+// render whose fetch resolves late can't overwrite the current diagram's
+// positions (see setHandlersForSequenceDiagram).
 async function fetchSequencePositions() {
     const data = await fetchDiagramData("getSequencePositions");
-    participantLifelines = data ? data.participants : [];
-    messagePositions = data ? data.messages : [];
-    notePositions = data ? data.notes : [];
-    groupPositions = data ? data.groups : [];
-    boxPositions = data ? data.boxes : [];
+    return {
+        participants: data ? data.participants : [],
+        messages: data ? data.messages : [],
+        notes: data ? data.notes : [],
+        groups: data ? data.groups : [],
+        boxes: data ? data.boxes : [],
+    };
 }
 
 // Vertical position of a message SVG element, comparable to messagePositions cy
@@ -82,19 +94,6 @@ function messageElementCy(svgelement) {
 }
 
 // --- Editor -> diagram highlighting ---
-
-// Restore the literal style attribute (used by the message diagram-side
-// mouseout). Mutating el.style re-serializes the attribute and loses the exact
-// "stroke-width:1.0" string that the element classifiers (e.g.
-// checkIfMessageElement) match on, so unhighlighting must put back the original
-// attribute rather than clear style properties.
-function restoreStyleAttribute(el, old) {
-    if (old) {
-        el.setAttribute('style', old);
-    } else {
-        el.removeAttribute('style');
-    }
-}
 
 function resetSequenceHighlight() {
     sequenceHighlighted = clearHoverHighlight(sequenceHighlighted);
@@ -237,9 +236,12 @@ function setupParticipantHandlers(svgelements, svg, element) {
     for (let index = 0; index < svgelements.length; index++) {
         let svgelement = svgelements[index];
         // Disable pointer events only on participant text (font-size 14) so clicks
-        // pass through to the rect beneath. Message text (font-size 13) stays clickable.
+        // pass through to the rect beneath. Message text (font-size 13) stays
+        // clickable, and title text (font-size 14 but bold) stays clickable so it
+        // remains double-click editable (see setupTitleHandler).
         if (svgelement.tagName.toLowerCase() === 'text' &&
-            svgelement.getAttribute('font-size') === '14') {
+            svgelement.getAttribute('font-size') === '14' &&
+            !isTitleText(svgelement)) {
             svgelement.style.pointerEvents = 'none';
         }
 
@@ -318,19 +320,43 @@ function sequenceEventListeners() {
 }
 
 // Called on every render when diagram type is sequence
-async function setHandlersForSequenceDiagram(pumlcontent, element) {
+async function setHandlersForSequenceDiagram(pumlcontent, element, renderId) {
     fetchSvgFromPlantUml().then(async (svgContent) => {
+        // A newer render started while this SVG was being fetched (e.g. the
+        // user switched diagrams); drop this result so it can't clobber the
+        // current diagram. Balance the loading overlay toggle that
+        // renderPlantUml did for this render before bailing.
+        if (renderId !== renderGeneration) {
+            hideLoadingOverlay();
+            return;
+        }
         element.innerHTML = svgContent;
         sequenceHighlighted = []; // old SVG is gone; drop stale references
+        sequenceDiagramHover = []; // old SVG is gone; drop stale references
         sequenceRowMap = new Map(); // rebuilt below by the setup*Handlers walk
         const svgContainer = element.querySelector('svg');
         const svg = element.querySelector('g');
         if (!svg) {
-            toggleLoadingOverlay();
+            hideLoadingOverlay();
             return;
         }
 
-        await fetchSequencePositions();
+        const positions = await fetchSequencePositions();
+        // fetchSequencePositions is a second async hop: a newer render can
+        // complete during it, replacing #colb's SVG and the shared position
+        // state. Re-check before we publish these positions and bind handlers,
+        // so a stale render can't clobber the current diagram's positions or
+        // stack a duplicate set of handlers onto the newer SVG.
+        if (renderId !== renderGeneration) {
+            hideLoadingOverlay();
+            return;
+        }
+        participantLifelines = positions.participants;
+        messagePositions = positions.messages;
+        notePositions = positions.notes;
+        groupPositions = positions.groups;
+        boxPositions = positions.boxes;
+
         cancelMessageAddMode();
         cancelActivationAddMode();
         cancelGroupAddMode();
@@ -339,14 +365,19 @@ async function setHandlersForSequenceDiagram(pumlcontent, element) {
 
         handleContextMenuBackground(svgContainer);
         setupLifelineInteraction();
+        setupTitleHandler(svg.querySelectorAll('*'), svg, pumlcontent);
         setupParticipantHandlers(svg.querySelectorAll('*'), svg, element);
         setupMessageHandlers(svg.querySelectorAll('*'), svg);
         setupNoteHandlers(svg.querySelectorAll('*'));
         setupGroupHandlers(svg.querySelectorAll('*'));
         setupBoxHandlers(svg.querySelectorAll('*'));
 
-        toggleLoadingOverlay();
+        hideLoadingOverlay();
     }).catch((error) => {
+        // Balance the showLoadingOverlay() from renderPlantUml on the error
+        // path too; otherwise the ref count leaks and wedges the overlay
+        // visible. Mutually exclusive with the success hide above.
+        hideLoadingOverlay();
         displayErrorMessage(`Error rendering SVG: ${error.message}`, error);
     });
 }
@@ -501,25 +532,33 @@ function setupMessageHandlers(svgelements, svg) {
         const nearestMessage = findNearestMessage(messageElementCy(svgelement));
         if (nearestMessage) registerSequenceRow(nearestMessage.index, svgelement, 'message');
 
-        let originalstyle; // undefined while no hover is in progress
         svgelement.addEventListener('mouseover', function() {
             if (isSequenceAddMode()) return;
-            // If already highlighted from the editor side, keep the original style
-            const highlighted = findActiveHighlight(sequenceHighlighted, svgelement);
-            originalstyle = highlighted ? highlighted.token.old : svgelement.getAttribute('style');
-            svgelement.style.fontWeight = 'bold';
-            svgelement.style.strokeWidth = '2.0';
+            // Highlight the WHOLE message, not just the hovered shape, so it
+            // reads as one entity. Every element of a message was registered in
+            // sequenceRowMap under the same message index during setup (the same
+            // grouping the editor-side hover uses), so bold/thicken all of them.
             const nearest = findNearestMessage(messageElementCy(svgelement));
-            if (nearest) setEditorMarkers(nearest.index);
+            if (!nearest) return;
+            const entries = sequenceRowMap.get(nearest.index) || [];
+            for (const entry of entries) {
+                // Leave editor-owned highlights alone (they restore the true
+                // original on their own) and skip anything this hover already
+                // applied, so tokens capture the real pre-hover style.
+                if (findActiveHighlight(sequenceHighlighted, entry.el)) continue;
+                if (findActiveHighlight(sequenceDiagramHover, entry.el)) continue;
+                const token = entry.style.apply(entry.el);
+                if (token === null) continue;
+                sequenceDiagramHover.push({el: entry.el, style: entry.style, token: token});
+            }
+            setEditorMarkers(nearest.index);
         });
 
         svgelement.addEventListener('mouseout', function() {
             clearMarkers();
-            if (originalstyle === undefined) return;
-            // Keep styles if the element is highlighted from the editor side
-            if (findActiveHighlight(sequenceHighlighted, svgelement)) return;
-            restoreStyleAttribute(svgelement, originalstyle);
-            originalstyle = undefined;
+            // Undo only what this diagram-side hover applied; editor-owned
+            // highlights were skipped above and stay untouched.
+            sequenceDiagramHover = clearHoverHighlight(sequenceDiagramHover);
         });
 
         svgelement.addEventListener('contextmenu', function(e) {

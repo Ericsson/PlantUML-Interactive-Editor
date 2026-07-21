@@ -852,76 +852,6 @@ function bottomForkEventListeners() {
     });
 }
 
-function titleEventListeners() {
-    $('#submit-title').on('click', async () => {
-        var text = $('#title-text').val();
-        try {
-            const plantuml = trimlines(editor.session.getValue());
-            const response = await fetch("editTitle", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    'plantuml': plantuml,
-                    'title': text
-                }),
-            });
-            const pumlcontentcode = await response.text()
-            setPuml(pumlcontentcode)
-        } catch (error) {
-            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-        }
-    })
-
-    document.getElementById('editTitle').addEventListener('click', async () => {
-        try {
-            const plantuml = trimlines(editor.session.getValue());
-            const response = await fetch("getTextTitle", {
-
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    'plantuml': plantuml,
-                })
-            });
-            const text = await response.text();
-
-            $('#title-text').val(text);
-            $('#modalFormTitle').modal('show');
-            $('#modalFormTitle').on('shown.bs.modal', function() {
-                $('#title-text').trigger('focus')
-            })
-
-        } catch (error) {
-            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-        }
-
-    });
-
-    document.getElementById('deleteTitle').addEventListener('click', async () => {
-        try {
-            const plantuml = trimlines(editor.session.getValue());
-            const response = await fetch("deleteTitle", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    'plantuml': plantuml,
-                }),
-            });
-            const pumlcontentcode = await response.text()
-            setPuml(pumlcontentcode)
-        } catch (error) {
-            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-        }
-    })
-
-}
-
 function noteEventListeners() {
     $('#submit-note').on('click', async () => {
         const element = document.getElementById('colb')
@@ -1761,17 +1691,25 @@ function resetActivityHighlight() {
     activityHighlighted = clearHoverHighlight(activityHighlighted);
 }
 
-async function setHandlersForActivityDiagram(pumlcontent, element) {
+async function setHandlersForActivityDiagram(pumlcontent, element, renderId) {
     removeBackgroundMenuListener();
 
     fetchSvgFromPlantUml().then(async (svgContent) => {
+        // A newer render started while this SVG was being fetched (e.g. the
+        // user switched diagrams); drop this result so it can't clobber the
+        // current diagram. Balance the loading overlay toggle that
+        // renderPlantUml did for this render before bailing.
+        if (renderId !== renderGeneration) {
+            hideLoadingOverlay();
+            return;
+        }
         element.innerHTML = svgContent;
         activityHoverTargets = newActivityHoverTargets();
         activityHighlighted = []; // old DOM discarded with innerHTML
         activityRowMap = new Map();
         const svg = element.querySelector('g');
         if (!svg) {
-            toggleLoadingOverlay()
+            hideLoadingOverlay()
             return
         }
         // Clear the editor hover marker when the pointer leaves a diagram
@@ -2324,37 +2262,6 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
 
             if (checkIfTitleRect(svgelements, index)) {
                 activityHoverTargets.title.push(svgelement);
-                svgelement.setAttribute('fill', 'transparent')
-                svgelement.setAttribute('style', '"stroke:#00000000;stroke-width:1.0;fill:transparent;"')
-
-                svgelement.addEventListener('dblclick', async () => {
-                    try {
-
-                        const response = await fetch("getTextTitle", {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                'plantuml': pumlcontent,
-                                'svg': svg.innerHTML,
-                                'svgelement': svgelement.outerHTML
-                            })
-                        });
-                        const text = await response.text();
-
-                        $('#title-text').val(text);
-                        $('#modalFormTitle').modal('show');
-                        $('#modalFormTitle').on('shown.bs.modal', function() {
-                            $('#title-text').trigger('focus')
-                        })
-
-                    } catch (error) {
-                        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-                    }
-
-
-                });
 
                 svgelement.addEventListener('contextmenu', function(e) {
                     lastclickedsvgelement = svgelement
@@ -2380,12 +2287,22 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
             }
             index++
         }
+        // Make the diagram title double-click editable. Runs after the element
+        // walk so it can re-enable pointer events on the title text (the walk
+        // sets font-size text to pointer-events:none) and so it sees the final
+        // SVG. Handles both the old bounding-rect title and newer PlantUML's
+        // bold text-only title (see title.js).
+        setupTitleHandler(svgelements, svg, pumlcontent);
         // After the walk so the svg sent reflects its mutations (e.g. the
         // pointer-events flags note counting depends on)
         await fetchActivityPositions();
-        toggleLoadingOverlay()
+        hideLoadingOverlay()
 
     }).catch((error) => {
+        // Balance the showLoadingOverlay() from renderPlantUml on the error
+        // path too; otherwise the ref count leaks and wedges the overlay
+        // visible. Mutually exclusive with the success hide above.
+        hideLoadingOverlay();
         displayErrorMessage(`Error rendering SVG: ${error.message}`, error);
     });
 }
@@ -2456,13 +2373,6 @@ function checkIfMergePoly(svgelements, index) {
 function checkIfActivity(svgelements, index) {
     return (svgelements[index].tagName.toLowerCase() === 'rect') && parseFloat(svgelements[index].getAttribute('height')) > 6 &&
         (svgelements[index].getAttribute('style') == "stroke:#181818;stroke-width:0.5;")
-}
-
-function checkIfTitleRect(svgelements, index) {
-    if (svgelements[index]) {
-        return (svgelements[index].tagName.toLowerCase() === 'rect') && parseFloat(svgelements[index].getAttribute('height')) > 6 &&
-            (svgelements[index].getAttribute('style') == "stroke:#00000000;stroke-width:1.0;fill:none;")
-    }
 }
 
 function checkIfFork(svgelements, index) {

@@ -63,30 +63,33 @@ def _right_click_until_menu(page, locate_xy, menu_selector, attempts=10):
     )
 
 
+_NOTE_TEST_PUML = (
+    "@startuml\\nparticipant Alice\\nparticipant Bob\\n" "Alice -> Bob: hello\\n@enduml"
+)
+
+
 def _open_sequence_demo(page):
-    """Switch the app to sequence mode via the real "Sequence Demo" menu
-    item, matching how an end user would do it (not editor.setValue)."""
+    """Enter sequence mode via the real "Sequence Demo" menu item (so the
+    Bootstrap document-level click bubbling these tests exercise is genuine),
+    then load a small, note-free diagram.
+
+    The shipped demo intentionally showcases every feature (a title, a
+    participant box, four participants and several pre-existing notes), which
+    makes fixed-offset lifeline clicks and note ordinals non-deterministic.
+    Loading a minimal two-participant, note-free diagram keeps participant
+    index 0 == Alice and makes a freshly created note the only note
+    (ordinal 0), while still driving the real context-menu click pipeline."""
     page.click(".toolbar-btn.dropdown-toggle")
     page.wait_for_selector("#sequence", state="visible", timeout=15000)
     page.click("#sequence")
-    page.wait_for_function(
-        "() => participantLifelines && participantLifelines.length === 3",
-        timeout=15000,
-    )
-    # Switching diagrams fires a burst of background requests: the activity
-    # diagram being replaced is still finishing its render/positions calls
-    # while the sequence demo issues its own renders, and each response
-    # rebuilds the SVG and reattaches the per-element handlers. If the first
-    # real right-click lands mid-burst it hits an element whose context-menu
-    # handler is not attached yet, so #sequence-menu never opens (the flaky
-    # failure this guards against). Wait for that churn to drain, then
-    # re-confirm the lifelines survived the final render, so interactions run
-    # against a settled SVG.
-    page.wait_for_load_state("networkidle")
-    page.wait_for_function(
-        "() => participantLifelines && participantLifelines.length === 3",
-        timeout=15000,
-    )
+    for _ in range(12):
+        page.evaluate(f"() => editor.session.setValue('{_NOTE_TEST_PUML}')")
+        page.wait_for_timeout(2500)
+        if page.evaluate(
+            "() => participantLifelines && participantLifelines.length === 2"
+        ):
+            return
+    raise AssertionError("participantLifelines never loaded to 2")
 
 
 def _right_click_lifeline(page, lifeline_index=0):
@@ -252,7 +255,7 @@ class TestSequenceNoteTypeMenuRealClicks:
         lines = page.evaluate(
             "() => editor.session.getValue().split('\\n').map(l => l.trim())"
         )
-        assert "hnote over bob : Real click hex note" in lines
+        assert "hnote over Alice : Real click hex note" in lines
 
 
 class TestSequenceNoteTypeMenu:
@@ -559,7 +562,7 @@ class TestSequenceNoteModalTypeSelector:
         lines = page.evaluate(
             "() => editor.session.getValue().split('\\n').map(l => l.trim())"
         )
-        assert "hnote over bob : Unchanged type note edited" in lines
+        assert "hnote over Alice : Unchanged type note edited" in lines
 
 
 class TestMultiLineNoteRightClick:
