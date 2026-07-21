@@ -54,6 +54,14 @@ def test_divider_visible(app_url, page):
     assert divider.is_visible()
 
 
+def test_divider_toggle_visible(app_url, page):
+    """The collapse/expand toggle button exists inside the divider and is visible."""
+    toggle = page.locator("#divider-toggle")
+    toggle.wait_for(state="visible", timeout=5000)
+    assert toggle.is_visible()
+    assert page.locator(".divider #divider-toggle").count() == 1
+
+
 def test_split_container_visible(app_url, page):
     """The split container wraps both panes."""
     container = page.locator(".split-container")
