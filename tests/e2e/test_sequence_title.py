@@ -31,6 +31,8 @@ and the modal's submit handler is wired once via addUtilEventListeners, so this
 verifies the whole path works while a sequence diagram is loaded.
 """
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
 _PUML = (
     "@startuml\\ntitle\\nMy Sequence Title\\nendtitle\\n"
     "participant Alice\\nparticipant Bob\\nAlice -> Bob: hi\\n@enduml"
@@ -93,22 +95,41 @@ def _title_center(page):
     )
 
 
+def _dblclick_title_until_modal(page, attempts=8):
+    """Double-click the title, retrying until the edit modal opens.
+
+    The diagram re-renders a few times right after load and the SVG handlers are
+    (re)attached asynchronously after each render, so a single double-click can
+    land in the gap between the SVG being swapped in and setupTitleHandler
+    binding the dblclick / re-enabling pointer events on the title text.
+    Recomputing the title center and retrying makes the gesture robust against
+    that render race without hiding a genuine failure (the final attempt still
+    raises)."""
+    for attempt in range(attempts):
+        center = _title_center(page)
+        if center is not None:
+            page.mouse.dblclick(center[0], center[1])
+        try:
+            page.wait_for_selector(
+                "#modalFormTitle.show", state="visible", timeout=5000
+            )
+            return
+        except PlaywrightTimeoutError:
+            if attempt == attempts - 1:
+                raise
+
+
 class TestSequenceTitleDoubleClick:
     def test_double_click_title_opens_modal_prefilled(self, app_url, page):
         _load_sequence_with_title(page)
 
-        x, y = _title_center(page)
-        page.mouse.dblclick(x, y)
-
-        page.wait_for_selector("#modalFormTitle.show", state="visible", timeout=15000)
+        _dblclick_title_until_modal(page)
         assert page.input_value("#title-text") == "My Sequence Title"
 
     def test_double_click_title_edit_updates_puml(self, app_url, page):
         _load_sequence_with_title(page)
 
-        x, y = _title_center(page)
-        page.mouse.dblclick(x, y)
-        page.wait_for_selector("#modalFormTitle.show", state="visible", timeout=15000)
+        _dblclick_title_until_modal(page)
 
         page.fill("#title-text", "Renamed Title")
         page.click("#submit-title")
