@@ -2262,7 +2262,6 @@ async function setHandlersForActivityDiagram(pumlcontent, element, renderId) {
 
             if (checkIfTitleRect(svgelements, index)) {
                 activityHoverTargets.title.push(svgelement);
-                makeTitleDoubleClickable(svgelement, svg, pumlcontent);
 
                 svgelement.addEventListener('contextmenu', function(e) {
                     lastclickedsvgelement = svgelement
@@ -2288,6 +2287,12 @@ async function setHandlersForActivityDiagram(pumlcontent, element, renderId) {
             }
             index++
         }
+        // Make the diagram title double-click editable. Runs after the element
+        // walk so it can re-enable pointer events on the title text (the walk
+        // sets font-size text to pointer-events:none) and so it sees the final
+        // SVG. Handles both the old bounding-rect title and newer PlantUML's
+        // bold text-only title (see title.js).
+        setupTitleHandler(svgelements, svg, pumlcontent);
         // After the walk so the svg sent reflects its mutations (e.g. the
         // pointer-events flags note counting depends on)
         await fetchActivityPositions();

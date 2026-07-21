@@ -22,37 +22,31 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""E2E tests for double-click title editing in sequence diagrams.
+"""E2E tests for double-click title editing in activity diagrams.
 
-Parity with the activity diagram: the title is rendered as an invisible
-bounding <rect> that setupTitleHandler makes double-clickable, opening the
-shared #modalFormTitle. The getTextTitle/editTitle routes are diagram-agnostic
-and the modal's submit handler is wired once via addUtilEventListeners, so this
-verifies the whole path works while a sequence diagram is loaded.
+Shares the title implementation (title.js) with sequence diagrams. This guards
+the activity side against renderer-version drift: newer PlantUML renders the
+title as bold font-size-14 <text> (no bounding rect), while older PlantUML wraps
+it in an invisible #00000000 <rect>; setupTitleHandler handles both.
 """
 
 _PUML = (
-    "@startuml\\ntitle\\nMy Sequence Title\\nendtitle\\n"
-    "participant Alice\\nparticipant Bob\\nAlice -> Bob: hi\\n@enduml"
+    "@startuml\\ntitle\\nMy Activity Title\\nendtitle\\n"
+    "start\\n:Activity;\\nstop\\n@enduml"
 )
 
 
-def _load_sequence_with_title(page, retries=12, wait_ms=2500):
-    """Load a titled sequence diagram, retrying until it renders stably.
+def _load_activity_with_title(page, retries=12, wait_ms=2500):
+    """Load a titled activity diagram, retrying until it renders stably.
 
-    Mirrors the render-race-tolerant load helpers used by the other sequence
-    e2e tests: the page's initial demo render can complete late and clobber a
-    single setValue, so re-set until both lifelines and the title element exist.
-
-    The title is detected the same way title.js does: newer PlantUML renders it
-    as bold, font-size-14 <text>; older PlantUML wrapped it in an invisible
-    #00000000 bounding <rect>."""
+    Detects the title the same way title.js does: bold font-size-14 <text>
+    (newer PlantUML) or the invisible #00000000 bounding <rect> (older)."""
     for _ in range(retries):
         page.evaluate(f"() => editor.session.setValue('{_PUML}')")
         page.wait_for_timeout(wait_ms)
         ready = page.evaluate(
             """() => {
-                if (!participantLifelines || participantLifelines.length !== 2) {
+                if (!editor.session.getValue().includes('My Activity Title')) {
                     return false;
                 }
                 const svg = document.querySelector('#colb svg');
@@ -69,7 +63,7 @@ def _load_sequence_with_title(page, retries=12, wait_ms=2500):
         )
         if ready:
             return
-    raise AssertionError("titled sequence diagram never rendered")
+    raise AssertionError("titled activity diagram never rendered")
 
 
 def _title_center(page):
@@ -93,32 +87,32 @@ def _title_center(page):
     )
 
 
-class TestSequenceTitleDoubleClick:
+class TestActivityTitleDoubleClick:
     def test_double_click_title_opens_modal_prefilled(self, app_url, page):
-        _load_sequence_with_title(page)
+        _load_activity_with_title(page)
 
         x, y = _title_center(page)
         page.mouse.dblclick(x, y)
 
         page.wait_for_selector("#modalFormTitle.show", state="visible", timeout=15000)
-        assert page.input_value("#title-text") == "My Sequence Title"
+        assert page.input_value("#title-text") == "My Activity Title"
 
     def test_double_click_title_edit_updates_puml(self, app_url, page):
-        _load_sequence_with_title(page)
+        _load_activity_with_title(page)
 
         x, y = _title_center(page)
         page.mouse.dblclick(x, y)
         page.wait_for_selector("#modalFormTitle.show", state="visible", timeout=15000)
 
-        page.fill("#title-text", "Renamed Title")
+        page.fill("#title-text", "Renamed Activity Title")
         page.click("#submit-title")
         page.wait_for_function(
-            "() => editor.session.getValue().includes('Renamed Title')",
+            "() => editor.session.getValue().includes('Renamed Activity Title')",
             timeout=15000,
         )
 
         lines = page.evaluate(
             "() => editor.session.getValue().split('\\n').map(l => l.trim())"
         )
-        assert "Renamed Title" in lines
-        assert "My Sequence Title" not in lines
+        assert "Renamed Activity Title" in lines
+        assert "My Activity Title" not in lines
