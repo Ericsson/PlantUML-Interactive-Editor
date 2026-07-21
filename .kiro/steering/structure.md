@@ -100,6 +100,7 @@
 │       ├── test_sequence_hover_highlight.py  # Editor <-> diagram hover highlighting e2e tests
 │       ├── test_sequence_message_interactions.py # Message add/edit/delete e2e tests
 │       ├── test_sequence_note_menu.py         # Note type menu, modal type selector & create/edit flow e2e tests
+│       ├── test_sequence_note_group_hover.py  # Note hover during add-mode gestures (regression: note turned black during group ghost box)
 │       ├── test_sequence_participant.py      # Participant add/rename/delete e2e tests
 │       └── test_sequence_title.py            # Double-click title editing e2e tests (shared by activity & sequence)
 └── .kiro/steering/         # Kiro steering files

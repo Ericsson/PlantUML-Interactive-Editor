@@ -30,25 +30,37 @@ R Note choice, which itself swaps in place for the existing placement menu.
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 
-def _right_click_until_menu(page, locate_xy, menu_selector, attempts=8):
+def _right_click_until_menu(page, locate_xy, menu_selector, attempts=10):
     """Right-click at freshly computed coordinates, retrying until the menu
     appears (or the attempts run out, re-raising the timeout).
 
     The sequence demo re-renders the diagram a few times right after it loads,
-    which can move the lifelines/notes between when a coordinate is computed
-    and when the click lands - so a single click occasionally misses the
-    target and the context menu never opens. Recomputing the coordinate and
-    retrying makes the gesture robust against that render race without hiding
-    a genuine failure (the final attempt still raises)."""
+    which can move - or momentarily remove - the lifelines/notes between when
+    a coordinate is computed and when the click lands. So a single click
+    occasionally misses the target and the context menu never opens, and the
+    target element may not even be present when the coordinate is computed.
+    `locate_xy` returns None in that case; we wait briefly and retry.
+    Recomputing the coordinate each attempt makes the gesture robust against
+    that render race without hiding a genuine failure (the final attempt still
+    raises)."""
+    last_error = None
     for attempt in range(attempts):
-        x, y = locate_xy()
-        page.mouse.click(x, y, button="right")
+        coords = locate_xy()
+        if coords is None:
+            # Target not rendered yet (svg mid-re-render); wait and retry.
+            page.wait_for_timeout(500)
+            continue
+        page.mouse.click(coords[0], coords[1], button="right")
         try:
             page.wait_for_selector(menu_selector, state="visible", timeout=5000)
             return
-        except PlaywrightTimeoutError:
-            if attempt == attempts - 1:
-                raise
+        except PlaywrightTimeoutError as error:
+            last_error = error
+    if last_error is not None:
+        raise last_error
+    raise AssertionError(
+        f"{menu_selector} never appeared: target element was never located"
+    )
 
 
 _NOTE_TEST_PUML = (
@@ -80,25 +92,60 @@ def _open_sequence_demo(page):
     raise AssertionError("participantLifelines never loaded to 2")
 
 
-def _right_click_lifeline(page, lifeline_index=0, y_offset=60):
-    """Real right-click near a lifeline, converting SVG user-space
-    coordinates to screen coordinates the same way a real click would land,
-    so this exercises the actual DOM event/bubbling pipeline (unlike
-    dispatchEvent, which does not interact with Bootstrap's document-level
-    click handlers)."""
+def _right_click_lifeline(page, lifeline_index=0):
+    """Real right-click on a lifeline (between its top and bottom participant
+    boxes) to open the lifeline context menu, exercising the actual DOM
+    event/bubbling pipeline (unlike dispatchEvent, which does not interact
+    with Bootstrap's document-level click handlers).
+
+    Coordinates are taken from the rendered participant boxes'
+    getBoundingClientRect() rather than svg.getScreenCTM() math: the diagram
+    is wrapped in panzoom, which applies a CSS transform to #colb. On a cold
+    PlantUML JAR the first sequence render is slow enough that panzoom's
+    bounds clamping can settle on a non-identity transform, which
+    getScreenCTM() does not account for - so the CTM-computed point missed the
+    lifeline and the menu never opened (only on the very first sequence test,
+    when the JAR is still cold). getBoundingClientRect() reports the true
+    on-screen box position with panzoom's transform already baked in, so the
+    click always lands on the lifeline. Mirrors _right_click_note."""
 
     def locate():
         return page.evaluate(
-            """(args) => {
+            """(index) => {
                 const svg = document.querySelector('#colb svg');
-                const lifeline = participantLifelines[args.index];
-                const pt = svg.createSVGPoint();
-                pt.x = lifeline.cx;
-                pt.y = args.yOffset;
-                const screenPt = pt.matrixTransform(svg.getScreenCTM());
-                return [screenPt.x, screenPt.y];
+                if (!svg) return null;
+                const lifeline = participantLifelines[index];
+                if (!lifeline) return null;
+                const cx = lifeline.cx;
+                // Participant header/footer boxes share the lifeline's
+                // center-x and are the only note-stroke rects with rounded
+                // corners (notes/box rects have no rx/ry).
+                const boxes = Array.from(svg.querySelectorAll('rect'))
+                    .filter(r => {
+                        const style = r.getAttribute('style') || '';
+                        return r.hasAttribute('rx') && r.hasAttribute('ry') &&
+                            style.includes('stroke-width:0.5') &&
+                            Math.abs(
+                                parseFloat(r.getAttribute('x')) +
+                                parseFloat(r.getAttribute('width')) / 2 - cx
+                            ) <= 3;
+                    })
+                    .map(r => r.getBoundingClientRect())
+                    .sort((a, b) => a.top - b.top);
+                // The svg may be mid-re-render (boxes not present yet); signal
+                // a retryable miss rather than throwing.
+                if (boxes.length === 0) return null;
+                const top = boxes[0];
+                const bottom = boxes[boxes.length - 1];
+                const x = top.x + top.width / 2;
+                // Midpoint of the lifeline between the two boxes; if only one
+                // box was found, click just below it (still on the lifeline).
+                const y = boxes.length > 1
+                    ? (top.bottom + bottom.top) / 2
+                    : top.bottom + 20;
+                return [x, y];
             }""",
-            {"index": lifeline_index, "yOffset": y_offset},
+            lifeline_index,
         )
 
     _right_click_until_menu(page, locate, "#sequence-menu")
@@ -135,9 +182,13 @@ def _right_click_note(page, note_ordinal=0, lifeline_index=0):
         return page.evaluate(
             """(args) => {
                 const svg = document.querySelector('#colb svg');
+                if (!svg) return null;
                 const shapes = Array.from(svg.querySelectorAll('path, polygon, rect'))
                     .filter(el => isNoteCandidate(el) && classifyNoteShape(el) !== null);
                 const shape = shapes[args.noteOrdinal];
+                // The svg may be mid-re-render (shape not present yet); signal
+                // a retryable miss rather than throwing.
+                if (!shape) return null;
                 const box = shape.getBoundingClientRect();
                 return [box.x + box.width / 2, box.y + box.height / 2];
             }""",
