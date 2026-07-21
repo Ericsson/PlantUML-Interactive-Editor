@@ -81,7 +81,7 @@ def test_switching_to_sequence_is_not_clobbered_by_slow_activity_render(
     # Wait past the induced activity-render delay so a stale, unguarded render
     # would have had time to overwrite #colb.
     page.wait_for_function(
-        "() => participantLifelines && participantLifelines.length === 3",
+        "() => participantLifelines && participantLifelines.length === 4",
         timeout=15000,
     )
     page.wait_for_timeout(2500)
