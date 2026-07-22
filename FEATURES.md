@@ -10,6 +10,7 @@ PlantUML Activity Diagram documentation: [Activity Diagram (New Syntax) on plant
 - Automatic Indentation
 - Syntax Highlighting
 - Copy / Paste buttons to replace from or copy to clipboard
+- Collapsible code editor pane: click the chevron on the pane divider, or drag the divider past its minimum width, to collapse the editor to a thin strip; click the chevron or drag back out to expand it again
 - Undo / Redo using buttons or CTRL + X / CTRL + Y
 - Syntax and server error popups
 - Version History modal showing external changelog
