@@ -12,10 +12,22 @@
   "activationEvents": [],
   "main": "./extension.js",
   "contributes": {
-    "commands": [{
-      "command": "plantuml-interactive-editor.openDiagram",
-      "title": "PlantUML: Open Interactive Diagram"
-    }]
+    "commands": [
+      {
+        "command": "plantuml-interactive-editor.openDiagram",
+        "title": "PlantUML: Open Interactive Diagram"
+      }
+    ],
+    "configuration": {
+      "title": "PlantUML Interactive Editor",
+      "properties": {
+        "plantumlInteractive.plantumlJar": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to plantuml.jar, used to render diagrams. Falls back to the PLANTUML_JAR environment variable if not set."
+        }
+      }
+    }
   },
   "scripts": {
     "lint": "eslint .",
@@ -23,12 +35,13 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.125.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "24.x",
-    "eslint": "^10.5.0",
+    "@types/vscode": "^1.125.0",
     "@vscode/test-cli": "^0.0.15",
-    "@vscode/test-electron": "^3.0.0"
+    "@vscode/test-electron": "^3.0.0",
+    "eslint": "^10.5.0",
+    "globals": "^16.5.0"
   },
   "overrides": {
     "diff": "^8.0.4",

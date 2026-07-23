@@ -1,0 +1,78 @@
+// Minimal webview content for the PlantUML diagram panel.
+//
+// The webview holds only a diagram container and just enough script to
+// receive `{ type: "updateDiagram", svg }` and `{ type: "renderError", message }`
+// messages posted from the extension via panel.webview.postMessage(...).
+// It intentionally contains no PlantUML source, no code editor, and no
+// Ace Editor - the VS Code text editor remains the only source editor.
+
+/**
+ * @returns {string} the static HTML document loaded into the webview.
+ */
+function getWebviewContent() {
+	return `<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>PlantUML Interactive Diagram</title>
+	<style>
+		html, body {
+			margin: 0;
+			padding: 0;
+			height: 100%;
+			background-color: var(--vscode-editor-background);
+			color: var(--vscode-editor-foreground);
+			font-family: var(--vscode-font-family);
+		}
+		#diagram {
+			display: flex;
+			align-items: flex-start;
+			justify-content: center;
+			padding: 8px;
+			overflow: auto;
+			height: 100%;
+			box-sizing: border-box;
+		}
+		#diagram svg {
+			max-width: 100%;
+		}
+		#error {
+			display: none;
+			color: var(--vscode-errorForeground);
+			white-space: pre-wrap;
+			padding: 12px;
+			font-family: var(--vscode-editor-font-family);
+		}
+	</style>
+</head>
+<body>
+	<div id="error"></div>
+	<div id="diagram"></div>
+
+	<script>
+		const diagramEl = document.getElementById('diagram');
+		const errorEl = document.getElementById('error');
+
+		window.addEventListener('message', (event) => {
+			const message = event.data;
+
+			if (message.type === 'updateDiagram') {
+				errorEl.style.display = 'none';
+				errorEl.textContent = '';
+				diagramEl.style.display = 'flex';
+				diagramEl.innerHTML = message.svg;
+			} else if (message.type === 'renderError') {
+				diagramEl.style.display = 'none';
+				errorEl.style.display = 'block';
+				errorEl.textContent = message.message;
+			}
+		});
+	</script>
+</body>
+</html>`;
+}
+
+module.exports = {
+	getWebviewContent
+};
