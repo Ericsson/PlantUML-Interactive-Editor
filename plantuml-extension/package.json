@@ -17,7 +17,17 @@
         "command": "plantuml-interactive-editor.openDiagram",
         "title": "PlantUML: Open Interactive Diagram"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "PlantUML Interactive Editor",
+      "properties": {
+        "plantumlInteractive.plantumlJar": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to plantuml.jar, used to render diagrams. Falls back to the PLANTUML_JAR environment variable if not set."
+        }
+      }
+    }
   },
   "scripts": {
     "lint": "eslint .",
