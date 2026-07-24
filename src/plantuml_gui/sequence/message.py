@@ -27,7 +27,7 @@ from typing import Dict, List
 
 from pyquery import PyQuery as Pq
 
-from .classes import Diagram, Participant
+from .classes import ARROW_RE, Diagram, Participant
 from .util import (
     escape_multiline_text,
     find_insertion_index,
@@ -97,11 +97,28 @@ def _svg_element_matches(element: Pq, clicked: Pq) -> bool:
     return False
 
 
+def _is_continuation_text(element: Pq) -> bool:
+    """Return True if an SVG element is a message text continuation line.
+
+    A multi-line message (``A -> B: a\\nb``) renders its text as several
+    <text> siblings following the message's shape group. They are plain
+    message text (font-size 13, not bold - bold marks a group keyword/label)
+    and, unlike the group's first line, aren't part of any tag pattern, so
+    they must be explicitly attributed to their message.
+    """
+    if element[0].tag != "text":
+        return False
+    return element.attr("font-size") == "13" and element.attr("font-weight") != "bold"
+
+
 def index_of_clicked_message(svg: str, svgelement: str) -> int:
     """Find the 1-based index of the message containing the clicked SVG element.
 
     Iterates SVG elements using the same grouping logic as Diagram._parse_messages,
     checking if the clicked element matches any element in each message group.
+    Continuation text lines of a multi-line message (rendered as extra <text>
+    siblings after the group) are attributed to that same message, so a click on
+    any line of the text resolves to it.
     """
     d = Pq(svg)
     clicked = Pq(svgelement)
@@ -114,46 +131,42 @@ def index_of_clicked_message(svg: str, svgelement: str) -> int:
         tags = [el[0].tag for el in group]
 
         if tags[:4] == ["polygon", "polygon", "line", "text"]:
-            message_index += 1
-            for el in group[:4]:
-                if _svg_element_matches(el, clicked):
-                    return message_index
-            i += 4
+            members = list(group[:4])
+            j = i + 4
         elif tags[:5] == ["line", "line", "line", "polygon", "text"]:
-            message_index += 1
-            for el in group[:5]:
-                if _svg_element_matches(el, clicked):
-                    return message_index
-            i += 5
+            members = list(group[:5])
+            j = i + 5
         elif tags[:3] == ["polygon", "line", "text"]:
-            message_index += 1
-            for el in group[:3]:
-                if _svg_element_matches(el, clicked):
-                    return message_index
-            i += 3
+            members = list(group[:3])
+            j = i + 3
         else:
             i += 1
+            continue
+
+        message_index += 1
+        # Attribute any trailing continuation text lines to this message. The
+        # next message always starts with a polygon/line and a note with its
+        # shape, so a bare <text> here can only be this message's extra line.
+        while j < len(elements) and _is_continuation_text(elements[j]):
+            members.append(elements[j])
+            j += 1
+        for el in members:
+            if _svg_element_matches(el, clicked):
+                return message_index
+        i = j
 
     return -1
 
 
-# A message arrow, matched so its optional embedded color bracket can be read or
-# rewritten. The arrow either starts with ``<`` (a reverse/bidirectional head)
-# or ends with a head (``>``, ``x`` or ``o``); either way it contains at least
-# one dash. Requiring a head keeps a lone ``-`` inside a participant name (e.g.
-# ``Web-Server``) from being mistaken for the arrow. An existing ``[#color]``
-# token may sit anywhere among the dashes.
-_ARROW_RE = re.compile(
-    r"<{1,2}[-\\/]*(?:\[#[^\]]*\])?[-\\/]*(?:>{1,2}|[xo])?"  # starts with '<'
-    r"|[-\\/]+(?:\[#[^\]]*\])?[-\\/]*(?:>{1,2}|[xo])"  # ends with a head
-)
-
-
 def _arrow_color_from_line(line: str) -> str:
-    """Extract a message's arrow color from its puml line (``""`` if none)."""
+    """Extract a message's arrow color from its puml line (``""`` if none).
+
+    Uses the shared ``ARROW_RE`` (defined in ``classes.py``) so message-line
+    detection and color read/rewrite recognize the exact same arrow shapes.
+    """
     colon_pos = line.find(": ")
     prefix = line[:colon_pos] if colon_pos != -1 else line
-    match = _ARROW_RE.search(prefix)
+    match = ARROW_RE.search(prefix)
     if not match:
         return ""
     color_match = re.search(r"\[#([^\]]+)\]", match.group(0))
@@ -179,21 +192,25 @@ def _apply_arrow_color(arrow: str, color: str) -> str:
 
 def _set_arrow_color(prefix: str, color: str) -> str:
     """Rewrite the arrow color in a message line's pre-``": "`` prefix."""
-    match = _ARROW_RE.search(prefix)
+    match = ARROW_RE.search(prefix)
     if not match:
         return prefix
     new_arrow = _apply_arrow_color(match.group(0), color)
     return prefix[: match.start()] + new_arrow + prefix[match.end() :]
 
 
-def _clicked_message_line(puml: str, svg: str, svgelement: str) -> str:
-    """Return the puml source line of the clicked message.
+def _clicked_message_line(puml: str, svg: str, svgelement: str) -> str | None:
+    """Return the puml source line of the clicked message, or ``None``.
 
     Shared by the label/color getters so the SVG is parsed and the clicked
-    message resolved in one place.
+    message resolved in one place. Returns ``None`` when the clicked element
+    doesn't resolve to a message (``index_of_clicked_message`` returned -1), so
+    callers never index ``messages[-1 - 1]`` and read an unrelated message.
     """
     diagram = Diagram.from_svg(svg, puml)
     idx = index_of_clicked_message(svg, svgelement)
+    if idx == -1:
+        return None
     return puml.splitlines()[diagram.messages[idx - 1].index]
 
 
@@ -205,13 +222,15 @@ def _message_text_from_line(line: str) -> str:
 
 
 def get_message_text(puml: str, svg: str, svgelement: str) -> str:
-    """Get the label text of the clicked message."""
-    return _message_text_from_line(_clicked_message_line(puml, svg, svgelement))
+    """Get the label text of the clicked message (``""`` if not a message)."""
+    line = _clicked_message_line(puml, svg, svgelement)
+    return _message_text_from_line(line) if line is not None else ""
 
 
 def get_message_color(puml: str, svg: str, svgelement: str) -> str:
-    """Get the arrow color of the clicked message (``""`` if uncolored)."""
-    return _arrow_color_from_line(_clicked_message_line(puml, svg, svgelement))
+    """Get the arrow color of the clicked message (``""`` if uncolored/none)."""
+    line = _clicked_message_line(puml, svg, svgelement)
+    return _arrow_color_from_line(line) if line is not None else ""
 
 
 def get_message_label(puml: str, svg: str, svgelement: str) -> tuple[str, str]:
@@ -219,8 +238,11 @@ def get_message_label(puml: str, svg: str, svgelement: str) -> tuple[str, str]:
 
     Resolves the message's puml line once (parsing the SVG a single time) and
     derives both fields, so the /getMessageText route avoids a redundant parse.
+    Returns ``("", "")`` when the clicked element isn't a message.
     """
     line = _clicked_message_line(puml, svg, svgelement)
+    if line is None:
+        return "", ""
     return _message_text_from_line(line), _arrow_color_from_line(line)
 
 
@@ -235,6 +257,8 @@ def edit_message_text(
     """
     diagram = Diagram.from_svg(svg, puml)
     idx = index_of_clicked_message(svg, svgelement)
+    if idx == -1:
+        return puml  # clicked element isn't a message; leave puml unchanged
     message = diagram.messages[idx - 1]
     lines = puml.splitlines()
     line = lines[message.index]
@@ -251,9 +275,11 @@ def edit_message_text(
 
 
 def delete_message(puml: str, svg: str, svgelement: str) -> str:
-    """Delete the clicked message."""
+    """Delete the clicked message (no-op if the element isn't a message)."""
     diagram = Diagram.from_svg(svg, puml)
     idx = index_of_clicked_message(svg, svgelement)
+    if idx == -1:
+        return puml  # clicked element isn't a message; leave puml unchanged
     message = diagram.messages[idx - 1]
     lines = puml.splitlines()
     del lines[message.index]
