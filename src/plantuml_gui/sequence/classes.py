@@ -33,6 +33,43 @@ from pyquery import PyQuery as Pq  # pragma: no cover
 # Matches the identification used by the frontend's checkIfParticipant.
 PARTICIPANT_RECT_STYLE = "stroke:#181818;stroke-width:0.5;"
 
+# A message arrow, matched so its optional embedded color bracket can be read or
+# rewritten. The arrow either starts with ``<`` (a reverse/bidirectional head)
+# or ends with a head (``>``, ``x`` or ``o``); either way it contains at least
+# one dash. Requiring a head keeps a lone ``-`` inside a participant name (e.g.
+# ``Web-Server``) from being mistaken for the arrow. An existing ``[#color]``
+# token may sit anywhere among the dashes.
+#
+# Lives here, in the base module, so both message parsing (index assignment,
+# below) and message.py's color read/rewrite share one arrow definition and
+# cannot drift apart. classes.py imports nothing from the package, so message.py
+# importing this back is cycle-free.
+ARROW_RE = re.compile(
+    r"<{1,2}[-\\/]*(?:\[#[^\]]*\])?[-\\/]*(?:>{1,2}|[xo])?"  # starts with '<'
+    r"|[-\\/]+(?:\[#[^\]]*\])?[-\\/]*(?:>{1,2}|[xo])"  # ends with a head
+)
+
+
+def is_message_line(line: str) -> bool:
+    """Return True if a puml line is a message (``sender <arrow> receiver: text``).
+
+    The arrow always precedes the ``": "`` text separator, so only the part
+    before the first colon is inspected. Reverse (``<-``), bidirectional
+    (``<->``), dotted, self, and colored (``-[#red]>``) arrows are all matched
+    via :data:`ARROW_RE`.
+
+    Requiring a real dash in the matched arrow rejects two look-alikes:
+    non-message lines whose free text happens to contain a ``<`` before a colon
+    (e.g. a group label ``alt <size:12>...``), which :data:`ARROW_RE` would
+    otherwise match as a bare ``<``; and notes/labels that carry their arrow
+    only after the colon.
+    """
+    colon_pos = line.find(":")
+    if colon_pos == -1:
+        return False
+    match = ARROW_RE.search(line[:colon_pos])
+    return match is not None and "-" in match.group(0)
+
 
 def is_participant_rect(rect: Pq) -> bool:
     """Return True if an SVG rect is a participant header (not an activation
@@ -296,23 +333,9 @@ class Diagram:
         """Assign indexes in the puml code to corresponding message"""
         lines = puml.splitlines()
 
-        def is_message_line(line: str) -> bool:
-            # A real message line is "sender -> receiver: text", so the
-            # arrow always precedes the colon. Notes/group labels can
-            # contain "->" in their free text, but only after (or without)
-            # a colon, since they aren't built with that arrow-then-colon
-            # shape.
-            #
-            # A colored arrow embeds a "[#color]" token between the dash and
-            # the head (e.g. "-[#red]>"), which would otherwise hide the
-            # "->" substring; strip such tokens first so colored messages are
-            # still recognized.
-            line = re.sub(r"\[#[^\]]*\]", "", line)
-            arrow_pos = line.find("->")
-            colon_pos = line.find(":")
-            return arrow_pos != -1 and colon_pos != -1 and arrow_pos < colon_pos
-
-        # Find all lines that represent messages (lines with '->' before ':')
+        # Find all lines that represent messages, in source order. This must
+        # count the same arrows the SVG parser does (both directions), or the
+        # message list and the source lines fall out of alignment.
         message_lines = [i for i, line in enumerate(lines) if is_message_line(line)]
 
         # Messages are already in occuring order
