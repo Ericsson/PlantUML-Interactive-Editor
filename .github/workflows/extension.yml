@@ -1,0 +1,52 @@
+name: VS Code extension
+
+on:
+  push:
+    branches: [main, summer]
+  pull_request:
+    branches: [main, summer]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+
+    - name: Install extension dependencies
+      working-directory: plantuml-extension
+      run: npm ci
+
+    - name: Install Jinja2 for the asset sync
+      run: python -m pip install jinja2
+
+    # The extension loads the web app's own frontend from plantuml-extension/media,
+    # mirrored from src/plantuml_gui by scripts/sync_assets.py. If the mirror is
+    # stale the extension silently runs old interaction code, so fail here rather
+    # than ship a divergent copy.
+    - name: Check mirrored frontend assets are current
+      working-directory: plantuml-extension
+      run: npm run sync-assets:check
+
+    - name: Lint
+      working-directory: plantuml-extension
+      run: npm run lint
+
+    # The test harness drives a real VS Code instance, which needs a display.
+    - name: Test
+      working-directory: plantuml-extension
+      run: xvfb-run -a npm test
