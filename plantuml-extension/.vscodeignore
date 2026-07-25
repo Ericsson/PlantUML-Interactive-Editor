@@ -1,6 +1,9 @@
 .vscode/**
 .vscode-test/**
 test/**
+# Build tooling: mirrors src/plantuml_gui/static into media/ at development
+# time. media/ itself ships, so this is not needed at runtime.
+scripts/**
 .gitignore
 .yarnrc
 vsc-extension-quickstart.md

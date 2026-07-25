@@ -25,12 +25,19 @@
           "type": "string",
           "default": "",
           "description": "Absolute path to plantuml.jar, used to render diagrams. Falls back to the PLANTUML_JAR environment variable if not set."
+        },
+        "plantumlInteractive.pythonPath": {
+          "type": "string",
+          "default": "",
+          "description": "Python interpreter used to run the diagram-editing backend. Must have the plantuml-gui package installed. Defaults to \"python\" on PATH."
         }
       }
     }
   },
   "scripts": {
     "lint": "eslint .",
+    "sync-assets": "node scripts/sync-assets.mjs",
+    "sync-assets:check": "node scripts/sync-assets.mjs --check",
     "pretest": "npm run lint",
     "test": "vscode-test"
   },
@@ -41,7 +48,11 @@
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.0.0",
     "eslint": "^10.5.0",
-    "globals": "^16.5.0"
+    "globals": "^16.5.0",
+    "bootstrap": "4.6.2",
+    "diff": "^8.0.4",
+    "jquery": "3.7.1",
+    "panzoom": "9.4.0"
   },
   "overrides": {
     "diff": "^8.0.4",
