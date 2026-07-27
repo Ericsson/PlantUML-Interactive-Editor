@@ -198,9 +198,13 @@ async function openDiagramPanel(context) {
 			retainContextWhenHidden: true
 		}
 	);
+	// Rewrite the sidecar's loopback URL to one the webview can actually reach (needed under Remote-SSH/WSL/Codespaces).
+	const apiBase = (
+		await vscode.env.asExternalUri(vscode.Uri.parse(active.baseUrl))
+	).toString();
 
 	panel.webview.html = getWebviewContent({
-		apiBase: active.baseUrl,
+		apiBase,
 		token: active.token,
 		webview: panel.webview,
 		mediaRoot
