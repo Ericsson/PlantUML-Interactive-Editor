@@ -221,6 +221,9 @@ async function submitBox(startIndex, endIndex) {
 // --- Event listener registration ---
 
 function boxEventListeners() {
+    // Submit button in the box edit modal
+    $('#seq-submit-box').on('click', submitBoxEdit);
+
     // "Box" item in the participant context menu enters box-add mode.
     document.getElementById('seq-addBox').addEventListener('click', (e) => {
         e.preventDefault();
