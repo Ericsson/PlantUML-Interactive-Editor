@@ -867,6 +867,9 @@ function cssColorValue(color) {
 }
 
 function noteOperationEventListeners() {
+    // Submit button in the note modal (Add / Edit)
+    $('#seq-submit-note').on('click', submitNote);
+
     // "Add Note" in sequence-menu shows the note type submenu
     document.getElementById('seq-addNote').addEventListener('click', function(e) {
         e.preventDefault();
@@ -1004,6 +1007,9 @@ function noteOperationEventListeners() {
 let groupEditMode = false;
 
 function groupOperationEventListeners() {
+    // Submit button in the group label modal (Add / Rename)
+    $('#seq-submit-group').on('click', submitGroup);
+
     // "Rename" context menu item: fetch current label and show the group modal
     document.getElementById('seq-renameGroup').addEventListener('click', async function() {
         var element = document.getElementById('colb');
