@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Rewrote `Diagram._assign_participant_indexes` (`sequence/classes.py`) to map each participant to its declaration line by displayed name (quoted or bare, via the new `PARTICIPANT_DECLARATION_RE`/`_declared_participant_name`) rather than by position. Implicitly-introduced participants correctly keep index `-1` ("no declaration line") instead of shifting every later participant onto the wrong line, and `add_box` now rejects a negative index rather than letting Python's negative indexing invert the box. Added `tests/sequence/test_participant_indexes.py` and implicit-participant cases in `tests/sequence/test_box.py`.
 - Removed leftover module-level debug prints from `shared/puml_encoder.py`.
+- Added `src/plantuml_gui/serve.py`, an alternative entry point that runs the Flask app on an ephemeral port and announces it as `PLANTUML_GUI_PORT=<n>` on stdout, with optional `PLANTUML_GUI_TOKEN` auth, permissive CORS, and a `PLANTUML_GUI_JAR_OVERRIDE` applied after `render.py`'s `load_dotenv`. Unlike `python -m plantuml_gui` (fixed port 5000, reloader), it is safe to run as a managed child process. Covered by `tests/shared/test_serve.py`.
 
 ## [0.31] - 2026-07-22
 
