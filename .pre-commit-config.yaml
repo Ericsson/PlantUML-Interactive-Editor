@@ -3,8 +3,18 @@ repos:
     rev: v2.3.0
     hooks:
     -   id: check-yaml
+    # plantuml-extension/media/{app,menus,vendor} is generated, never
+    # hand-edited: scripts/sync_assets.py mirrors the web app's frontend there,
+    # renders the menu partials through Jinja, and copies vendored libraries out
+    # of node_modules. Whitespace hooks must not touch it. Beyond being
+    # pointless on minified third-party files, a "fix" here would make the
+    # committed bytes differ from what the script produces, so
+    # `npm run sync-assets:check` would report the mirror stale on every CI run
+    # from then on. The hand-written shims directly in media/ stay covered.
     -   id: end-of-file-fixer
+        exclude: ^plantuml-extension/media/(app|menus|vendor)/
     -   id: trailing-whitespace
+        exclude: ^plantuml-extension/media/(app|menus|vendor)/
 - repo: https://github.com/astral-sh/ruff-pre-commit
   rev: v0.4.8
   hooks:
