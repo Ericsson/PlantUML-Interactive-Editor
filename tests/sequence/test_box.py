@@ -199,6 +199,47 @@ BOB_INDEX = 2
 CAROL_INDEX = 3
 
 
+class TestAddBoxRejectsUndeclaredParticipants:
+    """A participant introduced by a message has no declaration line, so its
+    index is -1. Inserting at -1 silently means "before the last line" in
+    Python, which produced puml with ``end box`` above ``@startuml`` and ``box``
+    just before ``@enduml``.
+    """
+
+    def test_negative_start_index_is_rejected(self):
+        with pytest.raises(ValueError, match="declared on its own line"):
+            add_box(THREE_PARTICIPANT_PUML, "", "none", -1, BOB_INDEX)
+
+    def test_negative_end_index_is_rejected(self):
+        with pytest.raises(ValueError, match="declared on its own line"):
+            add_box(THREE_PARTICIPANT_PUML, "", "none", ALICE_INDEX, -1)
+
+    def test_both_negative_is_rejected(self):
+        with pytest.raises(ValueError, match="declared on its own line"):
+            add_box(THREE_PARTICIPANT_PUML, "", "none", -1, -1)
+
+    def test_puml_is_left_untouched(self):
+        # The reported symptom, stated as an invariant: a rejected call must not
+        # emit puml at all, let alone inverted puml.
+        with pytest.raises(ValueError):
+            add_box(THREE_PARTICIPANT_PUML, "", "none", -1, -1)
+
+    def test_route_reports_the_error(self, client):
+        response = client.post(
+            "/addBox",
+            data=json.dumps(
+                {
+                    "plantuml": THREE_PARTICIPANT_PUML,
+                    "startParticipantIndex": -1,
+                    "endParticipantIndex": -1,
+                }
+            ),
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+        assert "declared on its own line" in json.loads(response.data)["error"]
+
+
 class TestAddBox:
     def test_wraps_single_participant(self):
         result = add_box(THREE_PARTICIPANT_PUML, "My Box", "none", BOB_INDEX, BOB_INDEX)

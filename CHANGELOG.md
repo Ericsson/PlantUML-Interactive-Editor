@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### External
+
+- Fixed adding a participant box around an implicitly-declared participant (one introduced by a message, with no `participant` line): it previously produced broken PlantUML with `end box` above `@startuml` and `box` before `@enduml`. The box gesture now reports a clear message asking you to declare the participant on its own line first.
+
+### Internal
+
+- Rewrote `Diagram._assign_participant_indexes` (`sequence/classes.py`) to map each participant to its declaration line by displayed name (quoted or bare, via the new `PARTICIPANT_DECLARATION_RE`/`_declared_participant_name`) rather than by position. Implicitly-introduced participants correctly keep index `-1` ("no declaration line") instead of shifting every later participant onto the wrong line, and `add_box` now rejects a negative index rather than letting Python's negative indexing invert the box. Added `tests/sequence/test_participant_indexes.py` and implicit-participant cases in `tests/sequence/test_box.py`.
+- Removed leftover module-level debug prints from `shared/puml_encoder.py`.
+
 ## [0.31] - 2026-07-22
 
 ### External

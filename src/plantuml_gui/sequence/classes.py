@@ -49,6 +49,24 @@ ARROW_RE = re.compile(
     r"|[-\\/]+(?:\[#[^\]]*\])?[-\\/]*(?:>{1,2}|[xo])"  # ends with a head
 )
 
+# A participant declaration, capturing the name PlantUML renders in the SVG:
+# the quoted text when present (``participant "Long name" as A``), otherwise the
+# bare token (``participant Alice``). Trailing modifiers such as ``as A``,
+# ``order 10`` or a ``#color`` are left unmatched on purpose -- only the
+# displayed name is needed, because that is what the SVG gives us to match on.
+PARTICIPANT_DECLARATION_RE = re.compile(
+    r'^participant\s+(?:"(?P<quoted>[^"]*)"|(?P<bare>[^\s#]+))'
+)
+
+
+def _declared_participant_name(line: str) -> str | None:
+    """The displayed name a participant declaration introduces, if it is one."""
+    match = PARTICIPANT_DECLARATION_RE.match(line.strip())
+    if match is None:
+        return None
+    quoted = match.group("quoted")
+    return quoted if quoted is not None else match.group("bare")
+
 
 def is_message_line(line: str) -> bool:
     """Return True if a puml line is a message (``sender <arrow> receiver: text``).
@@ -280,16 +298,36 @@ class Diagram:
         self._assign_participant_indexes(puml)
 
     def _assign_participant_indexes(self, puml: str):
-        """Assign indexes in the puml code to corresponding participant"""
-        lines = puml.splitlines()
+        """Attach each participant to the puml line that declares it.
 
-        participant_lines = [
-            i for i, line in enumerate(lines) if line.startswith("participant")
+        Matched by name, not by position. A participant can be introduced
+        implicitly by a message (``Alice -> Bob: hi``) and then has no
+        declaration line at all, so zipping the declaration lines against the
+        diagram-ordered participants shifts every later participant onto some
+        other participant's line and leaves the trailing ones at -1. Callers
+        treat -1 as "not found", and add_box used to insert at it directly --
+        Python's negative indexing then wrote ``end box`` to the top of the
+        file and ``box`` before the last line.
+
+        Participants with no declaration keep index -1, which is accurate:
+        there is no line to point at. Callers that need a real line must say so
+        (see add_box).
+        """
+        declarations = [
+            (line_index, name)
+            for line_index, line in enumerate(puml.splitlines())
+            if (name := _declared_participant_name(line)) is not None
         ]
 
-        for i, line_index in enumerate(participant_lines):
-            if i < len(self.participants):
-                self.participants[i].index = line_index
+        # Consume each declaration at most once, so repeated display names map
+        # to distinct lines in diagram order rather than all to the first.
+        claimed: set[int] = set()
+        for participant in self.participants:
+            for position, (line_index, declared_name) in enumerate(declarations):
+                if position not in claimed and declared_name == participant.name:
+                    participant.index = line_index
+                    claimed.add(position)
+                    break
 
     def _parse_messages(self, svg, puml):
         """Parse messages from svg"""

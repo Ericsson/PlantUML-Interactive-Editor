@@ -140,7 +140,18 @@ def add_box(puml: str, title: str, color: str, start_index: int, end_index: int)
     If the range nests with an existing box, ``!pragma teoz true`` is added
     (once) so PlantUML renders nested boxes. A range that crosses an existing
     box (partial overlap) raises ``ValueError``.
+
+    A negative index means the participant has no declaration line (it was
+    introduced implicitly by a message) and raises ``ValueError``. Without this
+    check, ``lines.insert`` interprets -1 as "before the last line" and the box
+    lands inside out, with ``end box`` above ``@startuml``.
     """
+    if start_index < 0 or end_index < 0:
+        raise ValueError(
+            "A participant can only be put in a box if it is declared on its "
+            'own line. Add a "participant" line for it first.'
+        )
+
     start = min(start_index, end_index)
     end = max(start_index, end_index)
 
