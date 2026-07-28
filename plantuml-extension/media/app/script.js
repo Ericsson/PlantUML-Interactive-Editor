@@ -253,6 +253,8 @@ rnote over Alice, Bob: An "R Note" can span participants
 
 function buttonEventListeners() {
 
+    document.getElementById('version').addEventListener('click', toggleVersionPanel);
+
     document.getElementById('demo').addEventListener('click', function() {
     setDemo()
     });
