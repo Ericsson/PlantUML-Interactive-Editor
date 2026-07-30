@@ -111,6 +111,12 @@ function renderPlantUmlToSvg(plantUmlSource) {
 
 		let child;
 		try {
+			// Launch PlantUML via Java:
+			//   -DPLANTUML_LIMIT_SIZE=16384  raise PlantUML's internal max image size
+			//   -jar jarPath                 the plantuml.jar resolved above
+			//   -pipe                        read source from stdin, write result to stdout
+			//                                 (no temp files touched on disk)
+			//   -tsvg                        render output as SVG
 			child = spawn('java', [
 				'-DPLANTUML_LIMIT_SIZE=16384',
 				'-jar',
@@ -119,6 +125,9 @@ function renderPlantUmlToSvg(plantUmlSource) {
 				'-tsvg'
 			]);
 		} catch (err) {
+			// Synchronous throw from spawn() itself (rare - e.g. invalid
+			// arguments). Async failures like "java not found" surface via
+			// the 'error' event below instead.
 			reject(
 				new PlantUmlConfigError(
 					`Failed to launch Java to run PlantUML: ${err.message}. Ensure Java is ` +
@@ -128,9 +137,15 @@ function renderPlantUmlToSvg(plantUmlSource) {
 			return;
 		}
 
+		// Buffer raw output chunks instead of building strings incrementally,
+		// since the SVG/error text is only meaningful once the process has
+		// fully finished (see the 'close' handler below).
 		const stdoutChunks = [];
 		const stderrChunks = [];
 
+		// Fires if the process could not be spawned/run at all (e.g. the
+		// `java` binary is missing from PATH). Distinct from a non-zero
+		// exit code, which means Java *did* run but PlantUML itself failed.
 		child.on('error', (err) => {
 			reject(
 				new PlantUmlConfigError(
@@ -140,13 +155,21 @@ function renderPlantUmlToSvg(plantUmlSource) {
 			);
 		});
 
+		// Accumulate stdout (the rendered SVG) and stderr (any PlantUML
+		// error/warning text) as they arrive.
 		child.stdout.on('data', (chunk) => stdoutChunks.push(chunk));
 		child.stderr.on('data', (chunk) => stderrChunks.push(chunk));
 
+		// 'close' fires once the process has exited AND all of its stdio
+		// streams have been fully drained - unlike 'exit', which can fire
+		// before the last 'data' events arrive. Using 'close' guarantees
+		// stdoutChunks/stderrChunks are complete before we read them.
 		child.on('close', (code) => {
 			const stdout = Buffer.concat(stdoutChunks).toString('utf-8');
 			const stderr = Buffer.concat(stderrChunks).toString('utf-8');
 
+			// Non-zero exit code: PlantUML ran but reported failure
+			// (e.g. syntax error in the source). Surface stderr if present.
 			if (code !== 0) {
 				reject(
 					new PlantUmlRenderError(
@@ -156,6 +179,8 @@ function renderPlantUmlToSvg(plantUmlSource) {
 				return;
 			}
 
+			// Exit code 0 but nothing on stdout: treat as a failure too,
+			// since a successful render should always produce SVG markup.
 			if (!stdout || !stdout.trim()) {
 				reject(
 					new PlantUmlRenderError(
@@ -165,6 +190,7 @@ function renderPlantUmlToSvg(plantUmlSource) {
 				return;
 			}
 
+			// Success: stdout contains the rendered SVG markup.
 			resolve(stdout);
 		});
 
@@ -172,6 +198,9 @@ function renderPlantUmlToSvg(plantUmlSource) {
 			// Ignore EPIPE-style write errors; a non-zero exit or empty
 			// stdout is handled above and surfaces a clearer message.
 		});
+
+		// Feed the PlantUML source in on stdin, then close it so the
+		// process knows input is complete and can start/finish rendering.
 		child.stdin.write(plantUmlSource, 'utf-8');
 		child.stdin.end();
 	});
