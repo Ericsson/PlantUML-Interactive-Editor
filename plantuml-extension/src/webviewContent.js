@@ -22,18 +22,36 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-const assert = require('assert');
+// Minimal webview content for the PlantUML diagram panel.
+//
+// The webview holds only a diagram container and just enough script to
+// receive `{ type: "updateDiagram", svg }` and `{ type: "renderError", message }`
+// messages posted from the extension via panel.webview.postMessage(...).
+// It intentionally contains no PlantUML source, no code editor, and no
+// Ace Editor - the VS Code text editor remains the only source editor.
+//
+// The markup itself lives in webviewContent.html (a plain, global static
+// file) so it can be edited/previewed as regular HTML rather than a JS
+// template string. This module just reads it from disk and caches it.
 
-// You can import and use all API from the 'vscode' module
-// as well as import your extension to test it
-const vscode = require('vscode');
-// const myExtension = require('../extension');
+const fs = require('fs');
+const path = require('path');
 
-suite('Extension Test Suite', () => {
-	vscode.window.showInformationMessage('Start all tests.');
+const HTML_PATH = path.join(__dirname, 'webviewContent.html');
 
-	test('Sample test', () => {
-		assert.strictEqual(-1, [1, 2, 3].indexOf(5));
-		assert.strictEqual(-1, [1, 2, 3].indexOf(0));
-	});
-});
+/** Cached file contents, populated on first call to getWebviewContent(). */
+let cachedHtml;
+
+/**
+ * @returns {string} the static HTML document loaded into the webview.
+ */
+function getWebviewContent() {
+	if (cachedHtml === undefined) {
+		cachedHtml = fs.readFileSync(HTML_PATH, 'utf-8');
+	}
+	return cachedHtml;
+}
+
+module.exports = {
+	getWebviewContent
+};

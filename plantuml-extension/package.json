@@ -17,7 +17,17 @@
         "command": "plantuml-interactive-editor.openDiagram",
         "title": "PlantUML: Open Interactive Diagram"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "PlantUML Interactive Editor",
+      "properties": {
+        "plantumlInteractive.plantumlJar": {
+          "type": "string",
+          "default": "/app/vbuild/tools/plantuml/1.2022.5/lib/plantuml.1.2022.5.jar",
+          "description": "Absolute path to plantuml.jar, used to render diagrams. Defaults to a shared install path that is only usable on networks where it's provisioned. If you don't have access to that path, either set this to your own plantuml.jar location, or clear this setting (set it to an empty string) to use the PLANTUML_JAR environment variable instead."
+        }
+      }
+    }
   },
   "scripts": {
     "lint": "eslint .",
