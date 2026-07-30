@@ -8,14 +8,14 @@
 // variable (loaded from a .env file via python-dotenv), which is specific
 // to the Flask app's process and not reusable from a VS Code extension.
 // Here the jar path instead comes from the `plantumlInteractive.plantumlJar`
-// VS Code setting (falling back to a PLANTUML_JAR environment variable, and
-// then to a known shared install path, for convenience), keeping the same
-// underlying rendering mechanism.
+// VS Code setting (falling back to a PLANTUML_JAR environment variable for
+// convenience), keeping the same underlying rendering mechanism. The
+// setting's own default value is a known shared install path, used
+// out-of-the-box on networks where it's provisioned.
 
 const { spawn } = require('child_process');
 const fs = require('fs');
 const vscode = require('vscode');
-const { getLogger } = require('./logger');
 
 /** Thrown when PlantUML cannot be invoked or configured correctly. */
 class PlantUmlConfigError extends Error {}
@@ -36,10 +36,17 @@ const SHARED_DEFAULT_JAR_PATH =
  *
  * Looks up the `plantumlInteractive.plantumlJar` setting first, falling
  * back to the PLANTUML_JAR environment variable (the same variable name
- * used by the existing Flask app) for convenience, and finally to a known
- * shared install path if that path exists on disk. Throws
- * PlantUmlConfigError with an actionable message if nothing is configured
- * or the configured path does not exist on disk.
+ * used by the existing Flask app) for convenience. The setting's own
+ * schema default is the known shared install path, so most users get a
+ * working jar path out of the box without configuring anything. Because
+ * that value comes from the schema rather than something the user typed,
+ * it does not take precedence over the environment variable, and if it
+ * doesn't exist on disk (e.g. outside the network where it's provisioned)
+ * it's treated the same as nothing being configured, rather than
+ * surfacing a "jar not found" error for a path the user never chose.
+ * Throws PlantUmlConfigError with an actionable message if nothing is
+ * configured (or only the unusable shared default is in effect) or the
+ * configured path does not exist on disk.
  *
  * @returns {string} Absolute path to plantuml.jar
  */
@@ -48,15 +55,21 @@ function resolvePlantUmlJarPath() {
 		.getConfiguration('plantumlInteractive')
 		.get('plantumlJar');
 
-	let jarPath = configured || process.env.PLANTUML_JAR;
+	// `configured` is the schema default (the shared path) whenever the
+	// user hasn't set the setting themselves, so it must not out-rank the
+	// environment variable the way an explicit user setting would.
+	const isSchemaDefault = configured === SHARED_DEFAULT_JAR_PATH;
 
-	if (!jarPath && fs.existsSync(SHARED_DEFAULT_JAR_PATH)) {
-		getLogger().debug(
-			`Using shared default PlantUML jar at "${SHARED_DEFAULT_JAR_PATH}" ` +
-				'("plantumlInteractive.plantumlJar" setting and PLANTUML_JAR ' +
-				'environment variable are both unset).'
-		);
-		jarPath = SHARED_DEFAULT_JAR_PATH;
+	let jarPath = (!isSchemaDefault && configured) || process.env.PLANTUML_JAR;
+
+	if (!jarPath && isSchemaDefault) {
+		if (fs.existsSync(SHARED_DEFAULT_JAR_PATH)) {
+			jarPath = SHARED_DEFAULT_JAR_PATH;
+		}
+		// If it doesn't exist here, leave jarPath unset so we fall through
+		// to the "not configured" error below instead of a "not found"
+		// error that would be confusing on machines outside the network
+		// where this path is provisioned.
 	}
 
 	if (!jarPath) {

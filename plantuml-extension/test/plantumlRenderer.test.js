@@ -91,4 +91,15 @@ suite('resolvePlantUmlJarPath', () => {
 			await restore();
 		}
 	});
+
+	test('shared default path is used when the setting is explicitly set to that same path and it exists', async () => {
+		fs.existsSync = (p) => p === SHARED_DEFAULT_JAR_PATH;
+
+		const restore = await setJarSetting(SHARED_DEFAULT_JAR_PATH);
+		try {
+			assert.strictEqual(resolvePlantUmlJarPath(), SHARED_DEFAULT_JAR_PATH);
+		} finally {
+			await restore();
+		}
+	});
 });

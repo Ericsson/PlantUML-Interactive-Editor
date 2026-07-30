@@ -23,8 +23,8 @@
       "properties": {
         "plantumlInteractive.plantumlJar": {
           "type": "string",
-          "default": "",
-          "description": "Absolute path to plantuml.jar, used to render diagrams. Falls back to the PLANTUML_JAR environment variable, and then to a known shared install path (if present on disk), if not set."
+          "default": "/app/vbuild/tools/plantuml/1.2022.5/lib/plantuml.1.2022.5.jar",
+          "description": "Absolute path to plantuml.jar, used to render diagrams. Defaults to a shared install path that is only usable on networks where it's provisioned; if that path doesn't exist on your machine, set this to your own plantuml.jar location (or use the PLANTUML_JAR environment variable instead)."
         }
       }
     }
