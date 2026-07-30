@@ -8,12 +8,14 @@
 // variable (loaded from a .env file via python-dotenv), which is specific
 // to the Flask app's process and not reusable from a VS Code extension.
 // Here the jar path instead comes from the `plantumlInteractive.plantumlJar`
-// VS Code setting (falling back to a PLANTUML_JAR environment variable for
-// convenience), keeping the same underlying rendering mechanism.
+// VS Code setting (falling back to a PLANTUML_JAR environment variable, and
+// then to a known shared install path, for convenience), keeping the same
+// underlying rendering mechanism.
 
 const { spawn } = require('child_process');
 const fs = require('fs');
 const vscode = require('vscode');
+const { getLogger } = require('./logger');
 
 /** Thrown when PlantUML cannot be invoked or configured correctly. */
 class PlantUmlConfigError extends Error {}
@@ -21,12 +23,21 @@ class PlantUmlConfigError extends Error {}
 /** Thrown when PlantUML runs but reports a failure (non-zero exit / stderr). */
 class PlantUmlRenderError extends Error {}
 
+// Known shared install path for plantuml.jar. Used as a last-resort default
+// when neither the setting nor the environment variable is configured, so
+// users on networks where this path is provisioned get a working jar path
+// out of the box. Only used if it actually exists on disk, since this
+// extension may also run in environments without it.
+const SHARED_DEFAULT_JAR_PATH =
+	'/app/vbuild/tools/plantuml/1.2022.5/lib/plantuml.1.2022.5.jar';
+
 /**
  * Resolve the configured path to plantuml.jar.
  *
  * Looks up the `plantumlInteractive.plantumlJar` setting first, falling
  * back to the PLANTUML_JAR environment variable (the same variable name
- * used by the existing Flask app) for convenience. Throws
+ * used by the existing Flask app) for convenience, and finally to a known
+ * shared install path if that path exists on disk. Throws
  * PlantUmlConfigError with an actionable message if nothing is configured
  * or the configured path does not exist on disk.
  *
@@ -37,7 +48,16 @@ function resolvePlantUmlJarPath() {
 		.getConfiguration('plantumlInteractive')
 		.get('plantumlJar');
 
-	const jarPath = configured || process.env.PLANTUML_JAR;
+	let jarPath = configured || process.env.PLANTUML_JAR;
+
+	if (!jarPath && fs.existsSync(SHARED_DEFAULT_JAR_PATH)) {
+		getLogger().debug(
+			`Using shared default PlantUML jar at "${SHARED_DEFAULT_JAR_PATH}" ` +
+				'("plantumlInteractive.plantumlJar" setting and PLANTUML_JAR ' +
+				'environment variable are both unset).'
+		);
+		jarPath = SHARED_DEFAULT_JAR_PATH;
+	}
 
 	if (!jarPath) {
 		throw new PlantUmlConfigError(
@@ -148,5 +168,6 @@ module.exports = {
 	renderPlantUmlToSvg,
 	resolvePlantUmlJarPath,
 	PlantUmlConfigError,
-	PlantUmlRenderError
+	PlantUmlRenderError,
+	SHARED_DEFAULT_JAR_PATH
 };

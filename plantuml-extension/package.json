@@ -24,7 +24,7 @@
         "plantumlInteractive.plantumlJar": {
           "type": "string",
           "default": "",
-          "description": "Absolute path to plantuml.jar, used to render diagrams. Falls back to the PLANTUML_JAR environment variable if not set."
+          "description": "Absolute path to plantuml.jar, used to render diagrams. Falls back to the PLANTUML_JAR environment variable, and then to a known shared install path (if present on disk), if not set."
         }
       }
     }
