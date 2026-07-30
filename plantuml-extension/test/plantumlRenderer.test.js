@@ -26,14 +26,11 @@ const assert = require('assert');
 const fs = require('fs');
 const vscode = require('vscode');
 
-const {
-	resolvePlantUmlJarPath,
-	PlantUmlConfigError,
-	SHARED_DEFAULT_JAR_PATH
-} = require('../src/plantumlRenderer');
+const { resolvePlantUmlJarPath, PlantUmlConfigError } = require('../src/plantumlRenderer');
 
 const CONFIG_SECTION = 'plantumlInteractive';
 const CONFIG_KEY = 'plantumlJar';
+const SHARED_DEFAULT_JAR_PATH = '/app/vbuild/tools/plantuml/1.2022.5/lib/plantuml.1.2022.5.jar';
 
 /**
  * Set the plantumlInteractive.plantumlJar setting for the duration of a
@@ -69,9 +66,10 @@ suite('resolvePlantUmlJarPath', () => {
 		}
 	});
 
-	test('setting takes precedence over the shared default path', async () => {
+	test('an explicitly configured setting takes precedence over the env var', async () => {
 		const settingPath = '/configured/plantuml.jar';
-		fs.existsSync = (p) => p === settingPath || p === SHARED_DEFAULT_JAR_PATH;
+		fs.existsSync = (p) => p === settingPath;
+		process.env.PLANTUML_JAR = '/env/plantuml.jar';
 
 		const restore = await setJarSetting(settingPath);
 		try {
@@ -81,12 +79,12 @@ suite('resolvePlantUmlJarPath', () => {
 		}
 	});
 
-	test('env var takes precedence over the shared default path', async () => {
+	test('env var is used when the setting is explicitly cleared', async () => {
 		const envPath = '/env/plantuml.jar';
-		fs.existsSync = (p) => p === envPath || p === SHARED_DEFAULT_JAR_PATH;
+		fs.existsSync = (p) => p === envPath;
 		process.env.PLANTUML_JAR = envPath;
 
-		const restore = await setJarSetting(undefined);
+		const restore = await setJarSetting('');
 		try {
 			assert.strictEqual(resolvePlantUmlJarPath(), envPath);
 		} finally {
@@ -94,7 +92,7 @@ suite('resolvePlantUmlJarPath', () => {
 		}
 	});
 
-	test('shared default path is used when nothing else is configured and it exists', async () => {
+	test("the setting's default value (the shared install path) is used when nothing is overridden and it exists", async () => {
 		fs.existsSync = (p) => p === SHARED_DEFAULT_JAR_PATH;
 
 		const restore = await setJarSetting(undefined);
@@ -105,7 +103,7 @@ suite('resolvePlantUmlJarPath', () => {
 		}
 	});
 
-	test('throws when nothing is configured and the shared default path does not exist', async () => {
+	test('throws when the default shared install path does not exist and nothing else is configured', async () => {
 		fs.existsSync = () => false;
 
 		const restore = await setJarSetting(undefined);
@@ -116,12 +114,13 @@ suite('resolvePlantUmlJarPath', () => {
 		}
 	});
 
-	test('shared default path is used when the setting is explicitly set to that same path and it exists', async () => {
-		fs.existsSync = (p) => p === SHARED_DEFAULT_JAR_PATH;
+	test('throws when the setting is cleared, no env var is set, and nothing exists', async () => {
+		fs.existsSync = () => false;
+		delete process.env.PLANTUML_JAR;
 
-		const restore = await setJarSetting(SHARED_DEFAULT_JAR_PATH);
+		const restore = await setJarSetting('');
 		try {
-			assert.strictEqual(resolvePlantUmlJarPath(), SHARED_DEFAULT_JAR_PATH);
+			assert.throws(() => resolvePlantUmlJarPath(), PlantUmlConfigError);
 		} finally {
 			await restore();
 		}
