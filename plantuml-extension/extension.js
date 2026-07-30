@@ -1,130 +1,105 @@
-// SPDX-License-Identifier: MIT
-
-// MIT License
-
-// Copyright (c) 2026 Ericsson
-
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
-
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
-// VS Code extension lifecycle, commands, document listeners, and webview
-// communication. PlantUML -> SVG rendering itself lives in
-// src/plantumlRenderer.js; webview markup lives in src/webviewContent.js.
+// The module 'vscode' contains the VS Code extensibility API
+// Import the module and reference it with the alias vscode in your code below
 const vscode = require('vscode');
-const {
-	renderPlantUmlToSvg,
-	PlantUmlConfigError,
-	PlantUmlRenderError
-} = require('./src/plantumlRenderer');
-const { getWebviewContent } = require('./src/webviewContent');
-
-const LIVE_UPDATE_DEBOUNCE_MS = 300;
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
+
+/**
+ * @param {vscode.ExtensionContext} context
+ */
 function activate(context) {
+
 	const disposable = vscode.commands.registerCommand(
 		'plantuml-interactive-editor.openDiagram',
-		() => openDiagramPanel()
+		() => {
+
+			// Get the currently active VS Code editor
+			const editor = vscode.window.activeTextEditor;
+
+			if (!editor) {
+				vscode.window.showErrorMessage(
+					'Open a PlantUML file first.'
+				);
+				return;
+			}
+
+			const document = editor.document;
+
+			// Get PlantUML source from VS Code itself
+			const plantUmlCode = document.getText();
+
+			// Open ONLY the diagram beside the normal VS Code editor
+			const panel = vscode.window.createWebviewPanel(
+				'plantumlInteractiveDiagram',
+				'PlantUML Interactive Diagram',
+				vscode.ViewColumn.Beside,
+				{
+					enableScripts: true
+				}
+			);
+
+			panel.webview.html = getWebviewContent(
+				plantUmlCode
+			);
+		}
 	);
 
 	context.subscriptions.push(disposable);
 }
 
-/**
- * Open (or focus) the diagram webview panel for the active editor's
- * document, render its current content, and keep the diagram in sync as
- * the document changes.
- */
-function openDiagramPanel() {
-	const editor = vscode.window.activeTextEditor;
 
-	if (!editor) {
-		vscode.window.showErrorMessage('Open a PlantUML file first.');
-		return;
-	}
+function getWebviewContent(plantUmlCode) {
 
-	const document = editor.document;
+	return `
+		<!DOCTYPE html>
 
-	const panel = vscode.window.createWebviewPanel(
-		'plantumlInteractiveDiagram',
-		'PlantUML Interactive Diagram',
-		vscode.ViewColumn.Beside,
-		{
-			enableScripts: true
-		}
-	);
+		<html lang="en">
 
-	panel.webview.html = getWebviewContent();
+		<head>
+			<meta charset="UTF-8">
 
-	let debounceTimer;
+			<meta
+				name="viewport"
+				content="width=device-width, initial-scale=1.0"
+			>
 
-	const renderAndPost = () => {
-		renderPlantUmlToSvg(document.getText()).then(
-			(svg) => {
-				panel.webview.postMessage({ type: 'updateDiagram', svg });
-			},
-			(err) => {
-				panel.webview.postMessage({
-					type: 'renderError',
-					message: describeRenderError(err)
-				});
-				if (err instanceof PlantUmlConfigError) {
-					// Configuration problems are actionable and easy to miss
-					// inside the webview, so also surface them as a
-					// notification rather than failing silently.
-					vscode.window.showErrorMessage(err.message);
-				}
-			}
-		);
-	};
+			<title>PlantUML Interactive Diagram</title>
+		</head>
 
-	// Initial render of the document as it is when the panel opens.
-	renderAndPost();
+		<body>
 
-	const changeListener = vscode.workspace.onDidChangeTextDocument((event) => {
-		if (event.document !== document) {
-			return;
-		}
+			<h2>Interactive Diagram</h2>
 
-		clearTimeout(debounceTimer);
-		debounceTimer = setTimeout(renderAndPost, LIVE_UPDATE_DEBOUNCE_MS);
-	});
+			<div id="diagram">
+				Diagram will go here.
+			</div>
 
-	panel.onDidDispose(() => {
-		clearTimeout(debounceTimer);
-		changeListener.dispose();
-	});
+			<!-- Temporary: proves that we received
+				 code from the VS Code editor -->
+
+			<pre>
+${escapeHtml(plantUmlCode)}
+			</pre>
+
+		</body>
+
+		</html>
+	`;
 }
 
-/**
- * @param {Error} err
- * @returns {string} a user-facing message for a rendering failure.
- */
-function describeRenderError(err) {
-	if (err instanceof PlantUmlConfigError || err instanceof PlantUmlRenderError) {
-		return err.message;
-	}
-	return `Unexpected error rendering PlantUML diagram: ${err.message}`;
+
+function escapeHtml(text) {
+	return text
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;');
 }
+
 
 // This method is called when your extension is deactivated
 function deactivate() {}
+
 
 module.exports = {
 	activate,
