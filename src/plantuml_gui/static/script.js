@@ -51,7 +51,7 @@ async function initeditor() {
     ace.config.setModuleUrl(
         "ace/mode/plantuml",
         "/static/mode-plantuml.js" // Adjust to the correct path where your file is hosted
-      );
+    );
     editor.session.setMode("ace/mode/plantuml")
     editor.session.setOption("useWorker", false); // disables syntax validation
     hash = getHashParameter();
@@ -211,7 +211,7 @@ note by using the menu!
 end note
 stop
 @enduml`;
-        setPuml(puml)
+    setPuml(puml)
 }
 
 function setSequence() {
@@ -248,7 +248,7 @@ Alice -> Alice: Self-messages are supported too!
 hnote over Bob #LightGreen: This is an "H Note"
 rnote over Alice, Bob: An "R Note" can span participants
 @enduml`;
-        setPuml(puml)
+    setPuml(puml)
 }
 
 function buttonEventListeners() {
@@ -256,7 +256,7 @@ function buttonEventListeners() {
     document.getElementById('version').addEventListener('click', toggleVersionPanel);
 
     document.getElementById('demo').addEventListener('click', function() {
-    setDemo()
+        setDemo()
     });
 
     document.getElementById('clear').addEventListener('click', function() {
@@ -266,7 +266,7 @@ function buttonEventListeners() {
 
     document.getElementById('sequence').addEventListener('click', function() {
         setSequence()
-        });
+    });
 
     document.getElementById('undo').addEventListener('click', function() {
         undoeditor();
@@ -300,12 +300,12 @@ function buttonEventListeners() {
                 // File System Access API: opens a native "Save As" dialog
                 const handle = await window.showSaveFilePicker({
                     suggestedName: "untitled.puml",
-                    types: [
-                        {
-                            description: "PlantUML Files",
-                            accept: { "text/plain": [".puml", ".txt"] },
+                    types: [{
+                        description: "PlantUML Files",
+                        accept: {
+                            "text/plain": [".puml", ".txt"]
                         },
-                    ],
+                    }, ],
                 });
                 const writable = await handle.createWritable();
                 await writable.write(content);
@@ -317,7 +317,9 @@ function buttonEventListeners() {
             }
         } else {
             // Fallback: create a temporary download link and click it
-            const blob = new Blob([content], { type: "text/plain" });
+            const blob = new Blob([content], {
+                type: "text/plain"
+            });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
@@ -330,16 +332,16 @@ function buttonEventListeners() {
     });
 
     function download(filename, text) {
-    //   var element = document.createElement('a');
-    //   element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
-    //   element.setAttribute('download', filename);
+        //   var element = document.createElement('a');
+        //   element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+        //   element.setAttribute('download', filename);
 
-    //   element.style.display = 'none';
-    //   document.body.appendChild(element);
+        //   element.style.display = 'none';
+        //   document.body.appendChild(element);
 
-    //   element.click();
+        //   element.click();
 
-    //   document.body.removeChild(element);
+        //   document.body.removeChild(element);
     }
 
     document.getElementById('addTitleButton').addEventListener('click', async () => {
@@ -366,8 +368,12 @@ function buttonEventListeners() {
             const plantuml = trimlines(editor.session.getValue());
             const response = await fetch("/renderPNG", {
                 method: "POST",
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 'plantuml': plantuml })
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    'plantuml': plantuml
+                })
             });
 
             const blob = await response.blob();
@@ -810,9 +816,10 @@ function checkDiagramType(puml) {
     const sequenceKeywords = ["state", "actor", "boundary", "control", "entity", "database", "collections", "queue", "participant"];
 
     // Configurable ignored block definitions
-    const ignoreBlocks = [
-        { start: /^note\b/, end: /^end\s*note\b/ },
-    ];
+    const ignoreBlocks = [{
+        start: /^note\b/,
+        end: /^end\s*note\b/
+    }, ];
 
     const lines = puml.split('\n');
     const filteredLines = [];
