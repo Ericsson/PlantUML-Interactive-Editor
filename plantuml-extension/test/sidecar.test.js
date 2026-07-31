@@ -1,3 +1,27 @@
+// SPDX-License-Identifier: MIT
+
+// MIT License
+
+// Copyright (c) 2026 Ericsson
+
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 const assert = require('assert');
 const { EventEmitter } = require('events');
 const { PassThrough } = require('stream');
@@ -7,6 +31,7 @@ const {
 	describeStartFailure,
 	readPortLine,
 	resolvePythonPath,
+	SidecarStartError,
 	PORT_LINE_PREFIX
 } = require('../src/sidecar');
 
@@ -65,17 +90,23 @@ suite('sidecar: interpreter resolution', () => {
 		assert.strictEqual(await resolvePythonPath(), '/custom/python');
 	});
 
-	test('falls back to a platform-appropriate command', async () => {
+	test('throws instead of guessing when nothing is configured', async () => {
 		delete process.env.PLANTUML_GUI_PYTHON;
 
-		const resolved = await resolvePythonPath();
+		// The backend is a Python package no machine has by default, so an
+		// interpreter found by searching almost certainly cannot import
+		// plantuml_gui. Spawning one would blame the wrong thing.
+		await assert.rejects(() => resolvePythonPath(), SidecarStartError);
+	});
 
-		// With no setting, no env var, and (in the test host) no Python
-		// extension or workspace venv, this is the last resort.
-		assert.ok(
-			resolved === 'python' || resolved === 'python3' || require('fs').existsSync(resolved),
-			`unexpected interpreter: ${resolved}`
-		);
+	test('the unconfigured error names both knobs', async () => {
+		delete process.env.PLANTUML_GUI_PYTHON;
+
+		await assert.rejects(() => resolvePythonPath(), (err) => {
+			assert.ok(err.message.includes('plantumlInteractive.pythonPath'), err.message);
+			assert.ok(err.message.includes('PLANTUML_GUI_PYTHON'), err.message);
+			return true;
+		});
 	});
 });
 
