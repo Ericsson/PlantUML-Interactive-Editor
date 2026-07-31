@@ -36,8 +36,8 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "sync-assets": "node scripts/sync-assets.mjs",
-    "sync-assets:check": "node scripts/sync-assets.mjs --check",
+    "sync-assets": "uv run --project .. python scripts/sync_assets.py",
+    "sync-assets:check": "uv run --project .. python scripts/sync_assets.py --check",
     "pretest": "npm run lint",
     "test": "vscode-test"
   },
