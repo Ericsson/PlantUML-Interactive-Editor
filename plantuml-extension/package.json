@@ -4,7 +4,7 @@
   "description": "PlantUML Interactive Editor",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.125.0"
+    "vscode": "^1.113.0"
   },
   "categories": [
     "Other"
