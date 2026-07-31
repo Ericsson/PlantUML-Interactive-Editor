@@ -12,8 +12,6 @@
 
 const { spawn } = require('child_process');
 const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
 const vscode = require('vscode');
 
 // Must match PORT_LINE_PREFIX in src/plantuml_gui/serve.py.
@@ -58,75 +56,21 @@ class Sidecar {
 }
 
 /**
- * Ask the Python extension which interpreter the user has selected.
- *
- * Most people who have a virtualenv have already picked it there, so this
- * spares them configuring the same path twice. The API has changed shape
- * across versions, so every step is defensive: any failure just means we fall
- * through to the next candidate.
- *
- * @returns {Promise<string|undefined>} an interpreter path, if one is selected.
- */
-async function pythonExtensionInterpreter() {
-	try {
-		const extension = vscode.extensions.getExtension('ms-python.python');
-		if (!extension) {
-			return undefined;
-		}
-
-		const api = extension.isActive ? extension.exports : await extension.activate();
-		const environments = api?.environments;
-		if (!environments) {
-			return undefined;
-		}
-
-		const active = environments.getActiveEnvironmentPath?.();
-		if (!active) {
-			return undefined;
-		}
-
-		// `path` may be an env folder rather than the executable, so prefer the
-		// resolved executable when the API can give us one.
-		const resolved = await environments.resolveEnvironment?.(active);
-		const executable = resolved?.executable?.uri?.fsPath;
-
-		return executable || active.path || undefined;
-	} catch {
-		return undefined;
-	}
-}
-
-/**
- * Look for a virtualenv in the open workspace folders.
- *
- * @returns {string|undefined} the venv interpreter, if one exists on disk.
- */
-function workspaceVenvInterpreter() {
-	const relative =
-		process.platform === 'win32'
-			? ['.venv', 'Scripts', 'python.exe']
-			: ['.venv', 'bin', 'python'];
-
-	for (const folder of vscode.workspace.workspaceFolders ?? []) {
-		const candidate = path.join(folder.uri.fsPath, ...relative);
-		if (fs.existsSync(candidate)) {
-			return candidate;
-		}
-	}
-
-	return undefined;
-}
-
-/**
  * Resolve the Python interpreter to run the sidecar with.
  *
- * Tried in order, most explicit first. Requiring the user to hand-configure a
- * path is the main friction in the sidecar design, so the fallbacks matter:
- * note in particular that when the Extension Development Host launches without
- * a folder, workspace-scoped settings are not read at all, and only the
- * environment variable and the last-resort name are available.
+ * Two explicit sources only, most explicit first. Nothing is guessed: the
+ * backend is a Python package that no machine has by default, so an
+ * interpreter found by searching is one that almost certainly cannot import
+ * plantuml_gui, and spawning it would report the failure against the wrong
+ * thing. Failing here names the knob to turn instead.
  *
- * @returns {Promise<string>} an interpreter path or bare command name.
+ * Note that the Extension Development Host launches **without a workspace
+ * folder**, so workspace-scoped settings are not read at all. During
+ * development, PLANTUML_GUI_PYTHON in the `env` block of .vscode/launch.json is
+ * the reliable knob.
+ *
+ * @returns {Promise<string>} an interpreter path.
+ * @throws {SidecarStartError} when no interpreter has been configured
  */
 async function resolvePythonPath() {
 	const configured = vscode.workspace
@@ -136,7 +80,7 @@ async function resolvePythonPath() {
 	// An explicit setting wins even if it is wrong: a clear "could not run X"
 	// beats silently running some other interpreter than the one asked for.
 	if (configured) {
-		return configured;
+		return /** @type {string} */ (configured);
 	}
 
 	// Lets launch.json configure development without a workspace folder,
@@ -145,10 +89,11 @@ async function resolvePythonPath() {
 		return process.env.PLANTUML_GUI_PYTHON;
 	}
 
-	return (
-		(await pythonExtensionInterpreter()) ??
-		workspaceVenvInterpreter() ??
-		(process.platform === 'win32' ? 'python' : 'python3')
+	throw new SidecarStartError(
+		'No Python interpreter is configured for the PlantUML backend. Set ' +
+			'"plantumlInteractive.pythonPath" to an interpreter that has the ' +
+			'plantuml-gui package installed, or set PLANTUML_GUI_PYTHON (during ' +
+			'development, in the "env" block of .vscode/launch.json).'
 	);
 }
 

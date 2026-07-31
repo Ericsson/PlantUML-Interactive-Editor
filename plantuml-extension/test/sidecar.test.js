@@ -7,6 +7,7 @@ const {
 	describeStartFailure,
 	readPortLine,
 	resolvePythonPath,
+	SidecarStartError,
 	PORT_LINE_PREFIX
 } = require('../src/sidecar');
 
@@ -65,17 +66,23 @@ suite('sidecar: interpreter resolution', () => {
 		assert.strictEqual(await resolvePythonPath(), '/custom/python');
 	});
 
-	test('falls back to a platform-appropriate command', async () => {
+	test('throws instead of guessing when nothing is configured', async () => {
 		delete process.env.PLANTUML_GUI_PYTHON;
 
-		const resolved = await resolvePythonPath();
+		// The backend is a Python package no machine has by default, so an
+		// interpreter found by searching almost certainly cannot import
+		// plantuml_gui. Spawning one would blame the wrong thing.
+		await assert.rejects(() => resolvePythonPath(), SidecarStartError);
+	});
 
-		// With no setting, no env var, and (in the test host) no Python
-		// extension or workspace venv, this is the last resort.
-		assert.ok(
-			resolved === 'python' || resolved === 'python3' || require('fs').existsSync(resolved),
-			`unexpected interpreter: ${resolved}`
-		);
+	test('the unconfigured error names both knobs', async () => {
+		delete process.env.PLANTUML_GUI_PYTHON;
+
+		await assert.rejects(() => resolvePythonPath(), (err) => {
+			assert.ok(err.message.includes('plantumlInteractive.pythonPath'), err.message);
+			assert.ok(err.message.includes('PLANTUML_GUI_PYTHON'), err.message);
+			return true;
+		});
 	});
 });
 
