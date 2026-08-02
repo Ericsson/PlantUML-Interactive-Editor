@@ -24,10 +24,12 @@
 
 import io
 import os
+from pathlib import Path
 
 import pytest
 from flask import Flask, jsonify
 from plantuml_gui import serve
+from plantuml_gui.app import app as real_app
 
 
 @pytest.fixture()
@@ -40,6 +42,37 @@ def bare_app():
     def _edit_text():
         return jsonify({"ok": True})
 
+    # A route that is a GET but not an asset, so the static exemption can be
+    # tested for breadth as well as for working at all.
+    @app.route("/changelog")
+    def _changelog():
+        return jsonify({"ok": True})
+
+    return app
+
+
+@pytest.fixture()
+def asset_app(tmp_path):
+    """A throwaway app whose /static serves a real directory.
+
+    The webview loads the frontend's JS and CSS through Flask's built-in static
+    endpoint, so the exemption has to be exercised against that endpoint rather
+    than against a stand-in route with the same path.
+    """
+    (tmp_path / "script.js").write_text("// frontend")
+    # static_url_path is explicit because Flask otherwise derives it from the
+    # folder's basename, which here is a random tmp directory.
+    return Flask(__name__, static_folder=str(tmp_path), static_url_path="/static")
+
+
+@pytest.fixture()
+def menus_app():
+    """A throwaway app with the real template folder, so the partials render
+    for real without registering a route on the shared app (which every other
+    test module imports, and which would reject a second registration)."""
+    templates = Path(real_app.root_path) / "templates"
+    app = Flask(__name__, template_folder=str(templates))
+    serve.install_menus_route(app)
     return app
 
 
@@ -87,6 +120,63 @@ def test_request_with_correct_token_is_allowed(bare_app):
 
     assert response.status_code == 200
     assert response.get_json() == {"ok": True}
+
+
+def test_static_asset_is_served_without_a_token(asset_app):
+    """The webview loads these with <script src> and <link href>, which cannot
+    send a header, so requiring one here would mean no frontend at all."""
+    serve.install_token_auth(asset_app, "s3cret")
+
+    response = asset_app.test_client().get("/static/script.js")
+
+    assert response.status_code == 200
+    assert b"// frontend" in response.data
+
+
+def test_asset_exemption_does_not_cover_other_reads(bare_app):
+    """The exemption is for the frontend's own files, not for GETs in general:
+    /changelog reads the user's repository."""
+    serve.install_token_auth(bare_app, "s3cret")
+
+    assert bare_app.test_client().get("/changelog").status_code == 403
+
+
+def test_asset_exemption_does_not_cover_writes(asset_app):
+    """A POST is how every source-rewriting route is reached, so no method
+    other than GET/HEAD may inherit the exemption."""
+    serve.install_token_auth(asset_app, "s3cret")
+
+    assert asset_app.test_client().post("/static/script.js").status_code == 403
+
+
+def test_menus_route_renders_both_partials(menus_app):
+    """The markup carries ~95 of the DOM ids the frontend dereferences with no
+    null check, so a partial that silently stopped rendering would break every
+    interaction while the diagram still drew fine."""
+    body = menus_app.test_client().get(serve.MENUS_ROUTE).get_data(as_text=True)
+
+    assert 'id="activity-menu"' in body
+    assert 'id="activation-end-menu"' in body
+
+
+def test_menus_route_expands_the_color_select_macro(menus_app):
+    """The reason this is a route and not a file read: sequence_menus.html
+    defines and calls `color_select`, and unrendered markup would leave the
+    literal `{{ color_select(...) }}` in the DOM with no dropdown behind it."""
+    body = menus_app.test_client().get(serve.MENUS_ROUTE).get_data(as_text=True)
+
+    assert '<option value="LightBlue" style="background-color:LightBlue">' in body
+    assert "{{" not in body
+    assert "{%" not in body
+
+
+def test_menus_route_requires_the_token(bare_app):
+    """Unlike /static, this one is fetched by the extension host, which can
+    send the header -- so it keeps the check."""
+    serve.install_menus_route(bare_app)
+    serve.install_token_auth(bare_app, "s3cret")
+
+    assert bare_app.test_client().get(serve.MENUS_ROUTE).status_code == 403
 
 
 def test_cors_preflight_is_allowed_through_token_auth(bare_app):

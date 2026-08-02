@@ -34,13 +34,18 @@ This entry point instead binds an ephemeral port, prints it in a machine-
 readable form for the parent to read, and optionally requires a shared token
 so that other local processes cannot drive edits into the user's files.
 
+It also serves the webview its frontend: the same static JS and CSS the web
+app loads, plus the context menus rendered from the Jinja partials. Serving
+them means the extension needs no copy of the web app's frontend, and so
+cannot run a stale one.
+
 Run with `python -m plantuml_gui.serve`. See docs/vscode_extension_interactivity.md.
 """
 
 import os
 import sys
 
-from flask import jsonify, request
+from flask import jsonify, render_template, request
 from werkzeug.serving import make_server
 
 from .app import app
@@ -62,6 +67,25 @@ CORS_ALLOW_HEADERS = f"Content-Type, {TOKEN_HEADER}"
 # Chromium caps this at 2 hours; asking for more just gets clamped. Without it
 # every single request pays for a preflight round-trip.
 CORS_MAX_AGE = "7200"
+
+# Where the webview fetches the context-menu markup from. Sidecar-only, like
+# /health -- the web app gets the same markup from an {% include %} in
+# index.html.
+MENUS_ROUTE = "/webview/menus"
+
+# The two partials index.html includes, in the order it includes them.
+MENU_PARTIALS = ("partials/activity_menus.html", "partials/sequence_menus.html")
+
+# Requests that only read; see _require_token for why that distinction earns an
+# exemption.
+SAFE_METHODS = frozenset({"GET", "HEAD"})
+
+# Endpoints serving the frontend's own files. `static` is Flask's built-in
+# static endpoint, which is what /static/<path> resolves to here -- the
+# app-level rule is registered before the blueprint's and wins the match.
+# Matched by endpoint rather than by path prefix so that a route mounted under
+# /static later cannot silently inherit the exemption.
+ASSET_ENDPOINTS = frozenset({"static"})
 
 
 def apply_jar_override():
@@ -128,6 +152,18 @@ def install_token_auth(flask_app, token):
         if request.method == "OPTIONS":
             return None
 
+        # The webview loads the frontend's JS and CSS from here with <script
+        # src> and <link href>, and neither can carry a header -- so an
+        # authenticated static file is only possible by putting the secret in a
+        # query string, where it would land in werkzeug's request log. Exempt
+        # them instead. It gives away nothing: these are non-secret, read-only
+        # files that any process able to reach loopback can already read off
+        # disk. Every route that rewrites the user's source is a POST and stays
+        # checked, and so does MENUS_ROUTE, which the extension host fetches
+        # and can therefore send the header for.
+        if request.method in SAFE_METHODS and request.endpoint in ASSET_ENDPOINTS:
+            return None
+
         if request.headers.get(TOKEN_HEADER) != token:
             return jsonify({"error": "invalid or missing token"}), 403
         return None
@@ -181,10 +217,31 @@ def install_health_route(flask_app):
         return jsonify({"status": "ok"})
 
 
+def install_menus_route(flask_app):
+    """Serve the context-menu markup the webview needs, rendered.
+
+    The extension owns the webview's HTML, but not this part of it: the menus
+    are ~95 of the DOM ids the frontend calls getElementById on, and
+    sequence_menus.html *defines and calls* a `color_select` macro. Reading the
+    partials as files would leave `{{ color_select(...) }}` as literal text and
+    the colour dropdowns would silently not exist -- so they have to go through
+    Jinja, and Jinja lives here.
+
+    Registered by the sidecar rather than on a blueprint, like the health
+    route, so the web app's route table is unchanged; index.html gets the same
+    markup from `{% include %}`.
+    """
+
+    @flask_app.route(MENUS_ROUTE)
+    def _webview_menus():
+        return "\n".join(render_template(name) for name in MENU_PARTIALS)
+
+
 def main():
     apply_jar_override()
     check_jar()
     install_health_route(app)
+    install_menus_route(app)
     install_cors(app)
     install_token_auth(app, os.environ.get(TOKEN_ENV))
 
