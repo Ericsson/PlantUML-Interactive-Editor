@@ -32,7 +32,8 @@ const {
 	readPortLine,
 	resolvePythonPath,
 	SidecarStartError,
-	PORT_LINE_PREFIX
+	PORT_LINE_PREFIX,
+	TOKEN_HEADER
 } = require('../src/sidecar');
 
 /** A stand-in for a spawned child process, so the port handshake can be
@@ -46,6 +47,35 @@ function fakeChild() {
 	};
 	return child;
 }
+
+suite('sidecar: the contract with serve.py', () => {
+	// Both constants are declared on each side with a comment saying they must
+	// match. Nothing enforced that, and neither mismatch is visible until the
+	// backend is running: a changed prefix hangs startup for 30s, a changed
+	// header turns every request into a 403.
+	const servePy = require('fs').readFileSync(
+		require('path').join(__dirname, '..', '..', 'src', 'plantuml_gui', 'serve.py'),
+		'utf-8'
+	);
+
+	/**
+	 * @param {string} name a module-level constant in serve.py
+	 * @returns {string} its string literal value
+	 */
+	const pythonConstant = (name) => {
+		const match = new RegExp(`^${name} = "([^"]*)"`, 'm').exec(servePy);
+		assert.ok(match, `${name} not found in serve.py`);
+		return match[1];
+	};
+
+	test('announces the port with the prefix serve.py prints', () => {
+		assert.strictEqual(PORT_LINE_PREFIX, pythonConstant('PORT_LINE_PREFIX'));
+	});
+
+	test('sends the token in the header serve.py checks', () => {
+		assert.strictEqual(TOKEN_HEADER, pythonConstant('TOKEN_HEADER'));
+	});
+});
 
 suite('sidecar: environment', () => {
 	test('passes the jar as an override, not as PLANTUML_JAR', () => {

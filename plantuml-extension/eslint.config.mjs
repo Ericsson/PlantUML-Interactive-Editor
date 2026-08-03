@@ -1,6 +1,11 @@
 import globals from "globals";
 
 export default [{
+    // Both are downloaded, not written here: .vscode-test holds a whole copy
+    // of VS Code, whose bundled extensions ship eslint configs of their own
+    // that ESLint tries to load and fails on.
+    ignores: [".vscode-test/**", "node_modules/**"],
+}, {
     files: ["**/*.js"],
     languageOptions: {
         globals: {
