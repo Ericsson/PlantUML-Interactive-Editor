@@ -35,12 +35,10 @@ const {
 	vendorRoot,
 	fetchMenus,
 	AssetLoadError,
-	APP_SCRIPTS,
-	VENDOR_SCRIPTS,
 	VENDOR_STYLES,
-	MENUS_PATH,
-	TOKEN_HEADER
+	MENUS_PATH
 } = require('../src/webviewAssets');
+const { TOKEN_HEADER } = require('../src/sidecar');
 
 const EXTENSION_PATH = path.join(__dirname, '..');
 const STATIC_DIR = path.join(EXTENSION_PATH, '..', 'src', 'plantuml_gui', 'static');
@@ -142,21 +140,6 @@ suite('webview assets: URLs', () => {
 		sidecar?.close();
 	});
 
-	test('serves every app script from the sidecar, in load order', () => {
-		assert.strictEqual(assets.scriptSrcs.length, APP_SCRIPTS.length);
-		assert.ok(assets.scriptSrcs[0].endsWith('/static/script.js'));
-		assert.ok(assets.scriptSrcs.at(-1).endsWith('/static/activity.js'));
-		for (const src of assets.scriptSrcs) {
-			assert.strictEqual(new URL(src).origin, assets.origin);
-		}
-	});
-
-	test('leaves out the Ace syntax mode', () => {
-		// There is no Ace here -- the VS Code editor is the source editor --
-		// so mode-plantuml.js would be dead weight and a confusing 404 hunt.
-		assert.ok(!assets.scriptSrcs.some((src) => src.includes('mode-plantuml')));
-	});
-
 	test('loads only the stylesheet entry point', () => {
 		// styles.css @imports six files from static/css/, and over HTTP those
 		// resolve against the sidecar on their own -- unlike a mirror, where
@@ -170,18 +153,16 @@ suite('webview assets: URLs', () => {
 	test('loads the browser libraries from node_modules, not the sidecar', () => {
 		// The web app gets these from CDNs, which a webview's CSP blocks, and
 		// they are not part of the Python package.
-		const uris = [...assets.vendorScriptUris, ...assets.vendorStyleUris];
-
-		assert.strictEqual(uris.length, VENDOR_SCRIPTS.length + VENDOR_STYLES.length);
-		for (const uri of uris) {
+		assert.strictEqual(assets.vendorStyleUris.length, VENDOR_STYLES.length);
+		for (const uri of assets.vendorStyleUris) {
 			assert.ok(!uri.startsWith(assets.origin), `${uri} should not come from the sidecar`);
 		}
 	});
 
 	test('every vendored library is actually on disk', () => {
-		// The failure mode otherwise is a silent 404 inside the webview: the
-		// diagram still renders and nothing is clickable.
-		for (const relative of [...VENDOR_SCRIPTS, ...VENDOR_STYLES]) {
+		// The failure mode otherwise is a silent 404 inside the webview, which
+		// leaves the menu markup unstyled rather than reporting anything.
+		for (const relative of VENDOR_STYLES) {
 			const file = path.join(EXTENSION_PATH, 'node_modules', ...relative.split('/'));
 			assert.ok(fs.existsSync(file), `missing ${relative} - run npm install`);
 		}

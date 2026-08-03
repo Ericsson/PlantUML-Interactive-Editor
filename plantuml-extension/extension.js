@@ -32,6 +32,7 @@ const vscode = require('vscode');
 const { startSidecar, SidecarStartError } = require('./src/sidecar');
 const { resolvePlantUmlJarPath, PlantUmlConfigError } = require('./src/plantumlJar');
 const { renderPlantUmlToSvg, PlantUmlRenderError } = require('./src/renderClient');
+const { resolveWebviewAssets, vendorRoot, AssetLoadError } = require('./src/webviewAssets');
 const { getWebviewContent } = require('./src/webviewContent');
 
 const LIVE_UPDATE_DEBOUNCE_MS = 300;
@@ -59,7 +60,7 @@ function activate(context) {
 
 	const disposable = vscode.commands.registerCommand(
 		'plantuml-interactive-editor.openDiagram',
-		() => openDiagramPanel()
+		() => openDiagramPanel(context)
 	);
 
 	context.subscriptions.push(disposable);
@@ -107,8 +108,10 @@ function disposeSidecar() {
 /**
  * Open a diagram webview panel for the active editor's document, render its
  * current content, and keep the diagram in sync as the document changes.
+ *
+ * @param {vscode.ExtensionContext} context
  */
-async function openDiagramPanel() {
+async function openDiagramPanel(context) {
 	const editor = vscode.window.activeTextEditor;
 
 	if (!editor) {
@@ -153,11 +156,29 @@ async function openDiagramPanel() {
 		'PlantUML Interactive Diagram',
 		vscode.ViewColumn.Beside,
 		{
-			enableScripts: true
+			enableScripts: true,
+			// The browser libraries are loaded from node_modules; everything
+			// else the page needs comes over HTTP from the sidecar.
+			localResourceRoots: [vendorRoot(context.extensionPath)]
 		}
 	);
 
-	panel.webview.html = getWebviewContent();
+	try {
+		const assets = await resolveWebviewAssets({
+			sidecar: active,
+			webview: panel.webview,
+			extensionPath: context.extensionPath
+		});
+		panel.webview.html = getWebviewContent({ webview: panel.webview, assets });
+	} catch (err) {
+		panel.dispose();
+		vscode.window.showErrorMessage(
+			err instanceof AssetLoadError
+				? err.message
+				: `Unexpected error loading the diagram frontend: ${err.message}`
+		);
+		return;
+	}
 
 	let debounceTimer;
 

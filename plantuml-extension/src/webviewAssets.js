@@ -32,7 +32,7 @@
 // no way for the webview to run a stale copy of a file that was edited in
 // src/plantuml_gui/.
 //
-// Only what the sidecar cannot serve is resolved locally: the four browser
+// Only what the sidecar cannot serve is resolved locally: the browser
 // libraries, which the web app loads from CDNs (blocked by a webview's CSP)
 // and which are therefore taken straight out of node_modules.
 //
@@ -42,44 +42,21 @@
 
 const path = require('path');
 const vscode = require('vscode');
+const { TOKEN_HEADER } = require('./sidecar');
 
-// Must match TOKEN_HEADER and MENUS_ROUTE in src/plantuml_gui/serve.py.
-const TOKEN_HEADER = 'X-PlantUML-Token';
+// Must match MENUS_ROUTE in src/plantuml_gui/serve.py.
 const MENUS_PATH = 'webview/menus';
 
 // A local server that has already answered /health; a slow answer here means
 // something is wrong rather than merely busy.
 const MENUS_TIMEOUT_MS = 5000;
 
-// Sidecar-relative, and ordered: script.js declares the `let editor` binding
-// and the render pipeline the rest hang off, and activity.js registers the
-// handlers that assume both. Deliberately excludes static/mode-plantuml.js --
-// that is Ace's syntax mode, and the VS Code editor is the source editor here.
-const APP_SCRIPTS = [
-	'static/script.js',
-	'static/title.js',
-	'static/hover-highlight.js',
-	'static/sequence-message.js',
-	'static/sequence-activation.js',
-	'static/sequence-group.js',
-	'static/sequence-box.js',
-	'static/sequence-operations.js',
-	'static/activity.js'
-];
-
 // Just the entry point: styles.css @imports six files from static/css/, and
 // over HTTP those resolve against the sidecar origin on their own.
 const APP_STYLES = ['static/styles.css'];
 
-// node_modules-relative. jQuery before Bootstrap, which requires it. jQuery is
-// pinned to 3.x because Bootstrap 4 requires <4.
-const VENDOR_SCRIPTS = [
-	'jquery/dist/jquery.min.js',
-	'bootstrap/dist/js/bootstrap.min.js',
-	'panzoom/dist/panzoom.min.js',
-	'diff/dist/diff.min.js'
-];
-
+// node_modules-relative. Bootstrap's stylesheet, which the menu markup's
+// classes come from.
 const VENDOR_STYLES = ['bootstrap/dist/css/bootstrap.min.css'];
 
 /** Thrown when the frontend cannot be resolved from a running sidecar. */
@@ -172,9 +149,7 @@ function withTrailingSlash(url) {
  *   base: string,
  *   origin: string,
  *   styleHrefs: string[],
- *   scriptSrcs: string[],
  *   vendorStyleUris: string[],
- *   vendorScriptUris: string[],
  *   menusHtml: string
  * }>}
  * @throws {AssetLoadError}
@@ -191,9 +166,7 @@ async function resolveWebviewAssets({ sidecar, webview, extensionPath }) {
 		base,
 		origin: new URL(base).origin,
 		styleHrefs: APP_STYLES.map((relative) => `${base}${relative}`),
-		scriptSrcs: APP_SCRIPTS.map((relative) => `${base}${relative}`),
 		vendorStyleUris: vendorUris(webview, extensionPath, VENDOR_STYLES),
-		vendorScriptUris: vendorUris(webview, extensionPath, VENDOR_SCRIPTS),
 		menusHtml: await fetchMenus(base, sidecar.token)
 	};
 }
@@ -235,10 +208,6 @@ module.exports = {
 	vendorRoot,
 	fetchMenus,
 	AssetLoadError,
-	APP_SCRIPTS,
-	APP_STYLES,
-	VENDOR_SCRIPTS,
 	VENDOR_STYLES,
-	MENUS_PATH,
-	TOKEN_HEADER
+	MENUS_PATH
 };

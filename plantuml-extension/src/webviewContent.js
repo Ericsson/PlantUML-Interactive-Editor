@@ -22,34 +22,79 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Minimal webview content for the PlantUML diagram panel.
+// The webview page: a shell that supplies the ids the web app's CSS and markup
+// expect, and points at the frontend the sidecar serves.
 //
-// The webview holds only a diagram container and just enough script to
-// receive `{ type: "updateDiagram", svg }` and `{ type: "renderError", message }`
-// messages posted from the extension via panel.webview.postMessage(...).
-// It intentionally contains no PlantUML source, no code editor, and no
-// Ace Editor - the VS Code text editor remains the only source editor.
-//
-// The markup itself lives in webviewContent.html (a plain, global static
-// file) so it can be edited/previewed as regular HTML rather than a JS
-// template string. This module just reads it from disk and caches it.
+// The markup lives in webviewContent.html rather than in a template literal
+// here, so it can be edited and previewed as HTML -- and so that a stray
+// backtick in the page cannot terminate a literal and turn the rest of the
+// document into executable JavaScript. This module only fills in placeholders.
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
+const { buildCsp } = require('./webviewAssets');
+
 const HTML_PATH = path.join(__dirname, 'webviewContent.html');
 
-/** Cached file contents, populated on first call to getWebviewContent(). */
-let cachedHtml;
+/** Cached template, read once; it cannot change while the host is running. */
+let cachedTemplate;
 
 /**
- * @returns {string} the static HTML document loaded into the webview.
+ * @returns {string} the raw webviewContent.html template.
  */
-function getWebviewContent() {
-	if (cachedHtml === undefined) {
-		cachedHtml = fs.readFileSync(HTML_PATH, 'utf-8');
+function readTemplate() {
+	if (cachedTemplate === undefined) {
+		cachedTemplate = fs.readFileSync(HTML_PATH, 'utf-8');
 	}
-	return cachedHtml;
+	return cachedTemplate;
+}
+
+/**
+ * Build the document loaded into the diagram panel.
+ *
+ * @param {object} options
+ * @param {import('vscode').Webview} options.webview
+ * @param {Awaited<ReturnType<import('./webviewAssets').resolveWebviewAssets>>} options.assets
+ * @returns {string}
+ */
+function getWebviewContent({ webview, assets }) {
+	const nonce = crypto.randomBytes(16).toString('base64');
+
+	// Vendored Bootstrap first: the app's own stylesheet is written to override
+	// it, and on equal specificity the later rule wins.
+	const styleLinks = [...assets.vendorStyleUris, ...assets.styleHrefs]
+		.map((href) => `\t<link rel="stylesheet" href="${href}">`)
+		.join('\n');
+
+	return fill(readTemplate(), {
+		csp: buildCsp({ webview, assets, nonce }),
+		nonce,
+		styleLinks,
+		menus: assets.menusHtml
+	});
+}
+
+/**
+ * Replace every {{name}} placeholder in `template`.
+ *
+ * Substituted through a replacer function so that a `$&` or `$1` appearing in
+ * the menu markup or a URL is inserted literally rather than being read as a
+ * replacement pattern.
+ *
+ * @param {string} template
+ * @param {Record<string, string>} values
+ * @returns {string}
+ * @throws {Error} if the template names a placeholder that has no value
+ */
+function fill(template, values) {
+	return template.replace(/\{\{(\w+)\}\}/g, (match, name) => {
+		if (!(name in values)) {
+			throw new Error(`webviewContent.html uses an unknown placeholder: ${match}`);
+		}
+		return values[name];
+	});
 }
 
 module.exports = {

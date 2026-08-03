@@ -22,34 +22,39 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Placeholders in {{double braces}} are filled in by webviewContent.js. Every one
+of them must be substituted; a leftover placeholder is asserted against in
+test/webviewContent.test.js.
 -->
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
 	<meta charset="UTF-8">
+	<meta http-equiv="Content-Security-Policy" content="{{csp}}">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>PlantUML Interactive Diagram</title>
+{{styleLinks}}
 	<style>
+		/* The app's CSS is written for the web page's two-pane shell. Here the
+		   diagram is the whole panel, so undo the parts that assume a shell. */
 		html, body {
 			margin: 0;
 			padding: 0;
 			height: 100%;
+			overflow: hidden;
 			background-color: var(--vscode-editor-background);
 			color: var(--vscode-editor-foreground);
 			font-family: var(--vscode-font-family);
 		}
-		#diagram {
-			display: flex;
-			align-items: flex-start;
-			justify-content: center;
-			padding: 8px;
+		#colb-container {
+			position: absolute;
+			inset: 0;
 			overflow: auto;
-			height: 100%;
-			box-sizing: border-box;
 		}
-		#diagram svg {
-			max-width: 100%;
+		#colb {
+			padding: 12px;
 		}
 		#error {
 			display: none;
@@ -62,10 +67,18 @@ SOFTWARE.
 </head>
 <body>
 	<div id="error"></div>
-	<div id="diagram"></div>
 
-	<script>
-		const diagramEl = document.getElementById('diagram');
+	<!-- #colb is the web app's own id for the diagram surface, so the stylesheet
+	     served by the sidecar applies to it unchanged. -->
+	<div id="colb-container">
+		<div id="colb"></div>
+	</div>
+
+{{menus}}
+
+	<script nonce="{{nonce}}">
+		const diagramEl = document.getElementById('colb');
+		const containerEl = document.getElementById('colb-container');
 		const errorEl = document.getElementById('error');
 
 		window.addEventListener('message', (event) => {
@@ -74,10 +87,10 @@ SOFTWARE.
 			if (message.type === 'updateDiagram') {
 				errorEl.style.display = 'none';
 				errorEl.textContent = '';
-				diagramEl.style.display = 'flex';
+				containerEl.style.display = 'block';
 				diagramEl.innerHTML = message.svg;
 			} else if (message.type === 'renderError') {
-				diagramEl.style.display = 'none';
+				containerEl.style.display = 'none';
 				errorEl.style.display = 'block';
 				errorEl.textContent = message.message;
 			}
