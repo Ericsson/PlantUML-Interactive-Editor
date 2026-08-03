@@ -167,8 +167,8 @@ suite('renderClient: failures', () => {
 	});
 
 	test('a backend that never answers times out instead of hanging', async () => {
-		// The spawn-based renderer this replaced had no timeout at all: a
-		// wedged java process left the panel waiting forever.
+		// A wedged java process must fail the panel with a message; nothing
+		// else cancels the request, so the timeout is the only way out.
 		fake = await startFakeSidecar(() => {
 			/* deliberately no response */
 		});

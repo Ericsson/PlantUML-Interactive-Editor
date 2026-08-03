@@ -24,16 +24,14 @@
 
 // Where the PlantUML jar comes from.
 //
-// Nothing here runs the jar -- rendering happens in the Python sidecar
-// (src/plantuml_gui/shared/render.py), which reads PLANTUML_JAR per call. The
-// path is resolved on this side so the extension can check it before spawning
-// Python and pass it down as PLANTUML_GUI_JAR_OVERRIDE. serve.py's check_jar
-// only warns; without this check a bad path surfaces later as a 500 on the
-// first render, which is a much worse place to learn about a typo in a setting.
+// The jar is run by the backend (src/plantuml_gui/shared/render.py, which reads
+// PLANTUML_JAR per call), not here. This side resolves the path so it can be
+// checked before Python is spawned and handed down as PLANTUML_GUI_JAR_OVERRIDE.
+// The check matters because serve.py's check_jar only warns on stderr, so an
+// unchecked bad path first shows up as a 500 on the user's first render.
 //
-// The setting's own default value in package.json is a known shared install
-// path, so most users get a working jar out of the box on networks where it is
-// provisioned.
+// The setting's default value in package.json is a known shared install path,
+// so the jar resolves out of the box on networks where it is provisioned.
 
 const fs = require('fs');
 const vscode = require('vscode');

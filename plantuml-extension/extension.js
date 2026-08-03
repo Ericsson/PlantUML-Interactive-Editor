@@ -25,9 +25,9 @@
 // VS Code extension lifecycle, commands, document listeners, and webview
 // communication.
 //
-// No rendering happens in Node. The extension runs the existing Flask app as a
-// child process (src/sidecar.js) and POSTs to its /render route
-// (src/renderClient.js); webview markup lives in src/webviewContent.js.
+// Rendering lives in the Python backend, which this file runs as a child
+// process (src/sidecar.js) and reaches over HTTP (src/renderClient.js).
+// Webview markup lives in src/webviewContent.js.
 const vscode = require('vscode');
 const { startSidecar, SidecarStartError } = require('./src/sidecar');
 const { resolvePlantUmlJarPath, PlantUmlConfigError } = require('./src/plantumlJar');
@@ -43,15 +43,18 @@ let sidecarStarting;
 /** @type {vscode.OutputChannel | undefined} */
 let outputChannel;
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
+/**
+ * Entry point, run the first time the command is invoked.
+ *
+ * @param {vscode.ExtensionContext} context
+ */
 function activate(context) {
-	// Python tracebacks and werkzeug's log land here. Without it a backend
-	// that starts but misbehaves is invisible.
+	// Where the backend's stderr goes: Python tracebacks and werkzeug's request
+	// log. The only window into a child that starts but then misbehaves.
 	outputChannel = vscode.window.createOutputChannel('PlantUML Interactive');
 	context.subscriptions.push(outputChannel);
 
-	// The child outlives every panel, so it is tied to the extension instead.
+	// The child outlives every panel, so its disposal belongs to the extension.
 	context.subscriptions.push({ dispose: disposeSidecar });
 
 	const disposable = vscode.commands.registerCommand(
@@ -79,9 +82,8 @@ function ensureSidecar(jarPath) {
 		sidecarStarting = startSidecar({ jarPath, output: outputChannel })
 			.then((started) => {
 				sidecar = started;
-				// A crash mid-session would otherwise leave every later render
-				// failing against a dead process; clear our handle so the next
-				// open retries instead.
+				// Drop the handle when the child dies, so the next open starts a
+				// fresh one instead of rendering against a dead process forever.
 				started.process.on('exit', () => {
 					if (sidecar === started) {
 						sidecar = undefined;
@@ -116,13 +118,12 @@ async function openDiagramPanel() {
 
 	const document = editor.document;
 
-	// Before spawning anything: a missing jar is the most common
-	// misconfiguration, and serve.py only warns about it on stderr. Checking
-	// here turns it into a notification naming the setting, and avoids
-	// starting a backend that could not render anyway.
+	// Checked before anything is spawned: serve.py only warns about a bad jar
+	// on stderr, so catching it here makes it a notification naming the setting,
+	// and skips starting a backend that could not render.
 	//
-	// The path is read into the child's environment at spawn time, so changing
-	// the setting takes effect on the next backend start, not the next render.
+	// The path enters the child's environment at spawn time, so a change to the
+	// setting takes effect on the next backend start, not the next render.
 	let jarPath;
 	try {
 		jarPath = resolvePlantUmlJarPath();
@@ -202,7 +203,7 @@ function describeRenderError(err) {
 	return `Unexpected error rendering PlantUML diagram: ${err.message}`;
 }
 
-// This method is called when your extension is deactivated
+/** Called when VS Code shuts the extension down; stops the backend with it. */
 function deactivate() {
 	disposeSidecar();
 }

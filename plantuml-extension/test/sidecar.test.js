@@ -49,9 +49,9 @@ function fakeChild() {
 }
 
 suite('sidecar: the contract with serve.py', () => {
-	// Both constants are declared on each side with a comment saying they must
-	// match. Nothing enforced that, and neither mismatch is visible until the
-	// backend is running: a changed prefix hangs startup for 30s, a changed
+	// Two constants are declared once on each side of the process boundary, so
+	// only a test can hold them together. Both mismatches are invisible until
+	// the backend is running: a changed prefix hangs startup for 30s, a changed
 	// header turns every request into a 403.
 	const servePy = require('fs').readFileSync(
 		require('path').join(__dirname, '..', '..', 'src', 'plantuml_gui', 'serve.py'),

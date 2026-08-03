@@ -39,8 +39,8 @@ const vscode = require('vscode');
 // Must match PORT_LINE_PREFIX in src/plantuml_gui/serve.py.
 const PORT_LINE_PREFIX = 'PLANTUML_GUI_PORT=';
 
-// Must match TOKEN_HEADER in src/plantuml_gui/serve.py. Exported so every
-// caller sends the same header name rather than repeating the literal.
+// Must match TOKEN_HEADER in src/plantuml_gui/serve.py, which answers 403 to
+// anything else. Exported so every caller names the header from one place.
 const TOKEN_HEADER = 'X-PlantUML-Token';
 
 // The sidecar has to boot Python, import Flask, and bind a socket. Slow on a
@@ -259,9 +259,9 @@ async function startSidecar(options = {}) {
 	try {
 		await waitForHealthy(sidecar, Date.now() + STARTUP_TIMEOUT_MS);
 	} catch (err) {
-		// The child bound a port but never answered. Without this it survives
-		// the failed start, holding that port for the life of the editor while
-		// nothing holds a handle to it.
+		// The child bound a port but never answered. Kill it here: no caller
+		// receives a handle to it, so this is the last chance to stop it holding
+		// that port for the life of the editor.
 		sidecar.dispose();
 		throw err;
 	}

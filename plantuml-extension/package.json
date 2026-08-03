@@ -29,7 +29,7 @@
         "plantumlInteractive.pythonPath": {
           "type": "string",
           "default": "",
-          "description": "Absolute path to a Python interpreter that has the plantuml-gui package installed. Required: the extension runs the package as a backend process and does not guess an interpreter, because one found by searching almost certainly cannot import plantuml_gui. Note that the Extension Development Host launches without a workspace folder, so workspace settings are not read there - during development, set PLANTUML_GUI_PYTHON in the \"env\" block of .vscode/launch.json instead."
+          "description": "Absolute path to a Python interpreter that has the plantuml-gui package installed. Required: the extension runs that package as its rendering backend, and will not fall back to an interpreter on PATH because one is unlikely to have the package. Note that the Extension Development Host launches without a workspace folder, so workspace settings are not read there - during development, set PLANTUML_GUI_PYTHON in the \"env\" block of .vscode/launch.json instead."
         }
       }
     }

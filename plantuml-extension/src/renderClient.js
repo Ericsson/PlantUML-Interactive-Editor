@@ -24,18 +24,17 @@
 
 // PlantUML -> SVG, via the sidecar's /render route.
 //
-// The extension used to shell out to `java -jar plantuml.jar -pipe -tsvg`
-// itself, duplicating shared/render.py's invocation flag for flag. There is
-// now one renderer: the Python one, reached over HTTP. That matters beyond
-// deduplication -- the webview will eventually drive the same backend for the
-// ~71 puml-rewriting routes, and a diagram rendered by a second, subtly
-// different code path would not match the SVG those routes are parsing.
+// Rendering belongs to the backend (shared/render.py, which runs
+// `java -jar plantuml.jar -pipe -tsvg`) and this is the only way the extension
+// reaches it. Keeping it there rather than shelling out to java here is what
+// guarantees the diagram in the panel is the same SVG the ~71 puml-rewriting
+// routes parse; a second invocation would be free to drift from it.
 
 const { TOKEN_HEADER } = require('./sidecar');
 
-// Generous: PlantUML on a cold JVM is slow, and the sidecar is single-threaded
-// per request. Short enough that a wedged java process does not hang the panel
-// forever, which is what the old spawn-based renderer did (it had no timeout).
+// Generous: PlantUML on a cold JVM is slow, and the sidecar handles one request
+// at a time. Short enough that a wedged java process fails the panel with a
+// message instead of leaving it waiting.
 const RENDER_TIMEOUT_MS = 20000;
 
 /** Thrown when the backend cannot be reached, or reports a failure. */
@@ -78,6 +77,9 @@ async function renderPlantUmlToSvg(sidecar, plantUmlSource, options = {}) {
 	// image/svg+xml. Read it as text and do not trust the content type.
 	const svg = await response.text();
 
+	// An empty 200 is a failure, not a blank diagram: render.py runs java with
+	// check=False and discards stderr, so a jar or JVM that cannot run at all
+	// still answers 200 with nothing in it.
 	if (!svg.trim()) {
 		throw new PlantUmlRenderError(
 			'The PlantUML backend returned an empty diagram. Check that PLANTUML_JAR ' +
@@ -104,8 +106,9 @@ function describeTransportFailure(err, timeoutMs) {
 		);
 	}
 
-	// The sidecar died between the health check and now; the next open restarts
-	// it, so say what happened rather than showing a bare "fetch failed".
+	// ECONNREFUSED means the child has died since the health check. The next
+	// open starts a new one, so the message says that rather than passing
+	// Node's opaque "fetch failed" through.
 	if (err.cause?.code === 'ECONNREFUSED') {
 		return 'The PlantUML backend is no longer running. Reopen the diagram to restart it.';
 	}
