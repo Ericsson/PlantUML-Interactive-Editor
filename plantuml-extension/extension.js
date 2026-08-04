@@ -25,16 +25,28 @@
 // VS Code extension lifecycle, commands, document listeners, and webview
 // communication.
 //
-// Rendering lives in the Python backend, which this file runs as a child
-// process (src/sidecar.js) and reaches over HTTP (src/renderClient.js).
-// Webview markup lives in src/webviewContent.js.
+// The diagram is interactive: editing something in it rewrites the PlantUML
+// source in the VS Code document. The rewriting is done by the Python backend,
+// which this file runs as a child process (src/sidecar.js) and which the
+// webview calls directly; this file owns the document and is its only writer.
+// The webview's page is rendered by that same backend and fetched by
+// src/webviewPage.js.
 const vscode = require('vscode');
 const { startSidecar, SidecarStartError } = require('./src/sidecar');
 const { resolvePlantUmlJarPath, PlantUmlConfigError } = require('./src/plantumlJar');
-const { renderPlantUmlToSvg, PlantUmlRenderError } = require('./src/renderClient');
-const { getWebviewContent } = require('./src/webviewContent');
+const { fetchWebviewPage, vendorRoot, WebviewPageError } = require('./src/webviewPage');
 
 const LIVE_UPDATE_DEBOUNCE_MS = 300;
+
+/**
+ * Line highlight for the diagram -> editor direction: hovering an element in
+ * the diagram paints the puml line that produced it. Created once, since each
+ * decoration type is a resource VS Code tracks.
+ */
+const hoverDecoration = vscode.window.createTextEditorDecorationType({
+	backgroundColor: new vscode.ThemeColor('editor.wordHighlightBackground'),
+	isWholeLine: true
+});
 
 /** @type {import('./src/sidecar').Sidecar | undefined} */
 let sidecar;
@@ -59,7 +71,7 @@ function activate(context) {
 
 	const disposable = vscode.commands.registerCommand(
 		'plantuml-interactive-editor.openDiagram',
-		() => openDiagramPanel()
+		() => openDiagramPanel(context)
 	);
 
 	context.subscriptions.push(disposable);
@@ -107,8 +119,10 @@ function disposeSidecar() {
 /**
  * Open a diagram webview panel for the active editor's document, render its
  * current content, and keep the diagram in sync as the document changes.
+ *
+ * @param {vscode.ExtensionContext} context
  */
-async function openDiagramPanel() {
+async function openDiagramPanel(context) {
 	const editor = vscode.window.activeTextEditor;
 
 	if (!editor) {
@@ -153,29 +167,47 @@ async function openDiagramPanel() {
 		'PlantUML Interactive Diagram',
 		vscode.ViewColumn.Beside,
 		{
-			enableScripts: true
+			enableScripts: true,
+			// Only the browser libraries are loaded off disk; the page itself
+			// and the rest of the frontend come over HTTP from the sidecar.
+			localResourceRoots: [vendorRoot(context.extensionPath)],
+			// Rebuilding a hidden panel costs a full render plus a rewalk of
+			// every handler the frontend attached.
+			retainContextWhenHidden: true
 		}
 	);
 
-	panel.webview.html = getWebviewContent();
+	// Fetched fresh on every panel open, which is what makes editing the
+	// frontend a matter of reopening the panel.
+	try {
+		panel.webview.html = await fetchWebviewPage({
+			sidecar: active,
+			webview: panel.webview,
+			extensionPath: context.extensionPath
+		});
+	} catch (err) {
+		panel.dispose();
+		vscode.window.showErrorMessage(
+			err instanceof WebviewPageError
+				? err.message
+				: `Unexpected error loading the diagram frontend: ${err.message}`
+		);
+		return;
+	}
 
 	let debounceTimer;
 
-	const renderAndPost = () => {
-		renderPlantUmlToSvg(active, document.getText()).then(
-			(svg) => {
-				panel.webview.postMessage({ type: 'updateDiagram', svg });
-			},
-			(err) => {
-				const message = describeRenderError(err);
-				panel.webview.postMessage({ type: 'renderError', message });
-				outputChannel?.appendLine(`render failed: ${message}`);
-			}
-		);
+	// Reentrancy guard for applyEdit only. The text comparisons on both sides
+	// are what actually terminate the write-back loop.
+	let applyingEdit = false;
+
+	const postDocument = () => {
+		panel.webview.postMessage({ type: 'documentChanged', text: document.getText() });
 	};
 
-	// Initial render of the document as it is when the panel opens.
-	renderAndPost();
+	// The frontend renders itself from this, through the app's own
+	// renderPlantUml(); the first message also primes its cached text.
+	postDocument();
 
 	const changeListener = vscode.workspace.onDidChangeTextDocument((event) => {
 		if (event.document !== document) {
@@ -183,24 +215,110 @@ async function openDiagramPanel() {
 		}
 
 		clearTimeout(debounceTimer);
-		debounceTimer = setTimeout(renderAndPost, LIVE_UPDATE_DEBOUNCE_MS);
+		debounceTimer = setTimeout(postDocument, LIVE_UPDATE_DEBOUNCE_MS);
+	});
+
+	const messageListener = panel.webview.onDidReceiveMessage(async (message) => {
+		if (message.type === 'applyPuml') {
+			if (applyingEdit) {
+				return;
+			}
+			applyingEdit = true;
+			try {
+				await applyPuml(document, message.text);
+			} finally {
+				applyingEdit = false;
+			}
+		} else if (message.type === 'setHighlight') {
+			applyHighlight(document, message.rows);
+		} else if (message.type === 'ready') {
+			outputChannel?.appendLine('[webview] frontend loaded');
+		}
+	});
+
+	// Cursor -> diagram highlighting. VS Code exposes no per-line mouse-hover
+	// event for text editors, so the web app's editor-to-diagram hover
+	// direction degrades to following the caret.
+	const selectionListener = vscode.window.onDidChangeTextEditorSelection((event) => {
+		if (event.textEditor.document !== document) {
+			return;
+		}
+		const position = event.selections[0].active;
+		panel.webview.postMessage({
+			type: 'cursorMoved',
+			row: position.line,
+			column: position.character
+		});
 	});
 
 	panel.onDidDispose(() => {
 		clearTimeout(debounceTimer);
 		changeListener.dispose();
+		messageListener.dispose();
+		selectionListener.dispose();
+		clearHighlight(document);
 	});
+
+	context.subscriptions.push(panel);
 }
 
 /**
- * @param {Error} err
- * @returns {string} a user-facing message for a rendering failure.
+ * Write `text` into `document` as a single undoable edit.
+ *
+ * The equality check is the primary defence against the write-back loop: an
+ * edit we apply fires onDidChangeTextDocument, which posts documentChanged back
+ * to the webview, whose own equality check stops there. Comparing values rather
+ * than tracking whose turn it is means a genuine edit can never be swallowed.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {string} text
  */
-function describeRenderError(err) {
-	if (err instanceof PlantUmlConfigError || err instanceof PlantUmlRenderError) {
-		return err.message;
+async function applyPuml(document, text) {
+	if (typeof text !== 'string' || text === document.getText()) {
+		return;
 	}
-	return `Unexpected error rendering PlantUML diagram: ${err.message}`;
+
+	const edit = new vscode.WorkspaceEdit();
+	edit.replace(document.uri, fullRange(document), text);
+
+	if (!(await vscode.workspace.applyEdit(edit))) {
+		vscode.window.showErrorMessage('Could not write the diagram change into the document.');
+	}
+}
+
+/**
+ * Paint the given puml lines in every editor showing `document`.
+ *
+ * The diagram -> editor direction: the editor shim turns the app's Ace
+ * addMarker calls into a row list and posts it here.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {number[]} rows zero-based line numbers
+ */
+function applyHighlight(document, rows) {
+	const ranges = (rows ?? [])
+		.filter((row) => row >= 0 && row < document.lineCount)
+		.map((row) => document.lineAt(row).range);
+
+	for (const editor of vscode.window.visibleTextEditors) {
+		if (editor.document === document) {
+			editor.setDecorations(hoverDecoration, ranges);
+		}
+	}
+}
+
+/** @param {vscode.TextDocument} document */
+function clearHighlight(document) {
+	applyHighlight(document, []);
+}
+
+/**
+ * @param {vscode.TextDocument} document
+ * @returns {vscode.Range} a range covering the whole document.
+ */
+function fullRange(document) {
+	const lastLine = document.lineAt(document.lineCount - 1);
+	return new vscode.Range(0, 0, lastLine.lineNumber, lastLine.text.length);
 }
 
 /** Called when VS Code shuts the extension down; stops the backend with it. */

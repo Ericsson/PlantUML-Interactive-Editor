@@ -39,6 +39,12 @@
     "pretest": "npm run lint",
     "test": "vscode-test"
   },
+  "dependencies": {
+    "bootstrap": "4.6.2",
+    "diff": "^8.0.4",
+    "jquery": "3.7.1",
+    "panzoom": "9.4.0"
+  },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "24.x",

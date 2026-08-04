@@ -1,0 +1,121 @@
+<!--
+SPDX-License-Identifier: MIT
+
+MIT License
+
+Copyright (c) 2026 Ericsson
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+The page the VS Code extension's diagram panel loads. Rendered by
+install_webview_route in serve.py, which documents where the values come from.
+
+Standalone rather than a child template of index.html: what index.html adds is
+its app shell -- global bar, split panes, divider -- and here the diagram is
+the whole panel, so there would be nothing to do with the shell but hide it.
+What the two pages genuinely share is pulled in below: the same menu partials
+and the same app_scripts macro.
+
+(Jinja reads its tags inside HTML comments too, so do not write one here.)
+
+Every src and href is absolute against `base`. This document is handed to
+VS Code as a string, so its own origin is vscode-webview://<uuid> and a
+relative path would resolve to nothing.
+-->
+
+{% from "partials/app_scripts.html" import app_scripts %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <!--
+    Two sources are allowed and nothing else: this server, for the frontend,
+    and the webview's own source, for the browser libraries the extension loads
+    off disk. That is what makes it safe to innerHTML PlantUML-rendered SVG
+    from an untrusted .puml file -- injected markup can carry neither origin,
+    so an inline <script> or an SVG onload handler is blocked.
+
+    'unsafe-inline' is style-only: Bootstrap and the app CSS both set inline
+    styles, and the app code toggles element.style directly. There is no
+    corresponding allowance for script, and no nonce, because this page has no
+    inline script at all -- what the shims need is on <body> below.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none';
+        img-src {{ csp_source }} {{ origin }} data:;
+        style-src {{ csp_source }} {{ origin }} 'unsafe-inline';
+        script-src {{ csp_source }} {{ origin }};
+        font-src {{ csp_source }} {{ origin }};
+        connect-src {{ origin }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PlantUML Interactive Diagram</title>
+    <!-- Bootstrap first: the app's own stylesheet is written to override it,
+         and on equal specificity the later rule wins. -->
+    {% for href in vendor_styles %}
+    <link rel="stylesheet" href="{{ href }}">
+    {% endfor %}
+    <link rel="stylesheet" href="{{ base }}static/styles.css">
+    <link rel="stylesheet" href="{{ base }}static/vscode/webview.css">
+</head>
+
+<!-- Read by fetchShim.js, which every relative fetch() in the app's code goes
+     through. Attributes rather than an inline <script> so that the CSP above
+     needs no nonce and no script-src exception. -->
+
+<body data-plantuml-api="{{ base }}" data-plantuml-token="{{ token }}"
+    data-plantuml-token-header="{{ token_header }}">
+    <!-- The ids the app's code dereferences without a null check and that the
+         menu partials do not supply. One missing id throws during setup and
+         kills every interaction while the diagram still renders. The VS Code
+         text editor is the source editor here, so #editor exists only because
+         hover-highlight.js reads editor.container, and #version /
+         #version-panel only because script.js registers a document click
+         handler that dereferences them; webview.css hides all three. -->
+    <div id="popup">Error message</div>
+    <div id="editor"></div>
+    <span id="version"></span>
+    <div id="version-panel"></div>
+
+    <div id="colb-container">
+        <div id="colb"></div>
+        <div id="loading-overlay"></div>
+    </div>
+
+    {% include "partials/activity_menus.html" %}
+    {% include "partials/sequence_menus.html" %}
+
+    <!--
+    Load order is the invariant this whole page rests on:
+      1. vendor   jQuery before Bootstrap, which requires it
+      2. shims    fetchShim before anything calls fetch; editorShim before
+                  script.js, which dereferences `ace` at load time (line 46)
+                  and would throw mid-parse if the global did not exist yet
+      3. app      the frontend, in dependency order
+      4. boot     last, because it assigns script.js's `let editor`
+    -->
+    {% for src in vendor_scripts %}
+    <script src="{{ src }}"></script>
+    {% endfor %}
+    <script src="{{ base }}static/vscode/fetchShim.js?v={{ script_hash }}"></script>
+    <script src="{{ base }}static/vscode/editorShim.js?v={{ script_hash }}"></script>
+    {{ app_scripts(base, script_hash) }}
+    <script src="{{ base }}static/vscode/webviewInit.js?v={{ script_hash }}"></script>
+</body>
+
+</html>
