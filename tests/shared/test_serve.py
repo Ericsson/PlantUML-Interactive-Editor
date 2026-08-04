@@ -368,8 +368,8 @@ def test_webview_page_serves_the_same_scripts_as_the_web_app(webview_app):
         {"base": "not a url"},
         # Would append a CSP directive of the caller's choosing.
         {"csp_source": "https://x; script-src *"},
-        # Would split one source expression into several.
-        {"csp_source": "https://x https://evil"},
+        # Double quote would close the content attribute.
+        {"csp_source": 'https://x" https://evil'},
         {"vendor_script": ["https://x/a.js https://evil/b.js"]},
         {"vendor_style": ['https://x/a.css" onload="alert(1)']},
     ],
@@ -379,6 +379,14 @@ def test_webview_page_rejects_values_it_cannot_render_safely(webview_app, overri
     cover them: a semicolon starts a new CSP directive and whitespace splits
     one value into several, both inside a perfectly well-formed attribute."""
     assert get_webview(webview_app, **overrides).status_code == 400
+
+
+def test_webview_page_accepts_compound_csp_source(webview_app):
+    """VS Code Remote-SSH sends csp_source with single-quoted keywords and
+    space-separated sources, e.g. \"'self' https://*.vscode-cdn.net\". These
+    are legitimate CSP grammar and must not be rejected."""
+    response = get_webview(webview_app, csp_source="'self' https://*.vscode-cdn.net")
+    assert response.status_code == 200
 
 
 def test_webview_page_requires_the_token(webview_app):

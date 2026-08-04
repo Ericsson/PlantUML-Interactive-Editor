@@ -96,6 +96,13 @@ ASSET_ENDPOINTS = frozenset({"static"})
 # splits one value into several -- neither of which escaping catches.
 UNSAFE_IN_VALUE = set("\"'<>;") | set(" \t\r\n\f\v")
 
+# csp_source is rendered inside a content="..." attribute of a <meta> CSP tag.
+# Single quotes are legitimate CSP keywords ('self', 'unsafe-inline') and
+# spaces separate multiple source expressions -- both are part of the CSP
+# grammar. Double quotes, angle brackets, and semicolons remain dangerous
+# (break attribute, break tag, or start a new directive respectively).
+UNSAFE_IN_CSP_SOURCE = set('"<>;') | set("\t\r\n\f\v")
+
 
 def apply_jar_override():
     """Let the parent process choose the PlantUML jar, overriding any .env.
@@ -231,6 +238,16 @@ def _is_safe_value(value):
     return bool(value) and not (UNSAFE_IN_VALUE & set(value))
 
 
+def _is_safe_csp_source(value):
+    """Whether `value` is safe to render into the CSP meta tag's content attr.
+
+    More permissive than _is_safe_value: single quotes (for CSP keywords like
+    'self') and spaces (separating multiple source expressions) are legitimate
+    parts of the CSP grammar and cannot break out of the content attribute.
+    """
+    return bool(value) and not (UNSAFE_IN_CSP_SOURCE & set(value))
+
+
 def _is_http_url(value):
     parts = urlsplit(value)
     return parts.scheme in ("http", "https") and bool(parts.netloc)
@@ -276,7 +293,7 @@ def install_webview_route(flask_app, token):
         if not _is_http_url(base) or not _is_safe_value(base):
             return jsonify({"error": "base must be an http(s) URL"}), 400
 
-        if not _is_safe_value(csp_source):
+        if not _is_safe_csp_source(csp_source):
             return jsonify({"error": "csp_source is not a usable CSP source"}), 400
 
         if not all(map(_is_safe_value, vendor_scripts + vendor_styles)):
