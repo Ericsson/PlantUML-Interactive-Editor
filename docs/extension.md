@@ -72,15 +72,15 @@ app, running as-is.
                                         └───────────────────────────────────────────────────┘
 ```
 
-The five edges:
+The five edges, each specified in full under [Interfaces](#interfaces):
 
-| | Channel | When | Carries |
+| | Between | Channel | When |
 | --- | --- | --- | --- |
-| ① | `postMessage` | continuous | The *only* host ↔ webview link. Structured-cloneable JSON, five message types (see [Message protocol](#message-protocol)). Host → webview: `documentChanged`, `cursorMoved`. Webview → host: `applyPuml`, `setHighlight`, `ready`. |
-| ② | `spawn` + stdio | once per window | stdout: the `PLANTUML_GUI_PORT=<port>` handshake line. stderr: Python tracebacks and werkzeug's request log, tailed into the output channel. |
-| ③ | one HTTP GET | once per panel | `/webview?base&csp_source&vendor_script&vendor_style`, sent by Node with the token header. The response is assigned to `panel.webview.html`. |
-| ④ | the frontend's own HTTP | every interaction | `/static/*`, `/render`, and the 79 POST routes — called by the app's unmodified code, repointed and token-stamped by `fetchShim`. |
-| ⑤ | `subprocess` | once per render | `/render` pipes the puml into `java -jar plantuml.jar -pipe -tsvg` and returns the SVG. |
+| ① | host ↔ webview | `postMessage` | continuous |
+| ② | host → sidecar | `spawn` + stdio | once per window |
+| ③ | host → sidecar | one HTTP `GET /webview` | once per panel |
+| ④ | webview → sidecar | the frontend's own HTTP | every interaction |
+| ⑤ | sidecar → java | `subprocess` | once per render |
 
 Two independent channels, and the split is the whole design. The webview talks **HTTP to
 Python** for everything about the diagram, and **`postMessage` to Node** for everything about
@@ -122,6 +122,164 @@ Nothing under `static/vscode/` is loaded by the web app at `/`. It lives in this
 rather than in the extension because it is `<script src>` on a page Flask renders — serving
 it next to `script.js` costs nothing, and the alternative is the extension resolving a
 webview URI for each file and passing it in.
+
+## Interfaces
+
+Six links, no two alike, each specified below as transport, who speaks first, payload,
+authentication and failure. None of it comes from a shared schema — every contract here is
+upheld by hand, so the constants are listed in
+[Cross-runtime contracts](#cross-runtime-contracts).
+
+Which pairs can talk at all is itself part of the design, and the empty cells matter as much
+as the full ones:
+
+| | host | webview | sidecar | java |
+| --- | --- | --- | --- | --- |
+| **host** | — | postMessage | spawn, and 2 HTTP GETs | never |
+| **webview** | postMessage | — | HTTP, continuously | never |
+| **sidecar** | stdout, stderr | HTTP responses | — | subprocess |
+
+### 1. Host → sidecar: process control
+
+`spawn(pythonPath, ['-m', 'plantuml_gui.serve'], { env })`, from `src/sidecar.js`. Node
+speaks first; the child can only answer through its own stdio. Environment is the only way
+to configure a process before it starts, so all of it rides in there:
+
+| Variable | Set when | Read by | Effect |
+| --- | --- | --- | --- |
+| `PLANTUML_GUI_TOKEN` | always | `install_token_auth()` | The per-launch secret. **Absent means no auth is installed at all**, which is what keeps plain `python -m plantuml_gui` usable. |
+| `PLANTUML_GUI_JAR_OVERRIDE` | only if a jar resolved | `apply_jar_override()` | Assigns `PLANTUML_JAR` from inside the process, after `load_dotenv`. See [Jar override](#jar-override). |
+| `PYTHONUNBUFFERED` | always `1` | CPython | Without it the port line sits in a block buffer and the handshake times out. |
+
+Coming back: **stdout** carries exactly one meaningful line, `PLANTUML_GUI_PORT=<port>\n`,
+and everything else on it is ignored (see [Port handshake](#port-handshake)); **stderr**
+carries unstructured tracebacks mixed with werkzeug's request log, streamed to the output
+channel and kept in a rolling 8 KB buffer (see [Failure reporting](#failure-reporting)).
+
+One sidecar per window, shared by every panel, killed in `deactivate()`. Spawn `ENOENT`, an
+import error, and no port line within 30 s all end the same way: panel disposed, notification
+naming the setting to fix.
+
+### 2. Host → sidecar: HTTP
+
+Two requests in the extension's whole lifetime — Node is not a proxy for the frontend. Both
+carry `X-PlantUML-Token`.
+
+| Request | When | Response | On failure |
+| --- | --- | --- | --- |
+| `GET /health` | Every 100 ms after the port line until it answers or 30 s passes; 2 s per attempt. | `{"status": "ok"}` — the body is never read, only the fact that something answered. | Not-ready-yet; the deadline is what gives up. |
+| `GET /webview?…` | Once per panel, 5 s timeout. | `text/html`, assigned verbatim to `panel.webview.html`. | `400` + `{"error": …}` on a bad parameter, `WebviewPageError` otherwise. |
+
+The `/webview` query string is the whole of what the extension tells Flask about the panel:
+
+| Parameter | Repeated | Value |
+| --- | --- | --- |
+| `base` | no | Where the *webview* reaches the sidecar, via `vscode.env.asExternalUri`. Must be an http(s) URL. |
+| `csp_source` | no | `webview.cspSource`. Validated more laxly than the rest, since spaces and single quotes are legal CSP grammar. |
+| `vendor_script`, `vendor_style` | yes | Webview URIs for the browser libraries. Sent with `append`, read with `getlist`, because **order is load order**. |
+
+Flask derives `origin`, `token`, `token_header` and `script_hash` itself rather than
+accepting them from the caller.
+
+### 3. Host ↔ webview: `postMessage`
+
+The only channel between Node and the browser frame — no shared memory, no filesystem, no
+HTTP. Host side: `panel.webview.postMessage()` and `.onDidReceiveMessage()`. Webview side:
+`acquireVsCodeApi()` once in `webviewInit.js`, then `.postMessage()` and a `window`
+`message` listener.
+
+Payloads go through the structured clone algorithm, so they must be plain data — strings,
+numbers, arrays and object literals survive; functions, `Error`s, DOM nodes and class
+instances do not. Every message carries a `type` discriminator.
+
+| Direction | Message | Payload | Sent when |
+| --- | --- | --- | --- |
+| host → webview | `documentChanged` | `{ text }` | Once after the panel opens, then on every document change, debounced 300 ms. |
+| host → webview | `cursorMoved` | `{ row, column }` | On `onDidChangeTextEditorSelection`, undebounced, zero-based. |
+| webview → host | `applyPuml` | `{ text }` | A diagram operation produced new source. |
+| webview → host | `setHighlight` | `{ rows }`, zero-based line numbers | The shim's marker table changed. |
+| webview → host | `ready` | `{}` | The page finished booting. |
+
+Four properties of the channel shape the code on both sides. There is **no
+request/response** — no ids, no acks, no replies — which is why the write-back loop has to be
+terminated by [comparing values](#why-the-write-back-loop-terminates). **Unknown types are
+silently ignored**, both handlers being `if`/`else if` with no `else`, so adding a message
+type is backwards-compatible but a typo in one end fails quietly. **Delivery starts only
+once the receiver is listening**, which is the entire reason `ready` exists. And nothing is
+authenticated or reported: the channel is private to the panel by VS Code's guarantee, and
+posting to a disposed panel is a no-op rather than an error.
+
+### 4. Webview → sidecar: HTTP
+
+The app's own unmodified traffic — the same calls `index.html` makes. `fetchShim.js` adds
+exactly two things in flight: a relative URL becomes `base + path`, and every request gets
+the token header.
+
+All 79 POST routes take the same envelope:
+
+```
+POST <base><route>
+Content-Type: application/json
+X-PlantUML-Token: <token>
+
+{ "plantuml": "<the entire .puml source>",
+  "svg":      "<the currently rendered SVG>",
+  "svgelement": "<outerHTML of the clicked element>",
+  …operation-specific fields, e.g. "newname" }
+```
+
+Note what is *not* there: no file path, no document uri, no revision, no session id. The
+whole source goes out and the whole source comes back, which is why one sidecar can serve
+every panel without knowing that panels exist.
+
+Responses are **not** uniform, and the split follows blueprint rather than what the route
+does:
+
+| Routes | Content type | Body |
+| --- | --- | --- |
+| `activity/`, 46 of 48 | `text/html`, a bare Flask `str` | The whole new source, or the queried value. Read with `response.text()` — not JSON, and not a diff. |
+| `activity/`: `/getActivityPositions`, `/checkDuplicateArrow` | `application/json` | The blueprint's two exceptions: a row table, and `{"result", "type"}`. |
+| `sequence/`, all 23 | `application/json` | Always an envelope — `{"plantuml": …}` for a rewrite, `{"name": …}` or `{"text", "color"}` or a row table for a query. `/addGroup` and `/addBox` can answer `400` + `{"error": …}`. |
+| `shared/`: `/render`, `/encode`, `/decode`, the four title routes | `text/html` | Bare text; `/render` returns the SVG itself. |
+| `shared/`: `/renderPNG` | `image/png` | Bytes, as an attachment. |
+
+That inconsistency is historical rather than a rule being followed: the newer sequence
+blueprint standardised on JSON envelopes and the activity blueprint never did. The frontend
+matches it correctly today, but it is a trap when adding a route, because reading a JSON
+response with `.text()` yields a JSON *string* that flows onward into the document without
+erroring anywhere.
+
+Two things sit outside that shape. `GET /static/...` is issued by `<script src>` and
+`<link href>`, so it carries no token and is exempted by endpoint name (see
+[Token authentication](#token-authentication)). And every request here is cross-origin,
+since the page origin is `vscode-webview://<uuid>`, so the browser preflights anything
+carrying JSON or the token header; `install_cors()` answers with
+`Access-Control-Allow-Origin: *`, `Allow-Headers: Content-Type, X-PlantUML-Token`,
+`Allow-Methods: GET, POST, OPTIONS` and `Max-Age: 7200`.
+
+A bad or missing token gets `403` + `{"error": "invalid or missing token"}`. The app's code
+never anticipated a 403, so it surfaces as a failed render rather than a message — check the
+webview devtools network tab.
+
+### 5. Sidecar → PlantUML: subprocess
+
+One `java` process per render, from `shared/render.py`, source in on stdin and image out on
+stdout:
+
+```
+java -DPLANTUML_LIMIT_SIZE=16384 -jar $PLANTUML_JAR -pipe -tsvg
+java -DPLANTUML_LIMIT_SIZE=16384 -jar $PLANTUML_JAR -pipe -tpng -Sdpi=300
+```
+
+`PLANTUML_JAR` is read per call rather than captured at import, which is precisely what makes
+the `PLANTUML_GUI_JAR_OVERRIDE` indirection work.
+
+### 6. Host ↔ the document
+
+Not cross-process, but the link that closes the loop. The host reads with
+`document.getText()` and writes with a `WorkspaceEdit` replacing the full range — one edit,
+so one undo step, so Ctrl+Z undoes a diagram click. It is the **only** write path to the
+file; neither the webview nor the sidecar can reach it.
 
 ## Startup sequence
 
@@ -166,20 +324,18 @@ Flask `app` object. Running the web app normally is unaffected.
 ### Port handshake
 
 The child binds port `0` — "any free port" — via `make_server`, which binds immediately, so
-the port is known rather than guessed. It prints `PLANTUML_GUI_PORT=<port>` with
-`flush=True`, and `buildEnv()` sets `PYTHONUNBUFFERED=1`, because Python block-buffers
-stdout when it is a pipe rather than a terminal.
+the port is known rather than guessed at or raced for.
 
-`readPortLine()` buffers stdout, splits on newlines and keeps only complete lines (a chunk
-boundary can fall mid-number), and scans for the prefix rather than reading the first line —
-anything printed during import would otherwise be mistaken for the port.
+Two details in `readPortLine()` are not incidental. It keeps only complete lines, because a
+pipe chunk boundary can fall mid-number; and it scans for the prefix rather than reading the
+first line, because anything printed during import would otherwise be mistaken for the port.
 
 ### Readiness
 
-A bound socket is not a serving one. `waitForHealthy()` polls `GET /health` every 100 ms
-until it answers or the 30 s deadline passes, so no caller ever sends a real request to a
-socket that is bound but not yet serving. `/health` is registered by the sidecar only, so
-the web app's route table is unchanged.
+A bound socket is not a serving one, which is why the parent polls `/health` instead of
+trusting the port line — no caller ever sends a real request to a socket that is bound but
+not yet answering. `/health` is registered by the sidecar only, so the web app's route table
+is unchanged.
 
 ### Token authentication
 
@@ -207,11 +363,12 @@ Two exemptions:
 The webview's page origin is `vscode-webview://<uuid>`, so every request from it is
 cross-origin — unlike the web app, where page and Flask share an origin. The client sends
 `Content-Type: application/json` and a token header, neither CORS-safelisted, so the browser
-preflights and blocks the real request unless the response permits it. `install_cors()`
-answers with `Access-Control-Allow-Origin: *` because the webview's uuid changes per panel.
-That is not a hole: it grants any page permission to *attempt* a request, while the token
-check still rejects anything that cannot produce the secret. `*` also bars the browser from
-sending cookies, and this server has no cookie or session state.
+preflights and blocks the real request unless the response permits it.
+
+The allowed origin is `*`, because the webview's uuid changes per panel. That is not a hole:
+it grants any page permission to *attempt* a request, while the token check still rejects
+anything that cannot produce the secret. `*` also bars the browser from sending cookies, and
+this server has no cookie or session state.
 
 ### Jar override
 
@@ -250,21 +407,11 @@ asks for it over HTTP.
 The result: no HTML in the extension, no copy of the frontend, no build or sync step, and no
 way for the webview to run a stale copy of a file edited in `src/plantuml_gui/`.
 
-### What the extension passes
+### Why the parameters are validated, not escaped
 
-Flask cannot know three things about a VS Code webview, so they arrive as query parameters
-on `/webview`:
-
-- **`base`** — where the *webview* should reach the sidecar. Not derivable from the request:
-  the extension host fetches the page over loopback, but under Remote-SSH, WSL or Codespaces
-  the webview runs elsewhere, so `vscode.env.asExternalUri()` is asked to translate it.
-- **`csp_source`** — `webview.cspSource`, the origin the vendor-library URIs live on. Per
-  panel.
-- **`vendor_script` / `vendor_style`** — repeated, order significant (sent with `append`,
-  read with `getlist`).
-
-All of these are reflected into the document, so `serve.py` validates rather than escapes
-them. Jinja escapes quotes, but that does not help here: a semicolon inside a CSP source
+The four query parameters themselves are listed under *Host → sidecar: HTTP* in
+[Interfaces](#interfaces). What matters here is that all of them are reflected into the
+document, so `serve.py` validates rather than escapes them. Jinja escapes quotes, but that does not help here: a semicolon inside a CSP source
 starts a new directive of the caller's choosing, and whitespace splits one value into
 several. `csp_source` gets a laxer rule than the rest — spaces and single quotes are
 legitimate CSP grammar, and a compound `cspSource` is what VS Code Remote-SSH produces.
@@ -375,19 +522,9 @@ The context menus need no attention here: they are wired by `checkDiagramType()`
 
 ## Message protocol
 
-Five message types, structured-cloneable JSON only.
-
-Host → webview:
-
-- `documentChanged {text}` — once immediately after load, then on every document change,
-  debounced 300 ms.
-- `cursorMoved {row, column}` — from `onDidChangeTextEditorSelection`.
-
-Webview → host:
-
-- `applyPuml {text}` — a diagram operation produced new source.
-- `setHighlight {rows}` — the rows currently marked `hover` in the shim's marker table.
-- `ready` — logged to the output channel.
+The five message types, their payloads and the guarantees the channel does and does not give
+are specified under *Host ↔ webview* in [Interfaces](#interfaces). What follows is the part
+that the message list does not show: why the two directions do not chase each other forever.
 
 ### Why the write-back loop terminates
 
