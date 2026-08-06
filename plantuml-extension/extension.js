@@ -31,12 +31,16 @@
 // webview calls directly; this file owns the document and is its only writer.
 // The webview's page is rendered by that same backend and fetched by
 // src/webviewPage.js.
+const path = require('path');
 const vscode = require('vscode');
-const { startSidecar, SidecarStartError } = require('./src/sidecar');
+const { startSidecar, SidecarStartError, TOKEN_HEADER } = require('./src/sidecar');
 const { resolvePlantUmlJarPath, PlantUmlConfigError } = require('./src/plantumlJar');
 const { fetchWebviewPage, vendorRoot, WebviewPageError } = require('./src/webviewPage');
 
 const LIVE_UPDATE_DEBOUNCE_MS = 300;
+
+/** Generous because rendering shells out to java, once per request. */
+const RENDER_PNG_TIMEOUT_MS = 60000;
 
 /**
  * Line highlight for the diagram -> editor direction: hovering an element in
@@ -231,6 +235,8 @@ async function openDiagramPanel(context) {
 			}
 		} else if (message.type === 'setHighlight') {
 			applyHighlight(document, message.rows);
+		} else if (message.type === 'savePng') {
+			await savePng(document, active);
 		} else if (message.type === 'ready') {
 			outputChannel?.appendLine('[webview] frontend loaded');
 		}
@@ -284,6 +290,91 @@ async function applyPuml(document, text) {
 	if (!(await vscode.workspace.applyEdit(edit))) {
 		vscode.window.showErrorMessage('Could not write the diagram change into the document.');
 	}
+}
+
+/**
+ * Render the document as a PNG and write it wherever the user chooses.
+ *
+ * The webview posts a bare `savePng`; the source comes from the document,
+ * which this process owns and which every diagram edit is written into before
+ * a render can be asked for.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {import('./src/sidecar').Sidecar} sidecar a running sidecar
+ */
+async function savePng(document, sidecar) {
+	let response;
+
+	try {
+		response = await fetch(`${sidecar.baseUrl}renderPNG`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				[TOKEN_HEADER]: sidecar.token
+			},
+			body: JSON.stringify({ plantuml: document.getText() }),
+			signal: AbortSignal.timeout(RENDER_PNG_TIMEOUT_MS)
+		});
+	} catch (err) {
+		vscode.window.showErrorMessage(`Could not render the diagram as a PNG: ${err.message}`);
+		return;
+	}
+
+	if (!response.ok) {
+		vscode.window.showErrorMessage(
+			`The PlantUML backend returned ${response.status} for the PNG render.`
+		);
+		return;
+	}
+
+	// An empty body is a *successful* response here: the backend renders with
+	// check=False and returns java's stdout whatever happened, so a jar that
+	// failed to run arrives as 200 with nothing in it. Hence the length check
+	// below, which keeps a zero-byte .png off disk.
+	const png = new Uint8Array(await response.arrayBuffer());
+
+	if (png.byteLength === 0) {
+		vscode.window.showErrorMessage(
+			'The PlantUML backend produced an empty PNG. Check the PlantUML Interactive output for the renderer error.'
+		);
+		return;
+	}
+
+	const target = await vscode.window.showSaveDialog({
+		defaultUri: defaultPngUri(document),
+		filters: { 'PNG image': ['png'] }
+	});
+
+	// Undefined when the dialog was cancelled, which is not a failure.
+	if (!target) {
+		return;
+	}
+
+	try {
+		await vscode.workspace.fs.writeFile(target, png);
+	} catch (err) {
+		vscode.window.showErrorMessage(`Could not write ${target.fsPath}: ${err.message}`);
+	}
+}
+
+/**
+ * Where the save dialog should open: beside the document, under its own name.
+ *
+ * An unsaved document has no directory to sit beside -- its uri is
+ * `untitled:Untitled-1` -- so it falls back to the workspace root, and then to
+ * VS Code's own choice.
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {vscode.Uri | undefined}
+ */
+function defaultPngUri(document) {
+	if (document.uri.scheme === 'file') {
+		const { dir, name } = path.parse(document.uri.fsPath);
+		return vscode.Uri.file(path.join(dir, `${name}.png`));
+	}
+
+	const folder = vscode.workspace.workspaceFolders?.[0];
+	return folder && vscode.Uri.joinPath(folder.uri, 'diagram.png');
 }
 
 /**

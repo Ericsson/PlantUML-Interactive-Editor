@@ -86,6 +86,51 @@ suite('extension: activation', () => {
 	});
 });
 
+suite('extension: message protocol', () => {
+	test('handles every message type the webview posts', () => {
+		// The two ends live in different packages and are kept in step by
+		// hand; this is the check that they still are. See "Cross-runtime
+		// contracts" in docs/extension.md. It matters because the channel has
+		// no acks and both handlers are if/else-if chains, so a type the page
+		// posts and the host misses is dropped in silence -- the button simply
+		// does nothing.
+		const posted = new Set();
+
+		for (const source of readWebviewShims()) {
+			for (const [, type] of source.matchAll(/post(?:Message)?\(\{\s*type:\s*'([^']+)'/g)) {
+				posted.add(type);
+			}
+		}
+
+		const [, extensionSource] = readSources().find(([relative]) => relative === 'extension.js');
+		const handled = new Set(
+			[...extensionSource.matchAll(/message\.type === '([^']+)'/g)].map(([, type]) => type)
+		);
+
+		assert.ok(posted.has('savePng'), 'the shims no longer post savePng');
+		assert.deepStrictEqual(
+			[...posted].filter((type) => !handled.has(type)),
+			[],
+			'posted by the webview, not handled by the host'
+		);
+	});
+});
+
+/**
+ * @returns {string[]} the contents of the webview-side shims, which live in
+ *   the Python package rather than here; see the header of fetchShim.js.
+ */
+function readWebviewShims() {
+	const fs = require('fs');
+	const path = require('path');
+	const shims = path.join(__dirname, '..', '..', 'src', 'plantuml_gui', 'static', 'vscode');
+
+	return fs
+		.readdirSync(shims)
+		.filter((name) => name.endsWith('.js'))
+		.map((name) => fs.readFileSync(path.join(shims, name), 'utf-8'));
+}
+
 /**
  * @returns {[string, string][]} every source file the extension ships, as
  *   [path relative to the extension root, contents].

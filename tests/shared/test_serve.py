@@ -235,6 +235,36 @@ def test_webview_page_supplies_the_ids_the_frontend_dereferences(webview_app):
         assert page(f"#{element_id}"), f"#{element_id} is missing from the page"
 
 
+def test_webview_page_gets_the_same_toolbar_as_index(webview_app):
+    """Both pages render partials/diagram_toolbar.html, and diagram-toolbar.js
+    dereferences these ids without a null check on both -- so a button that
+    reaches one page and not the other throws there and takes panzoom with it."""
+    page = webview_page(webview_app)
+    index = PyQuery(
+        webview_app.jinja_env.get_template("index.html").render(
+            script_hash="x", version="0"
+        )
+    )
+
+    buttons = [element.attrib["id"] for element in index(".diagram-toolbar button")]
+    assert buttons, "index.html has no toolbar to share"
+
+    for element_id in buttons:
+        assert page(
+            f".diagram-toolbar button#{element_id}"
+        ), f"#{element_id} is missing"
+
+
+def test_webview_page_does_not_ask_for_tooltips_it_cannot_show(webview_app):
+    """tippy.js binds [data-tippy-content] and the extension vendors no tippy,
+    so the shared macro takes the attribute name: index.html gets tippy's, this
+    page gets title. Passing the wrong one leaves buttons silent on hover."""
+    page = webview_page(webview_app)
+
+    assert not page("[data-tippy-content]")
+    assert page(".diagram-toolbar button[title]"), "the buttons have no tooltip at all"
+
+
 def test_webview_page_includes_the_menus_from_the_same_partials_as_index(webview_app):
     """The context menus are ~95 of the ids the frontend needs. Sharing the
     partials with index.html is what keeps them from drifting apart."""

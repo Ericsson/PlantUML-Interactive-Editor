@@ -37,8 +37,8 @@ app, running as-is.
 │ │ sidecar.js      spawn · handshake  │  ①   │   shims   fetchShim · editorShim ·          │  │
 │ │                 token · /health    │◄────►│           webviewInit                       │  │
 │ │ plantumlJar.js  validate the jar   │      │   app     script.js · title.js ·            │  │
-│ │ webviewPage.js  fetch the page     │      │           hover-highlight ·                 │  │
-│ │                                    │      │           sequence-*.js · activity.js       │  │
+│ │ webviewPage.js  fetch the page     │      │           hover-highlight · activity.js ·   │  │
+│ │                                    │      │           sequence-*.js · diagram-toolbar   │  │
 │ │ ★ the ONLY writer of the document  │      │   css     styles.css · webview.css          │  │
 │ │                                    │      │                                             │  │
 │ │ owns: TextDocument · WorkspaceEdit │      │ shipped in the extension (node_modules):    │  │
@@ -46,8 +46,8 @@ app, running as-is.
 │ │                                    │      │           diff   — no Ace, no Popper        │  │
 │ └────────────────────────────────────┘      └─────────────────────────────────────────────┘  │
 │         │              │                                        │                            │
-│      ②  │ spawn +   ③  │ GET /webview                        ④  │ the app's own HTTP,        │
-│         │ stdio        │ once per panel                         │ every interaction          │
+│      ②  │ spawn +   ③  │ GET /webview once per panel,           │ the app's own HTTP,        │
+│         │ stdio        │ POST /renderPNG on save                │ every interaction          │
 └─────────┼──────────────┼────────────────────────────────────────┼────────────────────────────┘
           ▼              ▼                                        ▼
 ┌─ SIDECAR · Python · Flask ───────────────────────────────────────────────────────────────────┐
@@ -56,7 +56,7 @@ app, running as-is.
 │ X-PlantUML-Token required on every request but GET /static/*                                 │
 │                                                                                              │
 │ serve.py         ephemeral port · /health · /webview · token auth · CORS · jar override      │
-│ templates/       webview.html · app_scripts · activity_menus · sequence_menus                │
+│ templates/       webview.html · app_scripts · diagram_toolbar · activity/sequence_menus      │
 │ static/          every script and stylesheet the page loads, incl. vscode/ shims             │
 │ 79 POST routes   56 rewrite the source   /editText · /addNote · /deleteActivity …            │
 │                  23 query or render      /getText · /getActivityPositions · /render …        │
@@ -78,15 +78,16 @@ The five edges, each specified in full under [Interfaces](#interfaces):
 | --- | --- | --- | --- |
 | ① | host ↔ webview | `postMessage` | continuous |
 | ② | host → sidecar | `spawn` + stdio | once per window |
-| ③ | host → sidecar | one HTTP `GET /webview` | once per panel |
+| ③ | host → sidecar | HTTP: `GET /webview`, `POST /renderPNG` | once per panel; once per PNG saved |
 | ④ | webview → sidecar | the frontend's own HTTP | every interaction |
 | ⑤ | sidecar → java | `subprocess` | once per render |
 
 Two independent channels, and the split is the whole design. The webview talks **HTTP to
 Python** for everything about the diagram, and **`postMessage` to Node** for everything about
-the document. Node never proxies ④ — its only HTTP request is ③, made once, before the page
-exists. Python never learns that a file is involved: every route takes the full source in the
-request body and returns the full source back.
+the document. Node never proxies ④ — its own HTTP is ③: the page fetch, made once before the
+page exists, and the PNG render, which is Node's only because a webview cannot receive a file.
+Python never learns that a file is involved: every route takes the full source in the request
+body and returns the full source back.
 
 Note where the frontend lives. Only the browser libraries come from the extension; the page,
 the shims, the CSS and the app's own scripts are all served by the sidecar out of
@@ -113,10 +114,12 @@ Python side, `src/plantuml_gui/`:
 | `serve.py` | The sidecar entry point. Same Flask `app`, different startup: ephemeral port, `/health`, `/webview`, token auth, CORS, jar override. |
 | `templates/webview.html` | The page the panel loads. Standalone, not a child of `index.html`. |
 | `templates/partials/app_scripts.html` | The frontend's script list, shared by `index.html` and `webview.html`. |
+| `templates/partials/diagram_toolbar.html` | The toolbar markup, shared by the same two pages; takes the attributes they differ on. |
+| `static/diagram-toolbar.js` | Panzoom and the zoom buttons, for both pages. Loads at the end of `<body>`, not with `app_scripts`. |
 | `static/vscode/fetchShim.js` | Rewrites the app's relative `fetch()` URLs and attaches the token. |
 | `static/vscode/editorShim.js` | An Ace-shaped object backed by the VS Code document. |
 | `static/vscode/webviewInit.js` | Boots the reused app code inside the webview. |
-| `static/vscode/webview.css` | Hides the DOM elements that exist only to satisfy the app's code. |
+| `static/vscode/webview.css` | Lays out the toolbar and the diagram, repaints them in the editor's theme, and hides the DOM elements that exist only to satisfy the app's code. |
 
 Nothing under `static/vscode/` is loaded by the web app at `/`. It lives in this package
 rather than in the extension because it is `<script src>` on a page Flask renders — serving
@@ -162,13 +165,22 @@ naming the setting to fix.
 
 ### 2. Host → sidecar: HTTP
 
-Two requests in the extension's whole lifetime — Node is not a proxy for the frontend. Both
-carry `X-PlantUML-Token`.
+Node is not a proxy for the frontend: it makes three requests, two of them once each per
+panel, and every interaction with the diagram goes straight from the webview to the sidecar
+instead. All three carry `X-PlantUML-Token`.
 
 | Request | When | Response | On failure |
 | --- | --- | --- | --- |
 | `GET /health` | Every 100 ms after the port line until it answers or 30 s passes; 2 s per attempt. | `{"status": "ok"}` — the body is never read, only the fact that something answered. | Not-ready-yet; the deadline is what gives up. |
 | `GET /webview?…` | Once per panel, 5 s timeout. | `text/html`, assigned verbatim to `panel.webview.html`. | `400` + `{"error": …}` on a bad parameter, `WebviewPageError` otherwise. |
+| `POST /renderPNG` | On `savePng`, 60 s timeout — the render shells out to java. | `image/png` bytes, written to the file the save dialog returns. | Notification; nothing is written. |
+
+The third one is the exception that proves the rule. It is the frontend's own route, called
+with the frontend's own envelope, and the webview would be the natural caller — but a webview
+has no filesystem and blocks downloads, so the bytes have to arrive in this process no matter
+who fetches them. Asking here costs one request; asking there would cost the same request
+plus a base64 copy of a 300-dpi image across the `postMessage` boundary. See
+[Saving a PNG](#saving-a-png).
 
 The `/webview` query string is the whole of what the extension tells Flask about the panel:
 
@@ -198,6 +210,7 @@ instances do not. Every message carries a `type` discriminator.
 | host → webview | `cursorMoved` | `{ row, column }` | On `onDidChangeTextEditorSelection`, undebounced, zero-based. |
 | webview → host | `applyPuml` | `{ text }` | A diagram operation produced new source. |
 | webview → host | `setHighlight` | `{ rows }`, zero-based line numbers | The shim's marker table changed. |
+| webview → host | `savePng` | `{}` | The toolbar's PNG button was clicked. Carries no source: the host renders from the document. |
 | webview → host | `ready` | `{}` | The page finished booting. |
 
 Four properties of the channel shape the code on both sides. There is **no
@@ -449,9 +462,11 @@ Three libraries `index.html` loads are deliberately absent:
   through Bootstrap's own JS. The page uses Bootstrap for modals, which do not need it, and
   the context menus are `.dropdown-menu` markup positioned and toggled by the app's own code
   rather than by `data-toggle="dropdown"`. The one `data-toggle="dropdown"` in the codebase
-  is on `index.html`'s toolbar, which this page does not have.
-- **tippy.js** — only ever bound to `[data-tippy-content]`, which is exclusively
-  `index.html`'s toolbar buttons.
+  is on `index.html`'s global bar, which this page does not have.
+- **tippy.js** — only ever bound to `[data-tippy-content]`. This page shares its toolbar markup
+  with `index.html`, so the shared macro takes the attribute name as an argument: the buttons
+  carry plain `title` tooltips here, and a test asserts the page requests no tooltip it cannot
+  show.
 
 ### DOM the app assumes
 
@@ -459,6 +474,35 @@ Three libraries `index.html` loads are deliberately absent:
 `webview.css`. They exist because the app's code dereferences those ids without null checks;
 one missing id throws during setup and kills every interaction while the diagram still
 renders.
+
+The toolbar's four ids — `#zoom-in`, `#zoom-out`, `#zoom-fit`, `#png` — look like more of the
+same but are not. The app's `buttonEventListeners()` binds `#png` too, and this page never
+calls it (see [`webviewInit.js`](#webviewinitjs)); these are the page's own ids, bound by
+`webviewInit.js` to its own handlers. They are dereferenced without a null check for the same
+reason, so the same failure mode applies.
+
+### The toolbar
+
+Shared with `index.html`, not copied from it, in both halves: the markup is the
+`diagram_toolbar` macro in `partials/diagram_toolbar.html`, and the three zoom buttons are
+wired by `static/diagram-toolbar.js`, which both pages load. That code used to be inline in
+`index.html`; it moved into a file precisely because this page cannot run an inline script.
+It is not in `app_scripts.html` with the rest of the frontend, because unlike those it reads
+the DOM as it runs and so has to load at the end of `<body>` rather than from `<head>`.
+
+The macro takes the two arguments the pages differ on. `tooltip_attr` is an attribute *name*:
+`data-tippy-content` for `index.html`, `title` here, for the reason under
+[Browser libraries](#browser-libraries). `png_tooltip` differs because `#png` is the one
+button whose behaviour is not shared at all — see [Saving a PNG](#saving-a-png) — so each page
+wires it separately, `index.html` through `buttonEventListeners()` and this page through
+`webviewInit.js`.
+
+What is genuinely webview-only is the CSS. `webview.css` changes two things: `body` becomes a
+flex column with the diagram as the growing item — replacing `#colb-container`'s
+`position: absolute; inset: 0`, which assumed the diagram was the whole panel — and the
+palette tokens are redefined *on the toolbar* in terms of `--vscode-*`. Scoped there rather
+than on `:root` because `tokens.css` is a fixed light theme that the context menus read too;
+overriding globally would repaint them.
 
 ## The shims
 
@@ -507,22 +551,27 @@ It deliberately does not call the web app's own bootstrap:
 
 - `initeditor()` builds an Ace instance and, finding no `?hash` in the URL, calls
   `setDemo()`, which would overwrite the user's file with the demo diagram.
-- `addUtilEventListeners()` calls `buttonEventListeners()`, which binds the web toolbar
-  (New/Undo/Save/PNG). Those buttons do not exist here, and `addEventListener` on `null`
-  throws.
+- `addUtilEventListeners()` calls `buttonEventListeners()`, which binds the web app's global
+  bar (New/Undo/Save/PNG). Most of those buttons do not exist here, and `addEventListener` on
+  `null` throws. `#png` is the exception and still must not go through it: that handler
+  downloads through an `<a download>`, which a webview blocks. See [Saving a PNG](#saving-a-png).
 
 So the listeners `initeditor()` would have registered are re-registered explicitly —
 `session.on('change')` and `selection.on('changeCursor')` — without which the diagram would
 render once at boot and never again. It then calls `titleEventListeners()`, binds Ctrl+Enter
 for modal submit (Ctrl+Z is deliberately *not* rebound, since every edit is a `WorkspaceEdit`
-and already on VS Code's undo stack), sets up panzoom on `#colb`, and posts `ready`.
+and already on VS Code's undo stack), binds `#png`, and posts `ready`.
+
+`#png` is the one line here that adds behaviour rather than restoring it, and the only part of
+the toolbar this file owns: panning and the zoom buttons are already set up by
+`static/diagram-toolbar.js`, loaded just before it. All it does is post `savePng`.
 
 The context menus need no attention here: they are wired by `checkDiagramType()` during
 `renderPlantUml()`.
 
 ## Message protocol
 
-The five message types, their payloads and the guarantees the channel does and does not give
+The six message types, their payloads and the guarantees the channel does and does not give
 are specified under *Host ↔ webview* in [Interfaces](#interfaces). What follows is the part
 that the message list does not show: why the two directions do not chase each other forever.
 
@@ -565,6 +614,37 @@ webview   applyDocumentText(text) → identical → returns false. Loop ends.
 
 Typing directly in the VS Code editor enters the same flow at
 `onDidChangeTextDocument`, where `applyDocumentText` returns `true` and a re-render follows.
+
+## Saving a PNG
+
+The one feature that runs backwards through the architecture. Everywhere else the webview
+talks to the sidecar and the host only owns the document; here the host does both.
+
+```
+webview   #png clicked → post {savePng}          no payload
+host      POST /renderPNG {plantuml: document.getText()}
+sidecar   routes.py renderpng() → render.py → java -pipe -tpng -Sdpi=300
+sidecar   send_file(image/png) → response.arrayBuffer()
+host      showSaveDialog → workspace.fs.writeFile
+```
+
+Three things about it are deliberate:
+
+- **The message carries no source.** The document is the authority — every diagram edit
+  reaches it through `applyPuml` before a render can be asked for — and the webview's copy is
+  a shim's cache of the same text. Reading it here removes the question of which is newer.
+  It also means the PNG ignores the panel's pan and zoom, and comes out identical to the one
+  the web app's button produces.
+- **An empty body is a failure.** `_create_png_from_uml` runs java with `check=False` and
+  returns its stdout whatever happened, so a jar that could not run arrives as `200` with
+  nothing in it. Writing that leaves a zero-byte `.png` that looks like a save that worked, so
+  the host checks the length before opening the dialog.
+- **A cancelled dialog is not an error.** `showSaveDialog` resolves to `undefined`, and the
+  handler returns without a notification.
+
+The web app's own `#png` handler in `script.js` is never reached: it is registered by
+`buttonEventListeners()`, which `webviewInit.js` does not call. Its approach — a temporary
+`<a download>` — cannot work in a webview at all.
 
 ## Highlighting
 
@@ -626,8 +706,9 @@ Each site carries a comment naming the other.
 | `PLANTUML_GUI_PORT=` | `src/sidecar.js` (`PORT_LINE_PREFIX`) | `serve.py` (`PORT_LINE_PREFIX`) |
 | `X-PlantUML-Token` | `src/sidecar.js` (`TOKEN_HEADER`) | `serve.py` (`TOKEN_HEADER`) |
 | `/webview` | `src/webviewPage.js` (`WEBVIEW_PATH`) | `serve.py` (`WEBVIEW_ROUTE`) |
+| `/renderPNG` | `extension.js` (`savePng`) | `shared/routes.py` (`renderpng`) |
 | `PLANTUML_GUI_TOKEN`, `PLANTUML_GUI_JAR_OVERRIDE` | `src/sidecar.js` (`buildEnv`) | `serve.py` (`TOKEN_ENV`, `JAR_ENV`) |
-| The five message types | `extension.js` | `static/vscode/` shims |
+| The six message types | `extension.js` | `static/vscode/` shims |
 
 One more invariant lives entirely in the page: the script load order in `webview.html` —
 vendor, then shims, then app, then boot. Every step of it is justified in that file.

@@ -45,9 +45,22 @@ body {
     font-family: var(--vscode-font-family);
 }
 
+/* Toolbar above, diagram filling the rest. Those two are the only children
+   that take part: #popup is absolute, the three hidden ids below are
+   display:none, and the menu partials contribute .modals and .dropdown-menus,
+   which are display:none until shown. */
+body {
+    display: flex;
+    flex-direction: column;
+}
+
 #colb-container {
-    position: absolute;
-    inset: 0;
+    flex: 1;
+    /* Lets the item shrink below its content, so a diagram taller than the
+       panel scrolls under the toolbar instead of pushing it off the top. */
+    min-height: 0;
+    /* The containing block #loading-overlay's inset:0 resolves against. */
+    position: relative;
     /* hidden, not auto: panzoom translates #colb, so a scrollbar here would
        fight the drag gesture. */
     overflow: hidden;
@@ -60,6 +73,27 @@ body {
 
 #colb svg {
     max-width: none;
+}
+
+/* toolbars.css keeps the layout; only the palette changes. tokens.css defines
+   these as a fixed light theme (--bg-toolbar is #f0f0f2), so in the editor's
+   theme they become the --vscode-* vars the webview host sets, with fallbacks
+   for the themes that leave one unset.
+
+   Scoped to the toolbar: custom properties inherit, so this reaches its
+   buttons, while the context menus keep the tokens.css values they are drawn
+   with. */
+.diagram-toolbar {
+    --bg-toolbar: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+    --border-color: var(--vscode-panel-border, transparent);
+    --text-primary: var(--vscode-foreground);
+    --btn-hover-bg: var(--vscode-toolbar-hoverBackground, transparent);
+    --btn-active-bg: var(--vscode-toolbar-activeBackground, transparent);
+    --border-hover: transparent;
+    --accent-text: var(--vscode-button-foreground);
+    --accent-bg: var(--vscode-button-background);
+    --accent-border: var(--vscode-button-border, transparent);
+    --accent-hover-bg: var(--vscode-button-hoverBackground, var(--vscode-button-background));
 }
 
 /* The VS Code text editor is the source editor. These three exist only because

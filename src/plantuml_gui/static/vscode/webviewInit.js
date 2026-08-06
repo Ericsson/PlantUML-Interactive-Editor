@@ -37,8 +37,11 @@
 //   - initeditor() builds an Ace instance and, finding no ?hash in the URL,
 //     calls setDemo() -- which would overwrite the user's file with the demo.
 //   - addUtilEventListeners() calls buttonEventListeners(), which binds the web
-//     app's toolbar (New/Undo/Save/PNG...). Those buttons do not exist here, and
-//     getElementById(...).addEventListener on null throws.
+//     app's global bar (New/Undo/Save/PNG...). Most of those buttons do not
+//     exist here, and getElementById(...).addEventListener on null throws.
+//     #png does exist, and this file binds it below to a handler that suits a
+//     webview: the web app's downloads through an <a download>, which a
+//     webview blocks.
 // The context menus themselves are wired by checkDiagramType() during
 // renderPlantUml(), which is why every diagram interaction works without us
 // touching it.
@@ -117,15 +120,12 @@
 		}
 	});
 
-	// Pan and zoom the diagram, as the web app's index.html does.
-	const diagram = document.getElementById('colb');
-	if (window.panzoom && diagram) {
-		const instance = panzoom(diagram, { maxZoom: 3, minZoom: 0.25, bounds: true });
-		// Double-click is an editing gesture here (edit text), so stop panzoom
-		// treating it as zoom-to-point.
-		diagram.addEventListener('dblclick', (event) => event.stopImmediatePropagation());
-		window.panzoomInstance = instance;
-	}
+	// The toolbar's PNG button. Panning and the three zoom buttons come from
+	// static/diagram-toolbar.js, loaded just before this file.
+	//
+	// The message carries no payload: the host renders the PNG from the
+	// document it owns and writes it, being the runtime with a filesystem.
+	document.getElementById('png').addEventListener('click', () => post({ type: 'savePng' }));
 
 	post({ type: 'ready' });
 })();
