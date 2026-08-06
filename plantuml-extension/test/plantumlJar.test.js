@@ -26,11 +26,18 @@ const assert = require('assert');
 const fs = require('fs');
 const vscode = require('vscode');
 
-const { resolvePlantUmlJarPath, PlantUmlConfigError } = require('../src/plantumlRenderer');
+const { resolvePlantUmlJarPath, PlantUmlConfigError } = require('../src/plantumlJar');
 
 const CONFIG_SECTION = 'plantumlInteractive';
 const CONFIG_KEY = 'plantumlJar';
-const SHARED_DEFAULT_JAR_PATH = '/app/vbuild/tools/plantuml/1.2022.5/lib/plantuml.1.2022.5.jar';
+
+// Read from the manifest rather than repeating the literal: the assertion is
+// "the declared default is what you get", and a copy here would keep passing
+// after the manifest changed.
+const SHARED_DEFAULT_JAR_PATH =
+	require('../package.json').contributes.configuration.properties[
+		`${CONFIG_SECTION}.${CONFIG_KEY}`
+	].default;
 
 /**
  * Set the plantumlInteractive.plantumlJar setting for the duration of a
@@ -121,6 +128,22 @@ suite('resolvePlantUmlJarPath', () => {
 		const restore = await setJarSetting('');
 		try {
 			assert.throws(() => resolvePlantUmlJarPath(), PlantUmlConfigError);
+		} finally {
+			await restore();
+		}
+	});
+
+	test('the not-found message names the path and the setting to fix', async () => {
+		const settingPath = '/typo/plantuml.jar';
+		fs.existsSync = () => false;
+
+		const restore = await setJarSetting(settingPath);
+		try {
+			assert.throws(resolvePlantUmlJarPath, (err) => {
+				assert.ok(err.message.includes(settingPath), err.message);
+				assert.ok(err.message.includes('plantumlInteractive.plantumlJar'), err.message);
+				return true;
+			});
 		} finally {
 			await restore();
 		}

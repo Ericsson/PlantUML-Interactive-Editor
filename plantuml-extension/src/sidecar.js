@@ -31,8 +31,6 @@
 // `python -m plantuml_gui.serve` (see src/plantuml_gui/serve.py) and the
 // webview POSTs to it directly, so the web app's frontend code can be reused
 // with only its relative URLs rewritten.
-//
-// See docs/vscode_extension_interactivity.md.
 
 const { spawn } = require('child_process');
 const crypto = require('crypto');
@@ -40,6 +38,10 @@ const vscode = require('vscode');
 
 // Must match PORT_LINE_PREFIX in src/plantuml_gui/serve.py.
 const PORT_LINE_PREFIX = 'PLANTUML_GUI_PORT=';
+
+// Must match TOKEN_HEADER in src/plantuml_gui/serve.py, which answers 403 to
+// anything else. Exported so every caller names the header from one place.
+const TOKEN_HEADER = 'X-PlantUML-Token';
 
 // The sidecar has to boot Python, import Flask, and bind a socket. Slow on a
 // cold filesystem or with an antivirus scanning the interpreter.
@@ -198,7 +200,7 @@ async function waitForHealthy(sidecar, deadline) {
 
 		try {
 			const response = await fetch(`${sidecar.baseUrl}health`, {
-				headers: { 'X-PlantUML-Token': sidecar.token },
+				headers: { [TOKEN_HEADER]: sidecar.token },
 				signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS)
 			});
 			if (response.ok) {
@@ -254,7 +256,15 @@ async function startSidecar(options = {}) {
 	const port = await readPortLine(child, pythonPath, () => stderr);
 	const sidecar = new Sidecar(child, port, token);
 
-	await waitForHealthy(sidecar, Date.now() + STARTUP_TIMEOUT_MS);
+	try {
+		await waitForHealthy(sidecar, Date.now() + STARTUP_TIMEOUT_MS);
+	} catch (err) {
+		// The child bound a port but never answered. Kill it here: no caller
+		// receives a handle to it, so this is the last chance to stop it holding
+		// that port for the life of the editor.
+		sidecar.dispose();
+		throw err;
+	}
 
 	return sidecar;
 }
@@ -338,5 +348,6 @@ module.exports = {
 	readPortLine,
 	Sidecar,
 	SidecarStartError,
-	PORT_LINE_PREFIX
+	PORT_LINE_PREFIX,
+	TOKEN_HEADER
 };

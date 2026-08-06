@@ -23,21 +23,40 @@
 // SOFTWARE.
 
 // VS Code extension lifecycle, commands, document listeners, and webview
-// communication. PlantUML -> SVG rendering itself lives in
-// src/plantumlRenderer.js; webview markup lives in src/webviewContent.js.
+// communication.
+//
+// Rendering lives in the Python backend, which this file runs as a child
+// process (src/sidecar.js) and reaches over HTTP (src/renderClient.js).
+// Webview markup lives in src/webviewContent.js.
 const vscode = require('vscode');
-const {
-	renderPlantUmlToSvg,
-	PlantUmlConfigError,
-	PlantUmlRenderError
-} = require('./src/plantumlRenderer');
+const { startSidecar, SidecarStartError } = require('./src/sidecar');
+const { resolvePlantUmlJarPath, PlantUmlConfigError } = require('./src/plantumlJar');
+const { renderPlantUmlToSvg, PlantUmlRenderError } = require('./src/renderClient');
 const { getWebviewContent } = require('./src/webviewContent');
 
 const LIVE_UPDATE_DEBOUNCE_MS = 300;
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
+/** @type {import('./src/sidecar').Sidecar | undefined} */
+let sidecar;
+/** @type {Promise<import('./src/sidecar').Sidecar> | undefined} */
+let sidecarStarting;
+/** @type {vscode.OutputChannel | undefined} */
+let outputChannel;
+
+/**
+ * Entry point, run the first time the command is invoked.
+ *
+ * @param {vscode.ExtensionContext} context
+ */
 function activate(context) {
+	// Where the backend's stderr goes: Python tracebacks and werkzeug's request
+	// log. The only window into a child that starts but then misbehaves.
+	outputChannel = vscode.window.createOutputChannel('PlantUML Interactive');
+	context.subscriptions.push(outputChannel);
+
+	// The child outlives every panel, so its disposal belongs to the extension.
+	context.subscriptions.push({ dispose: disposeSidecar });
+
 	const disposable = vscode.commands.registerCommand(
 		'plantuml-interactive-editor.openDiagram',
 		() => openDiagramPanel()
@@ -47,11 +66,49 @@ function activate(context) {
 }
 
 /**
- * Open (or focus) the diagram webview panel for the active editor's
- * document, render its current content, and keep the diagram in sync as
- * the document changes.
+ * Start the sidecar if it is not already running, reusing one instance across
+ * panels. Concurrent callers await the same start rather than racing to spawn
+ * two servers.
+ *
+ * @param {string} jarPath validated by the caller, passed to the child's env
+ * @returns {Promise<import('./src/sidecar').Sidecar>}
  */
-function openDiagramPanel() {
+function ensureSidecar(jarPath) {
+	if (sidecar && sidecar.isRunning) {
+		return Promise.resolve(sidecar);
+	}
+
+	if (!sidecarStarting) {
+		sidecarStarting = startSidecar({ jarPath, output: outputChannel })
+			.then((started) => {
+				sidecar = started;
+				// Drop the handle when the child dies, so the next open starts a
+				// fresh one instead of rendering against a dead process forever.
+				started.process.on('exit', () => {
+					if (sidecar === started) {
+						sidecar = undefined;
+					}
+				});
+				return started;
+			})
+			.finally(() => {
+				sidecarStarting = undefined;
+			});
+	}
+
+	return sidecarStarting;
+}
+
+function disposeSidecar() {
+	sidecar?.dispose();
+	sidecar = undefined;
+}
+
+/**
+ * Open a diagram webview panel for the active editor's document, render its
+ * current content, and keep the diagram in sync as the document changes.
+ */
+async function openDiagramPanel() {
 	const editor = vscode.window.activeTextEditor;
 
 	if (!editor) {
@@ -60,6 +117,36 @@ function openDiagramPanel() {
 	}
 
 	const document = editor.document;
+
+	// Checked before anything is spawned: serve.py only warns about a bad jar
+	// on stderr, so catching it here makes it a notification naming the setting,
+	// and skips starting a backend that could not render.
+	//
+	// The path enters the child's environment at spawn time, so a change to the
+	// setting takes effect on the next backend start, not the next render.
+	let jarPath;
+	try {
+		jarPath = resolvePlantUmlJarPath();
+	} catch (err) {
+		vscode.window.showErrorMessage(
+			err instanceof PlantUmlConfigError
+				? err.message
+				: `Unexpected error resolving the PlantUML jar: ${err.message}`
+		);
+		return;
+	}
+
+	let active;
+	try {
+		active = await ensureSidecar(jarPath);
+	} catch (err) {
+		vscode.window.showErrorMessage(
+			err instanceof SidecarStartError
+				? err.message
+				: `Unexpected error starting the PlantUML backend: ${err.message}`
+		);
+		return;
+	}
 
 	const panel = vscode.window.createWebviewPanel(
 		'plantumlInteractiveDiagram',
@@ -75,21 +162,14 @@ function openDiagramPanel() {
 	let debounceTimer;
 
 	const renderAndPost = () => {
-		renderPlantUmlToSvg(document.getText()).then(
+		renderPlantUmlToSvg(active, document.getText()).then(
 			(svg) => {
 				panel.webview.postMessage({ type: 'updateDiagram', svg });
 			},
 			(err) => {
-				panel.webview.postMessage({
-					type: 'renderError',
-					message: describeRenderError(err)
-				});
-				if (err instanceof PlantUmlConfigError) {
-					// Configuration problems are actionable and easy to miss
-					// inside the webview, so also surface them as a
-					// notification rather than failing silently.
-					vscode.window.showErrorMessage(err.message);
-				}
+				const message = describeRenderError(err);
+				panel.webview.postMessage({ type: 'renderError', message });
+				outputChannel?.appendLine(`render failed: ${message}`);
 			}
 		);
 	};
@@ -123,8 +203,10 @@ function describeRenderError(err) {
 	return `Unexpected error rendering PlantUML diagram: ${err.message}`;
 }
 
-// This method is called when your extension is deactivated
-function deactivate() {}
+/** Called when VS Code shuts the extension down; stops the backend with it. */
+function deactivate() {
+	disposeSidecar();
+}
 
 module.exports = {
 	activate,

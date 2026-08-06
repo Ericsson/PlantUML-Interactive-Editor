@@ -23,17 +23,58 @@
 // SOFTWARE.
 
 const assert = require('assert');
-
-// You can import and use all API from the 'vscode' module
-// as well as import your extension to test it
 const vscode = require('vscode');
-// const myExtension = require('../extension');
 
-suite('Extension Test Suite', () => {
-	vscode.window.showInformationMessage('Start all tests.');
+const extension = require('../extension');
 
-	test('Sample test', () => {
-		assert.strictEqual(-1, [1, 2, 3].indexOf(5));
-		assert.strictEqual(-1, [1, 2, 3].indexOf(0));
+const COMMAND_ID = 'plantuml-interactive-editor.openDiagram';
+
+suite('extension: activation', () => {
+	suiteSetup(async () => {
+		// Contributed commands are not in getCommands() until the extension
+		// has been activated, and nothing in a test run triggers that. Find it
+		// by manifest name: there is no publisher field, so the extension id is
+		// not stable enough to look up directly.
+		const self = vscode.extensions.all.find(
+			(candidate) => candidate.packageJSON.name === 'plantuml-editor'
+		);
+		assert.ok(self, 'the extension under test was not loaded');
+		await self.activate();
+	});
+
+	test('exports the lifecycle hooks VS Code calls', () => {
+		assert.strictEqual(typeof extension.activate, 'function');
+		assert.strictEqual(typeof extension.deactivate, 'function');
+	});
+
+	test('registers the declared command', async () => {
+		// The manifest promises it; a rename on one side and not the other
+		// leaves an entry in the palette that does nothing.
+		const declared = require('../package.json').contributes.commands.map((c) => c.command);
+		assert.ok(declared.includes(COMMAND_ID), `not in package.json: ${declared}`);
+
+		const registered = await vscode.commands.getCommands(true);
+		assert.ok(registered.includes(COMMAND_ID), 'command was not registered');
+	});
+
+	test('does not render in Node', () => {
+		// The single-renderer invariant: rendering happens in the sidecar, via
+		// shared/render.py. A second java invocation on this side would drift
+		// from the one whose SVG the backend's ~71 routes parse.
+		const fs = require('fs');
+		const path = require('path');
+		const root = path.join(__dirname, '..');
+
+		const sources = ['extension.js'].concat(
+			fs
+				.readdirSync(path.join(root, 'src'))
+				.filter((name) => name.endsWith('.js'))
+				.map((name) => path.join('src', name))
+		);
+
+		for (const relative of sources) {
+			const source = fs.readFileSync(path.join(root, relative), 'utf-8');
+			assert.ok(!/spawn\(\s*['"]java['"]/.test(source), `${relative} spawns java`);
+		}
 	});
 });
