@@ -49,16 +49,22 @@ def generate_static_js_hash():
 
     The template applies a single ?v=<hash> query string to every script tag,
     so the hash must cover every served JS file (not just script.js) to avoid
-    browsers serving a stale module after it changes. Cached for the life of
-    the process: static files don't change without a restart, so re-reading
-    and re-hashing every JS file on every request to / is wasted work.
+    browsers serving a stale module after it changes. Walks subdirectories too,
+    because static/vscode/ holds the shims the sidecar's page loads. Cached
+    for the life of the process: static files don't change without a restart,
+    so re-reading and re-hashing every JS file on every request to / is wasted
+    work.
     """
     static_dir = shared_bp.static_folder
     hasher = hashlib.sha256()
-    for name in sorted(os.listdir(static_dir)):
-        if name.endswith(".js"):
-            with open(os.path.join(static_dir, name), "rb") as file:
-                hasher.update(file.read())
+    for dirpath, dirnames, filenames in os.walk(static_dir):
+        # Sorted in place so os.walk descends in a stable order; without it the
+        # hash would depend on the filesystem's directory ordering.
+        dirnames.sort()
+        for name in sorted(filenames):
+            if name.endswith(".js"):
+                with open(os.path.join(dirpath, name), "rb") as file:
+                    hasher.update(file.read())
     return hasher.hexdigest()[:8]
 
 

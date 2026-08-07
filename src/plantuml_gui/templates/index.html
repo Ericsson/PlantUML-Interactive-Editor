@@ -25,6 +25,7 @@ SOFTWARE.
 -->
 
 
+{% from "partials/app_scripts.html" import app_scripts %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -51,15 +52,7 @@ SOFTWARE.
     <script src='https://unpkg.com/panzoom@9.4.0/dist/panzoom.min.js'></script>
     <script src="https://unpkg.com/@popperjs/core@2"></script>
     <script src="https://unpkg.com/tippy.js@6"></script>
-    <script src="static/script.js?v={{ script_hash }}"></script>
-    <script src="static/title.js?v={{ script_hash }}"></script>
-    <script src="static/hover-highlight.js?v={{ script_hash }}"></script>
-    <script src="static/sequence-message.js?v={{ script_hash }}"></script>
-    <script src="static/sequence-activation.js?v={{ script_hash }}"></script>
-    <script src="static/sequence-group.js?v={{ script_hash }}"></script>
-    <script src="static/sequence-box.js?v={{ script_hash }}"></script>
-    <script src="static/sequence-operations.js?v={{ script_hash }}"></script>
-    <script src="static/activity.js?v={{ script_hash }}"></script>
+    {{ app_scripts('', script_hash) }}
     <link rel="stylesheet" href="static/styles.css">
 </head>
 
