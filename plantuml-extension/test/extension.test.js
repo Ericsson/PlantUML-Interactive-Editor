@@ -61,20 +61,46 @@ suite('extension: activation', () => {
 		// The single-renderer invariant: rendering happens in the sidecar, via
 		// shared/render.py. A second java invocation on this side would drift
 		// from the one whose SVG the backend's ~71 routes parse.
+		for (const [relative, source] of readSources()) {
+			assert.ok(!/spawn\(\s*['"]java['"]/.test(source), `${relative} spawns java`);
+		}
+	});
+
+	test('does not build the webview page in Node', () => {
+		// The single-page invariant, and the reason this extension carries no
+		// copy of the frontend: serve.py renders the whole document from the
+		// same templates and static files the web app uses. A document built
+		// here is a document that can go stale against them.
 		const fs = require('fs');
 		const path = require('path');
 		const root = path.join(__dirname, '..');
 
-		const sources = ['extension.js'].concat(
+		for (const [relative, source] of readSources()) {
+			assert.ok(!/<!DOCTYPE|<\/html>/i.test(source), `${relative} builds a document`);
+		}
+
+		const templates = fs
+			.readdirSync(path.join(root, 'src'))
+			.filter((name) => name.endsWith('.html'));
+		assert.deepStrictEqual(templates, [], 'src/ should hold no HTML template');
+	});
+});
+
+/**
+ * @returns {[string, string][]} every source file the extension ships, as
+ *   [path relative to the extension root, contents].
+ */
+function readSources() {
+	const fs = require('fs');
+	const path = require('path');
+	const root = path.join(__dirname, '..');
+
+	return ['extension.js']
+		.concat(
 			fs
 				.readdirSync(path.join(root, 'src'))
 				.filter((name) => name.endsWith('.js'))
 				.map((name) => path.join('src', name))
-		);
-
-		for (const relative of sources) {
-			const source = fs.readFileSync(path.join(root, relative), 'utf-8');
-			assert.ok(!/spawn\(\s*['"]java['"]/.test(source), `${relative} spawns java`);
-		}
-	});
-});
+		)
+		.map((relative) => [relative, fs.readFileSync(path.join(root, relative), 'utf-8')]);
+}
