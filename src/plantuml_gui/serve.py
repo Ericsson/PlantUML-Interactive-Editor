@@ -46,9 +46,11 @@ Run with `python -m plantuml_gui.serve`.
 
 import os
 import sys
+from typing import TextIO
 from urllib.parse import urlsplit
 
-from flask import jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
+from flask.typing import ResponseReturnValue
 from werkzeug.serving import make_server
 
 from .app import app
@@ -104,7 +106,7 @@ UNSAFE_IN_VALUE = set("\"'<>;") | set(" \t\r\n\f\v")
 UNSAFE_IN_CSP_SOURCE = set('"<>;') | set("\t\r\n\f\v")
 
 
-def apply_jar_override():
+def apply_jar_override() -> None:
     """Let the parent process choose the PlantUML jar, overriding any .env.
 
     `shared.render` calls `load_dotenv(..., override=True)` at import time, so
@@ -119,7 +121,7 @@ def apply_jar_override():
         os.environ["PLANTUML_JAR"] = jar
 
 
-def install_cors(flask_app):
+def install_cors(flask_app: Flask) -> None:
     """Allow a webview to call this server cross-origin.
 
     The client is a VS Code webview, whose page origin is `vscode-webview://
@@ -137,7 +139,7 @@ def install_cors(flask_app):
     """
 
     @flask_app.after_request
-    def _add_cors_headers(response):
+    def _add_cors_headers(response: Response) -> Response:
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Headers"] = CORS_ALLOW_HEADERS
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
@@ -145,7 +147,7 @@ def install_cors(flask_app):
         return response
 
 
-def install_token_auth(flask_app, token):
+def install_token_auth(flask_app: Flask, token: str | None) -> None:
     """Reject requests that do not carry `token`, if a token is configured.
 
     This server listens on loopback, which is not a trust boundary: any
@@ -158,7 +160,7 @@ def install_token_auth(flask_app, token):
         return
 
     @flask_app.before_request
-    def _require_token():
+    def _require_token() -> ResponseReturnValue | None:
         # A CORS preflight cannot carry the token: browsers strip custom
         # headers from OPTIONS by design, sending them as
         # Access-Control-Request-Headers instead. Rejecting it here fails the
@@ -185,7 +187,7 @@ def install_token_auth(flask_app, token):
         return None
 
 
-def check_jar(stream=sys.stderr):
+def check_jar(stream: TextIO = sys.stderr) -> bool:
     """Warn early if the PlantUML jar is missing or misconfigured.
 
     `shared.render` reads os.environ["PLANTUML_JAR"] per request, so a bad
@@ -221,7 +223,7 @@ def check_jar(stream=sys.stderr):
     return True
 
 
-def install_health_route(flask_app):
+def install_health_route(flask_app: Flask) -> None:
     """Add the readiness probe the parent polls until the server answers.
 
     Registered here rather than on the blueprints so the web app's route table
@@ -229,16 +231,16 @@ def install_health_route(flask_app):
     """
 
     @flask_app.route("/health")
-    def _health():
+    def _health() -> ResponseReturnValue:
         return jsonify({"status": "ok"})
 
 
-def _is_safe_value(value):
+def _is_safe_value(value: str) -> bool:
     """Whether `value` can be rendered into an attribute or the CSP verbatim."""
     return bool(value) and not (UNSAFE_IN_VALUE & set(value))
 
 
-def _is_safe_csp_source(value):
+def _is_safe_csp_source(value: str) -> bool:
     """Whether `value` is safe to render into the CSP meta tag's content attr.
 
     More permissive than _is_safe_value: single quotes (for CSP keywords like
@@ -248,12 +250,12 @@ def _is_safe_csp_source(value):
     return bool(value) and not (UNSAFE_IN_CSP_SOURCE & set(value))
 
 
-def _is_http_url(value):
+def _is_http_url(value: str) -> bool:
     parts = urlsplit(value)
     return parts.scheme in ("http", "https") and bool(parts.netloc)
 
 
-def install_webview_route(flask_app, token):
+def install_webview_route(flask_app: Flask, token: str | None) -> None:
     """Serve the webview its page, complete.
 
     Everything about the document is decided here: the shell markup, the CSP,
@@ -284,7 +286,7 @@ def install_webview_route(flask_app, token):
     """
 
     @flask_app.route(WEBVIEW_ROUTE)
-    def _webview_page():
+    def _webview_page() -> ResponseReturnValue:
         base = request.args.get("base", "")
         csp_source = request.args.get("csp_source", "")
         vendor_scripts = request.args.getlist("vendor_script")
@@ -315,7 +317,7 @@ def install_webview_route(flask_app, token):
         )
 
 
-def main():
+def main() -> int:
     apply_jar_override()
     check_jar()
     install_health_route(app)
