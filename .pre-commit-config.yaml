@@ -33,7 +33,7 @@ repos:
             (jQuery, Bootstrap, diff, panzoom) that index.html loads from CDN;
             the two are unrelated to each other and drift silently if only one
             is bumped.
-        entry: node plantuml-extension/scripts/check-vendor-versions.js
+        entry: python scripts/check_vendor_versions.py
         language: system
         pass_filenames: false
         files: ^(plantuml-extension/package\.json|src/plantuml_gui/templates/index\.html)$
