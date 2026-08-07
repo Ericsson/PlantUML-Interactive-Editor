@@ -41,7 +41,7 @@
   },
   "dependencies": {
     "bootstrap": "4.6.2",
-    "diff": "^8.0.4",
+    "diff": "8.0.3",
     "jquery": "3.7.1",
     "panzoom": "9.4.0"
   },
@@ -55,7 +55,7 @@
     "globals": "^16.5.0"
   },
   "overrides": {
-    "diff": "^8.0.4",
+    "diff": "8.0.3",
     "serialize-javascript": "^7.0.6"
   }
 }
