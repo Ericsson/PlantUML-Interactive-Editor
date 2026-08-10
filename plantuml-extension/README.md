@@ -6,26 +6,52 @@ every change is written back into the document as a single undoable edit.
 
 Internal extension, distributed as a `.vsix`.
 
+## Installing
+
+Two artefacts, because the extension is a thin client: the diagram-rewriting
+logic *and* the frontend both live in the Python backend, which the extension
+runs as a local child process.
+
+| File | What it is |
+| --- | --- |
+| `plantuml-editor-<version>.vsix` | the extension |
+| `plantuml_gui-<version>-py3-none-any.whl` | the backend |
+
+Install both from the same handover. The frontend ships inside the wheel, so a
+newer `.vsix` paired with an older wheel gives you an older UI, and the two
+processes agree on their protocol only when built together.
+
+```bash
+# 1. the backend, in an interpreter of its own
+python3 -m venv ~/.venvs/plantuml
+~/.venvs/plantuml/bin/pip install plantuml_gui-<version>-py3-none-any.whl
+
+# 2. the extension
+code --install-extension plantuml-editor-<version>.vsix
+```
+
+Then set one setting, `plantumlInteractive.pythonPath`, to that interpreter —
+the absolute path, `/home/<user>/.venvs/plantuml/bin/python`, since `~` is not
+expanded. In a remote window it lives under the Settings editor's **Remote**
+tab. Nothing else needs configuring: `plantumlInteractive.plantumlJar` can stay
+empty on a machine that has the shared PlantUML install.
+
+Any interpreter works so long as `import plantuml_gui` succeeds from it; a venv
+just keeps it away from your system packages. `pip` fetches Flask and the other
+runtime dependencies during step 1, so that step needs access to a package
+index.
+
 ## Requirements
 
-Two things have to exist on your machine before the extension can render
-anything.
+**Python 3.10 or newer**, with the wheel above installed into it. There is no
+fallback to whatever `python3` is on `PATH`, because an interpreter found that
+way almost certainly cannot import the package, and the resulting error would
+blame the wrong thing.
 
-**A Python interpreter with the `plantuml-gui` package installed.** The
-extension does not render diagrams itself; it runs that package as a local
-backend. Any interpreter will do as long as the package is importable from it:
-
-```
-pip install /path/to/PlantUML-Interactive-Editor
-```
-
-There is no fallback to whatever `python3` is on PATH, because an interpreter
-found that way almost certainly cannot import the package, and the resulting
-error would blame the wrong thing.
-
-**Java and a `plantuml.jar`.** Rendering shells out to
-`java -jar plantuml.jar`. Inside Ericsson the provisioned install is used
-automatically; elsewhere, point the extension at your own copy.
+**Java, and a `plantuml.jar`.** Rendering shells out to `java -jar
+plantuml.jar`. Inside Ericsson the provisioned install is found automatically;
+elsewhere, point `plantumlInteractive.plantumlJar` at your own copy. Java itself
+is expected on `PATH` and is not checked before use.
 
 ## Settings
 
@@ -103,6 +129,17 @@ npm test         # eslint, then the Mocha suites inside a real VS Code
 
 `npm test` launches an actual editor, so it needs a display — under a headless
 shell, run it with `xvfb-run`.
+
+## Building a release
+
+```bash
+uv build --wheel                            # repo root -> dist/*.whl
+cd plantuml-extension && npm run package    # -> plantuml-editor-<version>.vsix
+```
+
+Build both from the same commit and hand them over together, for the reason
+given under Installing. `uv build` without `--wheel` also writes a source
+archive, which nobody installing the extension needs.
 
 Architecture, the sidecar protocol and the webview contract are documented in
 [`docs/extension.md`](../docs/extension.md).
