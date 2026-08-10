@@ -24,3 +24,16 @@ repos:
     -   id: js-beautify
         files: script\.js
         args: [--end-with-newline] # list of arguments like '--editorconfig', '--end-with-newline', '--wrap-attributes=auto', '--wrap-line-length=120'
+-   repo: local
+    hooks:
+    -   id: check-vendor-versions
+        name: check extension/web-app vendor library versions match
+        description: >-
+            plantuml-extension/package.json vendors the same browser libraries
+            (jQuery, Bootstrap, diff, panzoom) that index.html loads from CDN;
+            the two are unrelated to each other and drift silently if only one
+            is bumped.
+        entry: uv run python scripts/check_vendor_versions.py
+        language: system
+        pass_filenames: false
+        files: ^(plantuml-extension/package\.json|src/plantuml_gui/templates/index\.html)$
