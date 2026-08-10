@@ -31,11 +31,7 @@
 // unchecked bad path first shows up as a 500 on the user's first render.
 //
 // Three sources, most explicit first: the setting, then PLANTUML_JAR, then the
-// shared install path provisioned inside Ericsson. The order used to be
-// undermined by the setting's default *being* that shared path -- `get()`
-// returns the manifest default, so PLANTUML_JAR was unreachable for anyone who
-// never opened Settings. The default is now empty and the shared path is a
-// fallback in config.js, which is where it can be one.
+// shared install path provisioned inside Ericsson.
 //
 // A source that is set but unusable stops resolution rather than falling
 // through to the next one. Falling through is how config comes to look

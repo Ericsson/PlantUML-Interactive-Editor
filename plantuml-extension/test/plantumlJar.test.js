@@ -76,10 +76,9 @@ async function setJarSetting(value) {
 
 suite('jar setting: the manifest', () => {
 	test('declares an empty default', async () => {
-		// The regression guard for the bug this file is mostly about. A
-		// non-empty default is returned by get() even when the user has never
-		// touched the setting, which makes PLANTUML_JAR unreachable and the
-		// shared-path fallback unconditional.
+		// `get()` returns the manifest default whenever a setting is untouched,
+		// so a non-empty default here would make PLANTUML_JAR unreachable for
+		// every user who never opens Settings.
 		const declared =
 			require('../package.json').contributes.configuration.properties[config.JAR_SETTING];
 
@@ -87,8 +86,7 @@ suite('jar setting: the manifest', () => {
 	});
 
 	test('does not name the shared install path', () => {
-		// It belongs in config.js, where it can be a last resort rather than
-		// the value that outranks everything else.
+		// It belongs in config.js, where it ranks below the two explicit knobs.
 		const manifest = JSON.stringify(require('../package.json'));
 
 		assert.ok(!manifest.includes(config.SHARED_JAR_PATH), 'manifest hardcodes the shared path');
@@ -128,8 +126,8 @@ suite('resolvePlantUmlJarPath: precedence', () => {
 	});
 
 	test('the environment variable is used when the setting is untouched', async () => {
-		// The case that was broken: with a non-empty manifest default, get()
-		// returned that default and this env var was never reached.
+		// The untouched case matters on its own: `get()` answers with the
+		// manifest default, and only an empty one lets this env var be reached.
 		const envPath = '/env/plantuml.jar';
 		restoreFs = stubFilesystem([envPath, config.SHARED_JAR_PATH]);
 		process.env[config.JAR_ENV] = envPath;
@@ -198,8 +196,8 @@ suite('resolvePlantUmlJarPath: validation', () => {
 	});
 
 	test('rejects a configured path that is a directory, not a file', async () => {
-		// serve.py's check_jar uses os.path.isfile; this side used existsSync,
-		// so the two disagreed about a directory named plantuml.jar.
+		// Matches os.path.isfile in serve.py's check_jar: a directory named
+		// plantuml.jar passes an existence check and then fails inside java.
 		const directory = '/configured/plantuml.jar';
 		restoreFs = stubFilesystem([], [directory]);
 

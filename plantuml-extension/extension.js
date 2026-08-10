@@ -132,12 +132,10 @@ function disposeSidecar() {
 /**
  * Report a configuration problem, with a way to go and fix it.
  *
- * The message already names the setting, but naming it and leaving the user to
- * find it are different things -- and this extension is installed from a vsix
- * by coworkers who have no reason to know where the Settings UI hides. The
- * button is only offered for errors whose answer really is a setting: a spawn
- * crash or a health timeout gets a plain notification, because sending someone
- * to Settings for those is misdirection.
+ * The message names the setting, but this extension is installed from a vsix by
+ * coworkers who have no particular reason to know where the Settings UI is, so
+ * the notification carries them there. Reserved for failures whose answer is a
+ * setting; see the call sites.
  *
  * @param {string} message
  */
@@ -191,10 +189,10 @@ async function openDiagramPanel(context) {
 	try {
 		active = await ensureSidecar(jarPath);
 	} catch (err) {
-		// Only the config subclass earns the button. A generic SidecarStartError
-		// is a backend that failed to boot -- a missing package, a traceback, a
-		// port that never answered -- and describeStartFailure has already said
-		// what to do about it.
+		// A generic SidecarStartError is a backend that failed to boot -- a
+		// missing package, a traceback, a port that never answered -- and
+		// describeStartFailure has already said what to do about it, which is
+		// not to visit Settings.
 		if (err instanceof PythonConfigError) {
 			await showConfigError(err.message);
 		} else {

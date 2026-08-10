@@ -686,11 +686,10 @@ has a third source, the shared internal install path, which is tried only when n
 the other two is set.
 
 `src/config.js` owns the names: the section, the keys, the dotted ids used in messages, the
-variable names, that fallback path, `normalizePath()` and `isFile()`. It deliberately does
-not own the resolution policy, which lives with `plantumlJar.js` and `sidecar.js` because
-each owns its own error type. Before it existed, setting ids were literals in four files,
-three of which used them only to name a setting in an error message — duplication that
-survives a rename.
+variable names, that fallback path, `normalizePath()` and `isFile()`. Its scope stops there;
+the resolution policy lives with `plantumlJar.js` and `sidecar.js` because each owns its own
+error type. Three of those call sites need an id only to name a setting in an error message,
+which is exactly the kind of literal a rename leaves behind.
 
 Two properties of the resolution are worth stating because the alternatives are tempting:
 
@@ -699,9 +698,10 @@ Two properties of the resolution are worth stating because the alternatives are 
   setting, mistypes it, and the extension renders from something they did not choose. The
   error names the source that supplied the bad path, since the same path means "fix your
   settings" or "fix your `.env`" depending on where it came from.
-- **The jar setting's default is empty.** It used to be the shared install path, and because
-  `get()` returns the manifest default when a setting is untouched, that made `PLANTUML_JAR`
-  unreachable for everyone who never opened Settings, and the shared path unconditional.
+- **The jar setting's default is empty**, and the shared install path lives in `config.js`
+  instead. `get()` answers with the manifest default whenever a setting is untouched, so a
+  path declared there would rank ahead of `PLANTUML_JAR` for everyone who never opens
+  Settings.
 
 Values are trimmed, and one matching pair of surrounding quotes is removed, so a path pasted
 out of a terminal works. `~`, `${workspaceFolder}` and `${env:...}` are *not* expanded: VS

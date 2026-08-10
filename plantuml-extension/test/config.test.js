@@ -47,9 +47,8 @@ suite('config: path normalization', () => {
 	});
 
 	test('leaves an unmatched quote alone', () => {
-		// Deliberate: a half-quoted value is a mistake, and failing with the
-		// quote still in the message says so. Guessing which end to trim would
-		// hide it.
+		// A half-quoted value is a mistake, and keeping the quote in the value
+		// keeps it in the error message. Guessing which end to trim would hide it.
 		assert.strictEqual(config.normalizePath('"/usr/bin/python3'), '"/usr/bin/python3');
 		assert.strictEqual(config.normalizePath('\'/usr/bin/python3"'), '\'/usr/bin/python3"');
 	});
@@ -73,8 +72,8 @@ suite('config: path normalization', () => {
 	});
 
 	test('does not expand ~ or variables', () => {
-		// Out of scope by decision: VS Code does not expand these in values
-		// read with get(), and half-supporting them is worse than not.
+		// VS Code does not expand these in values read with `get()`, so they
+		// reach the filesystem exactly as typed.
 		assert.strictEqual(config.normalizePath('~/plantuml.jar'), '~/plantuml.jar');
 		assert.strictEqual(
 			config.normalizePath('${workspaceFolder}/plantuml.jar'),

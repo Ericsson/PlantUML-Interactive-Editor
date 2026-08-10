@@ -25,15 +25,14 @@
 // The names and shapes of everything the user can configure.
 //
 // One module so that a setting id exists in exactly two places: here and
-// package.json. Before this, ids were string literals in four files, three of
-// which only used them to name the setting in an error message -- the kind of
-// duplication that survives a rename and leaves the user reading advice about
-// a setting that no longer exists.
+// package.json. Three of the callers need an id only to name the setting in an
+// error message, and an id spelled out at each of those sites is one a rename
+// leaves behind, pointing the user at a setting that does not exist.
 //
-// What this module deliberately does *not* own is the resolution policy: which
-// source wins, and what happens when the winner is unusable. That lives with
-// the callers, plantumlJar.js and sidecar.js, because each owns its own error
-// type and its own notion of a usable value. This is values and predicates.
+// Scope is values and predicates. The resolution policy -- which source wins,
+// and what happens when the winner is unusable -- lives with the callers,
+// plantumlJar.js and sidecar.js, because each owns its own error type and its
+// own notion of a usable value.
 
 const fs = require('fs');
 const vscode = require('vscode');
@@ -61,13 +60,12 @@ const JAR_ENV = 'PLANTUML_JAR';
 const PYTHON_ENV = 'PLANTUML_GUI_PYTHON';
 
 /**
- * The provisioned install used inside Ericsson, tried when nothing is
- * configured.
+ * The provisioned install used inside Ericsson.
  *
- * This was the `plantumlJar` default in package.json, which made it win over
- * PLANTUML_JAR for every user who never opened Settings -- `get()` returns the
- * manifest default, so the env var was unreachable. Keeping the path in code
- * lets it be what it was meant to be: a last resort.
+ * Lives here rather than as the setting's manifest default so that it stays a
+ * last resort: `get()` returns the manifest default whenever a setting is
+ * untouched, which would put this path ahead of PLANTUML_JAR for every user who
+ * never opens Settings.
  */
 const SHARED_JAR_PATH =
 	'/app/vbuild/tools/plantuml/1.2022.5/lib/plantuml.1.2022.5.jar';
@@ -87,11 +85,8 @@ const QUOTES = ['"', "'"];
  *
  * Only one matching pair is removed, and only when both ends agree, so a lone
  * quote is left in place to fail loudly rather than being silently reinterpreted.
- * Quotes inside the path are untouched.
- *
- * Intentionally does not expand `~`, `${workspaceFolder}` or `${env:...}`:
- * those look like features the setting supports everywhere once they work
- * anywhere, and VS Code does not expand them in values read with `get()`.
+ * Quotes inside the path are untouched. `~` and `${...}` are literal: VS Code
+ * does not expand them in values read with `get()`.
  *
  * @param {unknown} value
  * @returns {string} the cleaned path, or '' for anything unusable

@@ -53,13 +53,11 @@ const HEALTH_TIMEOUT_MS = 2000;
 class SidecarStartError extends Error {}
 
 /**
- * Thrown when the interpreter is missing or unusable before anything is spawned.
+ * Thrown when the interpreter is missing or unusable, before anything is spawned.
  *
  * A subclass rather than a flag so `extension.js` can tell the one failure the
- * user fixes in Settings apart from the ones they cannot -- a spawn crash or a
- * health timeout gets no "Open Settings" button, because Settings is not where
- * the answer is. Existing `instanceof SidecarStartError` handling still catches
- * it.
+ * user fixes in Settings apart from a spawn crash or a health timeout, while
+ * callers that only know the base class keep catching it.
  */
 class PythonConfigError extends SidecarStartError {}
 
@@ -101,9 +99,9 @@ class Sidecar {
  * plantuml_gui, and spawning it would report the failure against the wrong
  * thing. Failing here names the knob to turn instead.
  *
- * The path is checked before it is spawned, which the jar has always been.
- * Without that check the only report is ENOENT arriving through the child's
- * error event, after a process has been launched and a panel is waiting on it.
+ * The path is checked here so that a mistake is reported against the knob that
+ * caused it, rather than as an ENOENT off the child's error event once a
+ * process has been launched and a panel is waiting on it.
  *
  * See plantuml-extension/README.md for which knob to use when.
  *

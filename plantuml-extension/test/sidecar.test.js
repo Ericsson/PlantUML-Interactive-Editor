@@ -206,8 +206,8 @@ suite('sidecar: interpreter resolution', () => {
 	});
 
 	test('rejects a configured interpreter that does not exist, before spawning', async () => {
-		// Without this the only report is ENOENT off the child's error event,
-		// after a process has been launched and a panel is waiting on it.
+		// The check belongs ahead of the spawn so the report names the knob,
+		// rather than arriving as an ENOENT once a panel is waiting on a child.
 		stubFilesystem([]);
 		delete process.env[config.PYTHON_ENV];
 
