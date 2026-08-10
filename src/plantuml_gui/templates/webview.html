@@ -40,6 +40,7 @@ relative path would resolve to nothing.
 -->
 
 {% from "partials/app_scripts.html" import app_scripts %}
+{% from "partials/diagram_toolbar.html" import diagram_toolbar %}
 <!DOCTYPE html>
 <html lang="en">
 
@@ -92,6 +93,8 @@ relative path would resolve to nothing.
     <span id="version"></span>
     <div id="version-panel"></div>
 
+    {{ diagram_toolbar('title', 'Save diagram as PNG') }}
+
     <div id="colb-container">
         <div id="colb"></div>
         <div id="loading-overlay"></div>
@@ -107,7 +110,9 @@ relative path would resolve to nothing.
                   script.js, which dereferences `ace` at load time (line 46)
                   and would throw mid-parse if the global did not exist yet
       3. app      the frontend, in dependency order
-      4. boot     last, because it assigns script.js's `let editor`
+      4. toolbar  after the markup above and after panzoom, both of which it
+                  reads as it runs
+      5. boot     last, because it assigns script.js's `let editor`
     -->
     {% for src in vendor_scripts %}
     <script src="{{ src }}"></script>
@@ -115,6 +120,7 @@ relative path would resolve to nothing.
     <script src="{{ base }}static/vscode/fetchShim.js?v={{ script_hash }}"></script>
     <script src="{{ base }}static/vscode/editorShim.js?v={{ script_hash }}"></script>
     {{ app_scripts(base, script_hash) }}
+    <script src="{{ base }}static/diagram-toolbar.js?v={{ script_hash }}"></script>
     <script src="{{ base }}static/vscode/webviewInit.js?v={{ script_hash }}"></script>
 </body>
 

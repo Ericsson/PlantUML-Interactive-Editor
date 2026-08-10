@@ -1,0 +1,74 @@
+<!--
+SPDX-License-Identifier: MIT
+
+MIT License
+
+Copyright (c) 2026 Ericsson
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+The bar above the diagram, for the two pages that have one: index.html and the
+extension's webview.html. Laid out by static/css/toolbars.css; the three zoom
+buttons are wired by static/diagram-toolbar.js, which both pages also load.
+
+Two things differ between the pages, and both are arguments.
+
+`tooltip_attr` is the name of an attribute rather than a value. index.html
+passes `data-tippy-content`, which its tippy.js call at the foot of the page
+binds. The webview passes `title`, the tooltip a browser shows on its own,
+since the extension vendors no tippy.
+
+`png_tooltip` follows what #png does on each page: index.html downloads the
+image, the webview asks the extension host to write it. Each page wires that
+button itself; only the three zoom buttons are shared.
+
+(Jinja reads its tags inside HTML comments too, so do not write one here.)
+-->
+
+{% macro diagram_toolbar(tooltip_attr, png_tooltip) -%}
+<div class="diagram-toolbar">
+    <button type="button" id="zoom-out" class="toolbar-btn" {{ tooltip_attr }}="Zoom out">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="7" cy="7" r="5" />
+            <path d="M11 11l3.5 3.5" stroke-linecap="round" />
+            <path d="M5 7h4" />
+        </svg>
+    </button>
+    <button type="button" id="zoom-in" class="toolbar-btn" {{ tooltip_attr }}="Zoom in">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="7" cy="7" r="5" />
+            <path d="M11 11l3.5 3.5" stroke-linecap="round" />
+            <path d="M5 7h4M7 5v4" />
+        </svg>
+    </button>
+    <button type="button" id="zoom-fit" class="toolbar-btn" {{ tooltip_attr }}="Reset zoom">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <path d="M2 5V2h3M11 2h3v3M14 11v3h-3M5 14H2v-3" />
+        </svg>
+    </button>
+    <span class="toolbar-spacer"></span>
+    <button type="button" id="png" class="toolbar-btn toolbar-btn--accent" {{ tooltip_attr }}="{{ png_tooltip }}">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <path d="M8 2v9M5 8l3 3 3-3" />
+            <path d="M3 12v2h10v-2" />
+        </svg>
+        PNG
+    </button>
+</div>
+{%- endmacro %}
