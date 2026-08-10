@@ -30,11 +30,19 @@
 // The check matters because serve.py's check_jar only warns on stderr, so an
 // unchecked bad path first shows up as a 500 on the user's first render.
 //
-// The setting's default value in package.json is a known shared install path,
-// so the jar resolves out of the box on networks where it is provisioned.
+// Three sources, most explicit first: the setting, then PLANTUML_JAR, then the
+// shared install path provisioned inside Ericsson. The order used to be
+// undermined by the setting's default *being* that shared path -- `get()`
+// returns the manifest default, so PLANTUML_JAR was unreachable for anyone who
+// never opened Settings. The default is now empty and the shared path is a
+// fallback in config.js, which is where it can be one.
+//
+// A source that is set but unusable stops resolution rather than falling
+// through to the next one. Falling through is how config comes to look
+// ignored: the user fixes the setting, mistypes it, and the extension renders
+// from a jar they did not choose.
 
-const fs = require('fs');
-const vscode = require('vscode');
+const config = require('./config');
 
 /** Thrown when the PlantUML jar is not configured or not on disk. */
 class PlantUmlConfigError extends Error {}
@@ -42,38 +50,56 @@ class PlantUmlConfigError extends Error {}
 /**
  * Resolve the configured path to plantuml.jar.
  *
- * Looks up the `plantumlInteractive.plantumlJar` setting first, falling back
- * to the PLANTUML_JAR environment variable (the same variable name the Flask
- * app uses) for convenience. Note that `get()` returns the package.json
- * default when the setting is untouched, so the env var is only reached once
- * the setting has been explicitly cleared.
- *
  * @returns {string} Absolute path to plantuml.jar
- * @throws {PlantUmlConfigError} if nothing is configured or the path is absent
+ * @throws {PlantUmlConfigError} if nothing is configured, or if what is
+ *   configured is not a file
  */
 function resolvePlantUmlJarPath() {
-	const configured = vscode.workspace
-		.getConfiguration('plantumlInteractive')
-		.get('plantumlJar');
+	const configured = config.readSetting(config.JAR_KEY);
 
-	const jarPath = configured || process.env.PLANTUML_JAR;
+	if (configured) {
+		return requireFile(configured, `the "${config.JAR_SETTING}" setting`);
+	}
 
-	if (!jarPath) {
+	const fromEnv = config.readEnv(config.JAR_ENV);
+
+	if (fromEnv) {
+		return requireFile(fromEnv, `the ${config.JAR_ENV} environment variable`);
+	}
+
+	if (config.isFile(config.SHARED_JAR_PATH)) {
+		return config.SHARED_JAR_PATH;
+	}
+
+	throw new PlantUmlConfigError(
+		'PlantUML jar path is not configured, and the shared install at ' +
+			`"${config.SHARED_JAR_PATH}" is not available on this machine. Set ` +
+			`"${config.JAR_SETTING}" in your VS Code settings (or the ` +
+			`${config.JAR_ENV} environment variable) to the path of plantuml.jar.`
+	);
+}
+
+/**
+ * Return `candidate` if it is a file, otherwise say which knob produced it.
+ *
+ * Naming the source is the whole point: the same bad path means "fix your
+ * settings" or "fix your .env" depending on where it came from, and the user
+ * cannot tell those apart from the path alone.
+ *
+ * @param {string} candidate
+ * @param {string} source human-readable description of where it came from
+ * @returns {string}
+ * @throws {PlantUmlConfigError}
+ */
+function requireFile(candidate, source) {
+	if (!config.isFile(candidate)) {
 		throw new PlantUmlConfigError(
-			'PlantUML jar path is not configured. Set "plantumlInteractive.plantumlJar" ' +
-				'in your VS Code settings (or the PLANTUML_JAR environment variable) to the ' +
-				'path of plantuml.jar.'
+			`The PlantUML jar configured in ${source} is not a file: "${candidate}". ` +
+				`Check ${source}.`
 		);
 	}
 
-	if (!fs.existsSync(jarPath)) {
-		throw new PlantUmlConfigError(
-			`Configured PlantUML jar was not found at "${jarPath}". Check the ` +
-				'"plantumlInteractive.plantumlJar" setting.'
-		);
-	}
-
-	return /** @type {string} */ (jarPath);
+	return candidate;
 }
 
 module.exports = {
