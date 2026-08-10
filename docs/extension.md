@@ -102,6 +102,7 @@ Node side, `plantuml-extension/`:
 | --- | --- |
 | `package.json` | Manifest: the `plantuml-interactive-editor.openDiagram` command, the two settings, and the browser libraries as runtime dependencies. |
 | `extension.js` | Lifecycle, the command, the webview panel, document listeners, and the message handlers. The only writer of the document. |
+| `src/config.js` | The names and shapes of everything the user can configure: the section, the setting ids, the environment variables, the shared jar fallback, path normalization and the is-it-a-file predicate. No resolution policy. |
 | `src/sidecar.js` | Spawns and supervises the Python child; port handshake, token, health polling, error messages. |
 | `src/plantumlJar.js` | Resolves and validates the jar path before anything is spawned. |
 | `src/webviewPage.js` | Fetches the page from the sidecar and supplies the values Flask cannot know. |
@@ -300,14 +301,17 @@ file; neither the webview nor the sidecar can reach it.
    `PlantUML Interactive` output channel, registers sidecar disposal, and registers the
    command. Nothing is spawned yet.
 2. The command runs `openDiagramPanel()` against the active editor's document.
-3. `resolvePlantUmlJarPath()` resolves the jar from the setting, else `PLANTUML_JAR`, and
-   checks it exists. This happens **before** spawning, because `check_jar()` in `serve.py`
-   only warns on stderr — an unchecked bad path would first appear as a 500 on the user's
-   first render.
+3. `resolvePlantUmlJarPath()` resolves the jar: the setting, else `PLANTUML_JAR`, else the
+   shared internal install, and checks the winner is a file. A source that is set but
+   unusable stops resolution instead of falling through, so a mistyped setting cannot
+   silently render from a different jar. This happens **before** spawning, because
+   `check_jar()` in `serve.py` only warns on stderr — an unchecked bad path would first
+   appear as a 500 on the user's first render.
 4. `ensureSidecar()` starts the child if one is not already running. One sidecar is shared
    by every panel in the window; concurrent callers await the same start rather than racing
    to spawn two servers.
-5. `startSidecar()` resolves the interpreter, generates a per-launch token, and spawns
+5. `startSidecar()` resolves the interpreter the same way (setting, else
+   `PLANTUML_GUI_PYTHON`, checked to be a file), generates a per-launch token, and spawns
    `python -m plantuml_gui.serve`.
 6. The sidecar applies the jar override, warns if the jar is unusable, installs its routes,
    binds an ephemeral port, and prints `PLANTUML_GUI_PORT=<port>` to stdout.
@@ -322,7 +326,10 @@ file; neither the webview nor the sidecar can reach it.
 11. The host posts `documentChanged` with the file's text; the webview renders.
 
 Any failure between steps 3 and 9 becomes a notification naming the setting to change, and
-the panel is disposed rather than left blank.
+the panel is disposed rather than left blank. The two failures whose answer really is a
+setting — an unusable jar and an unusable interpreter — carry an **Open Settings** button
+that opens the Settings UI filtered to `plantumlInteractive`. A backend that failed to boot
+does not: `describeStartFailure()` has already said what to install.
 
 ## The sidecar
 
@@ -666,8 +673,45 @@ render from `/getActivityPositions` and `/getSequencePositions`.
 
 | Setting | Meaning |
 | --- | --- |
-| `plantumlInteractive.plantumlJar` | Absolute path to `plantuml.jar`. Defaults to a shared install path usable only where it is provisioned; clear it to fall back to the `PLANTUML_JAR` environment variable. |
 | `plantumlInteractive.pythonPath` | Absolute path to a Python interpreter that has `plantuml-gui` installed. Required. |
+| `plantumlInteractive.plantumlJar` | Absolute path to `plantuml.jar`. Optional where the shared internal install exists. |
+
+Both are declared `machine-overridable`: they are absolute paths to things installed on one
+machine, so they should neither ride Settings Sync to another nor be committed to a
+repository's `.vscode/settings.json`.
+
+Each has an environment-variable equivalent — `PLANTUML_GUI_PYTHON` and `PLANTUML_JAR`, the
+latter being the same variable the web app reads, so a repo `.env` configures both. The jar
+has a third source, the shared internal install path, which is tried only when neither of
+the other two is set.
+
+`src/config.js` owns the names: the section, the keys, the dotted ids used in messages, the
+variable names, that fallback path, `normalizePath()` and `isFile()`. It deliberately does
+not own the resolution policy, which lives with `plantumlJar.js` and `sidecar.js` because
+each owns its own error type. Before it existed, setting ids were literals in four files,
+three of which used them only to name a setting in an error message — duplication that
+survives a rename.
+
+Two properties of the resolution are worth stating because the alternatives are tempting:
+
+- **A source that is set but unusable stops resolution.** It does not fall through to the
+  next one. Falling through is how configuration comes to look ignored: the user fixes a
+  setting, mistypes it, and the extension renders from something they did not choose. The
+  error names the source that supplied the bad path, since the same path means "fix your
+  settings" or "fix your `.env`" depending on where it came from.
+- **The jar setting's default is empty.** It used to be the shared install path, and because
+  `get()` returns the manifest default when a setting is untouched, that made `PLANTUML_JAR`
+  unreachable for everyone who never opened Settings, and the shared path unconditional.
+
+Values are trimmed, and one matching pair of surrounding quotes is removed, so a path pasted
+out of a terminal works. `~`, `${workspaceFolder}` and `${env:...}` are *not* expanded: VS
+Code does not expand them in values read with `get()`, and supporting them halfway is worse
+than not at all.
+
+Both paths are validated with `statSync().isFile()` — a file, not merely something that
+exists, matching `check_jar()` in `serve.py` — before the backend is spawned. For the jar
+that avoids a 500 on the first render; for the interpreter it avoids launching a process
+just to learn its path was wrong.
 
 Nothing is guessed. `resolvePythonPath()` will not fall back to a `python` on `PATH`,
 because the backend is a package no machine has by default: an interpreter found by
