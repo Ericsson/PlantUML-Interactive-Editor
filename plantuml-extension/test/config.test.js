@@ -130,6 +130,23 @@ suite('config: setting ids', () => {
 		assert.strictEqual(config.JAR_SETTING, `${config.SECTION}.${config.JAR_KEY}`);
 		assert.strictEqual(config.PYTHON_SETTING, `${config.SECTION}.${config.PYTHON_KEY}`);
 	});
+
+	test('both settings are machine-overridable', () => {
+		// These are absolute paths to things installed on one machine. At the
+		// default `window` scope they ride Settings Sync to machines where they
+		// mean nothing, and land in a repo's .vscode/settings.json for coworkers
+		// whose interpreter is somewhere else.
+		for (const [id, property] of Object.entries(declared)) {
+			assert.strictEqual(property.scope, 'machine-overridable', id);
+		}
+	});
+
+	test('both settings describe themselves in the Settings UI', () => {
+		for (const [id, property] of Object.entries(declared)) {
+			assert.ok(property.markdownDescription, `${id} has no markdownDescription`);
+			assert.ok(typeof property.order === 'number', `${id} has no order`);
+		}
+	});
 });
 
 suite('config: readSetting', () => {
