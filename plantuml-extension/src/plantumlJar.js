@@ -30,11 +30,39 @@
 // The check matters because serve.py's check_jar only warns on stderr, so an
 // unchecked bad path first shows up as a 500 on the user's first render.
 //
-// The setting's default value in package.json is a known shared install path,
-// so the jar resolves out of the box on networks where it is provisioned.
+// Three sources, most explicit first: the setting, then PLANTUML_JAR, then the
+// shared install path provisioned inside Ericsson.
+//
+// A source that is set but unusable stops resolution rather than falling
+// through to the next one. Falling through is how config comes to look
+// ignored: the user fixes the setting, mistypes it, and the extension renders
+// from a jar they did not choose.
 
-const fs = require('fs');
 const vscode = require('vscode');
+const { SECTION, normalizePath, isFile } = require('./settings');
+
+/** Key within SECTION, and the id the user sees in Settings. */
+const JAR_KEY = 'plantumlJar';
+const JAR_SETTING = `${SECTION}.${JAR_KEY}`;
+
+/**
+ * The environment variable that stands in for the setting.
+ *
+ * The same name the Flask app reads, so a repo .env already configures the
+ * extension.
+ */
+const JAR_ENV = 'PLANTUML_JAR';
+
+/**
+ * The provisioned install used inside Ericsson.
+ *
+ * Here rather than as the setting's manifest default so that it stays a last
+ * resort: `get()` returns the manifest default whenever a setting is untouched,
+ * which is what used to put this path ahead of PLANTUML_JAR for every user who
+ * never opened Settings.
+ */
+const SHARED_JAR_PATH =
+	'/app/vbuild/tools/plantuml/1.2022.5/lib/plantuml.1.2022.5.jar';
 
 /** Thrown when the PlantUML jar is not configured or not on disk. */
 class PlantUmlConfigError extends Error {}
@@ -42,41 +70,65 @@ class PlantUmlConfigError extends Error {}
 /**
  * Resolve the configured path to plantuml.jar.
  *
- * Looks up the `plantumlInteractive.plantumlJar` setting first, falling back
- * to the PLANTUML_JAR environment variable (the same variable name the Flask
- * app uses) for convenience. Note that `get()` returns the package.json
- * default when the setting is untouched, so the env var is only reached once
- * the setting has been explicitly cleared.
- *
  * @returns {string} Absolute path to plantuml.jar
- * @throws {PlantUmlConfigError} if nothing is configured or the path is absent
+ * @throws {PlantUmlConfigError} if nothing is configured, or if what is
+ *   configured is not a file
  */
 function resolvePlantUmlJarPath() {
-	const configured = vscode.workspace
-		.getConfiguration('plantumlInteractive')
-		.get('plantumlJar');
+	const configured = normalizePath(
+		vscode.workspace.getConfiguration(SECTION).get(JAR_KEY)
+	);
 
-	const jarPath = configured || process.env.PLANTUML_JAR;
+	if (configured) {
+		return requireFile(configured, `the "${JAR_SETTING}" setting`);
+	}
 
-	if (!jarPath) {
+	const fromEnv = normalizePath(process.env[JAR_ENV]);
+
+	if (fromEnv) {
+		return requireFile(fromEnv, `the ${JAR_ENV} environment variable`);
+	}
+
+	if (isFile(SHARED_JAR_PATH)) {
+		return SHARED_JAR_PATH;
+	}
+
+	throw new PlantUmlConfigError(
+		'PlantUML jar path is not configured, and the shared install at ' +
+			`"${SHARED_JAR_PATH}" is not available on this machine. Set ` +
+			`"${JAR_SETTING}" in your VS Code settings (or the ` +
+			`${JAR_ENV} environment variable) to the path of plantuml.jar.`
+	);
+}
+
+/**
+ * Return `candidate` if it is a file, otherwise say which knob produced it.
+ *
+ * Naming the source is the whole point: the same bad path means "fix your
+ * settings" or "fix your .env" depending on where it came from, and the user
+ * cannot tell those apart from the path alone.
+ *
+ * @param {string} candidate
+ * @param {string} source human-readable description of where it came from
+ * @returns {string}
+ * @throws {PlantUmlConfigError}
+ */
+function requireFile(candidate, source) {
+	if (!isFile(candidate)) {
 		throw new PlantUmlConfigError(
-			'PlantUML jar path is not configured. Set "plantumlInteractive.plantumlJar" ' +
-				'in your VS Code settings (or the PLANTUML_JAR environment variable) to the ' +
-				'path of plantuml.jar.'
+			`The PlantUML jar configured in ${source} is not a file: "${candidate}". ` +
+				`Check ${source}.`
 		);
 	}
 
-	if (!fs.existsSync(jarPath)) {
-		throw new PlantUmlConfigError(
-			`Configured PlantUML jar was not found at "${jarPath}". Check the ` +
-				'"plantumlInteractive.plantumlJar" setting.'
-		);
-	}
-
-	return /** @type {string} */ (jarPath);
+	return candidate;
 }
 
 module.exports = {
 	resolvePlantUmlJarPath,
-	PlantUmlConfigError
+	PlantUmlConfigError,
+	JAR_KEY,
+	JAR_SETTING,
+	JAR_ENV,
+	SHARED_JAR_PATH
 };

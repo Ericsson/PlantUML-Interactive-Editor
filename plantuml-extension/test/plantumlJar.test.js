@@ -26,57 +26,104 @@ const assert = require('assert');
 const fs = require('fs');
 const vscode = require('vscode');
 
-const { resolvePlantUmlJarPath, PlantUmlConfigError } = require('../src/plantumlJar');
-
-const CONFIG_SECTION = 'plantumlInteractive';
-const CONFIG_KEY = 'plantumlJar';
-
-// Read from the manifest rather than repeating the literal: the assertion is
-// "the declared default is what you get", and a copy here would keep passing
-// after the manifest changed.
-const SHARED_DEFAULT_JAR_PATH =
-	require('../package.json').contributes.configuration.properties[
-		`${CONFIG_SECTION}.${CONFIG_KEY}`
-	].default;
+const settings = require('../src/settings');
+const {
+	resolvePlantUmlJarPath,
+	PlantUmlConfigError,
+	JAR_KEY,
+	JAR_SETTING,
+	JAR_ENV,
+	SHARED_JAR_PATH
+} = require('../src/plantumlJar');
 
 /**
- * Set the plantumlInteractive.plantumlJar setting for the duration of a
- * test and restore it afterwards.
+ * Make `paths` the only files on disk, for the duration of a test.
+ *
+ * statSync rather than existsSync because "is a file" is the check that
+ * matters: a directory named plantuml.jar passes existence and then fails
+ * inside java.
+ *
+ * @param {string[]} paths
+ * @param {string[]} [directories] paths that exist but are not files
+ * @returns {() => void} a restore function
+ */
+function stubFilesystem(paths, directories = []) {
+	const original = fs.statSync;
+
+	fs.statSync = (candidate) => {
+		if (paths.includes(candidate)) {
+			return { isFile: () => true };
+		}
+		if (directories.includes(candidate)) {
+			return { isFile: () => false };
+		}
+		const err = new Error(`ENOENT: ${candidate}`);
+		err.code = 'ENOENT';
+		throw err;
+	};
+
+	return () => {
+		fs.statSync = original;
+	};
+}
+
+/**
+ * Set the jar setting for the duration of a test and restore it afterwards.
  *
  * @param {string|undefined} value
  * @returns {Promise<() => Promise<void>>} a restore function
  */
 async function setJarSetting(value) {
-	const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
-	await config.update(CONFIG_KEY, value, vscode.ConfigurationTarget.Global);
+	const target = vscode.workspace.getConfiguration(settings.SECTION);
+	await target.update(JAR_KEY, value, vscode.ConfigurationTarget.Global);
 	return async () => {
-		await config.update(CONFIG_KEY, undefined, vscode.ConfigurationTarget.Global);
+		await target.update(JAR_KEY, undefined, vscode.ConfigurationTarget.Global);
 	};
 }
 
-suite('resolvePlantUmlJarPath', () => {
-	let originalExistsSync;
+suite('jar setting: the manifest', () => {
+	test('declares an empty default', async () => {
+		// `get()` returns the manifest default whenever a setting is untouched,
+		// so a non-empty default here would make PLANTUML_JAR unreachable for
+		// every user who never opens Settings.
+		const declared =
+			require('../package.json').contributes.configuration.properties[JAR_SETTING];
+
+		assert.strictEqual(declared.default, '');
+	});
+
+	test('does not name the shared install path', () => {
+		// It belongs in plantumlJar.js, where it ranks below the two explicit
+		// knobs.
+		const manifest = JSON.stringify(require('../package.json'));
+
+		assert.ok(!manifest.includes(SHARED_JAR_PATH), 'manifest hardcodes the shared path');
+	});
+});
+
+suite('resolvePlantUmlJarPath: precedence', () => {
+	let restoreFs;
 	let originalEnvJar;
 
 	setup(() => {
-		originalExistsSync = fs.existsSync;
-		originalEnvJar = process.env.PLANTUML_JAR;
-		delete process.env.PLANTUML_JAR;
+		originalEnvJar = process.env[JAR_ENV];
+		delete process.env[JAR_ENV];
 	});
 
 	teardown(() => {
-		fs.existsSync = originalExistsSync;
+		restoreFs?.();
+		restoreFs = undefined;
 		if (originalEnvJar === undefined) {
-			delete process.env.PLANTUML_JAR;
+			delete process.env[JAR_ENV];
 		} else {
-			process.env.PLANTUML_JAR = originalEnvJar;
+			process.env[JAR_ENV] = originalEnvJar;
 		}
 	});
 
-	test('an explicitly configured setting takes precedence over the env var', async () => {
+	test('the setting wins over the environment variable', async () => {
 		const settingPath = '/configured/plantuml.jar';
-		fs.existsSync = (p) => p === settingPath;
-		process.env.PLANTUML_JAR = '/env/plantuml.jar';
+		restoreFs = stubFilesystem([settingPath, '/env/plantuml.jar']);
+		process.env[JAR_ENV] = '/env/plantuml.jar';
 
 		const restore = await setJarSetting(settingPath);
 		try {
@@ -86,10 +133,25 @@ suite('resolvePlantUmlJarPath', () => {
 		}
 	});
 
-	test('env var is used when the setting is explicitly cleared', async () => {
+	test('the environment variable is used when the setting is untouched', async () => {
+		// The untouched case matters on its own: `get()` answers with the
+		// manifest default, and only an empty one lets this env var be reached.
 		const envPath = '/env/plantuml.jar';
-		fs.existsSync = (p) => p === envPath;
-		process.env.PLANTUML_JAR = envPath;
+		restoreFs = stubFilesystem([envPath, SHARED_JAR_PATH]);
+		process.env[JAR_ENV] = envPath;
+
+		const restore = await setJarSetting(undefined);
+		try {
+			assert.strictEqual(resolvePlantUmlJarPath(), envPath);
+		} finally {
+			await restore();
+		}
+	});
+
+	test('the environment variable is used when the setting is explicitly cleared', async () => {
+		const envPath = '/env/plantuml.jar';
+		restoreFs = stubFilesystem([envPath]);
+		process.env[JAR_ENV] = envPath;
 
 		const restore = await setJarSetting('');
 		try {
@@ -99,19 +161,39 @@ suite('resolvePlantUmlJarPath', () => {
 		}
 	});
 
-	test("the setting's default value (the shared install path) is used when nothing is overridden and it exists", async () => {
-		fs.existsSync = (p) => p === SHARED_DEFAULT_JAR_PATH;
+	test('the shared install path is used when nothing is configured', async () => {
+		restoreFs = stubFilesystem([SHARED_JAR_PATH]);
 
 		const restore = await setJarSetting(undefined);
 		try {
-			assert.strictEqual(resolvePlantUmlJarPath(), SHARED_DEFAULT_JAR_PATH);
+			assert.strictEqual(resolvePlantUmlJarPath(), SHARED_JAR_PATH);
 		} finally {
 			await restore();
 		}
 	});
+});
 
-	test('throws when the default shared install path does not exist and nothing else is configured', async () => {
-		fs.existsSync = () => false;
+suite('resolvePlantUmlJarPath: validation', () => {
+	let restoreFs;
+	let originalEnvJar;
+
+	setup(() => {
+		originalEnvJar = process.env[JAR_ENV];
+		delete process.env[JAR_ENV];
+	});
+
+	teardown(() => {
+		restoreFs?.();
+		restoreFs = undefined;
+		if (originalEnvJar === undefined) {
+			delete process.env[JAR_ENV];
+		} else {
+			process.env[JAR_ENV] = originalEnvJar;
+		}
+	});
+
+	test('throws when nothing is configured and the shared path is absent', async () => {
+		restoreFs = stubFilesystem([]);
 
 		const restore = await setJarSetting(undefined);
 		try {
@@ -121,11 +203,13 @@ suite('resolvePlantUmlJarPath', () => {
 		}
 	});
 
-	test('throws when the setting is cleared, no env var is set, and nothing exists', async () => {
-		fs.existsSync = () => false;
-		delete process.env.PLANTUML_JAR;
+	test('rejects a configured path that is a directory, not a file', async () => {
+		// Matches os.path.isfile in serve.py's check_jar: a directory named
+		// plantuml.jar passes an existence check and then fails inside java.
+		const directory = '/configured/plantuml.jar';
+		restoreFs = stubFilesystem([], [directory]);
 
-		const restore = await setJarSetting('');
+		const restore = await setJarSetting(directory);
 		try {
 			assert.throws(() => resolvePlantUmlJarPath(), PlantUmlConfigError);
 		} finally {
@@ -133,17 +217,96 @@ suite('resolvePlantUmlJarPath', () => {
 		}
 	});
 
-	test('the not-found message names the path and the setting to fix', async () => {
+	test('a bad setting does not fall through to a working environment variable', async () => {
+		// Falling through is how configuration comes to look ignored: the user
+		// would see a diagram rendered by a jar they did not choose.
+		restoreFs = stubFilesystem(['/env/plantuml.jar']);
+		process.env[JAR_ENV] = '/env/plantuml.jar';
+
+		const restore = await setJarSetting('/typo/plantuml.jar');
+		try {
+			assert.throws(() => resolvePlantUmlJarPath(), PlantUmlConfigError);
+		} finally {
+			await restore();
+		}
+	});
+
+	test('a bad environment variable does not fall through to the shared path', async () => {
+		restoreFs = stubFilesystem([SHARED_JAR_PATH]);
+		process.env[JAR_ENV] = '/typo/plantuml.jar';
+
+		const restore = await setJarSetting(undefined);
+		try {
+			assert.throws(() => resolvePlantUmlJarPath(), PlantUmlConfigError);
+		} finally {
+			await restore();
+		}
+	});
+
+	test('the message names the path and the setting to fix', async () => {
 		const settingPath = '/typo/plantuml.jar';
-		fs.existsSync = () => false;
+		restoreFs = stubFilesystem([]);
 
 		const restore = await setJarSetting(settingPath);
 		try {
 			assert.throws(resolvePlantUmlJarPath, (err) => {
 				assert.ok(err.message.includes(settingPath), err.message);
-				assert.ok(err.message.includes('plantumlInteractive.plantumlJar'), err.message);
+				assert.ok(err.message.includes(JAR_SETTING), err.message);
 				return true;
 			});
+		} finally {
+			await restore();
+		}
+	});
+
+	test('the message names the environment variable when that is the bad source', async () => {
+		restoreFs = stubFilesystem([]);
+		process.env[JAR_ENV] = '/typo/plantuml.jar';
+
+		const restore = await setJarSetting(undefined);
+		try {
+			assert.throws(resolvePlantUmlJarPath, (err) => {
+				assert.ok(err.message.includes(JAR_ENV), err.message);
+				return true;
+			});
+		} finally {
+			await restore();
+		}
+	});
+
+	test('the unconfigured message names both knobs and the shared path', async () => {
+		restoreFs = stubFilesystem([]);
+
+		const restore = await setJarSetting(undefined);
+		try {
+			assert.throws(resolvePlantUmlJarPath, (err) => {
+				assert.ok(err.message.includes(JAR_SETTING), err.message);
+				assert.ok(err.message.includes(JAR_ENV), err.message);
+				assert.ok(err.message.includes(SHARED_JAR_PATH), err.message);
+				return true;
+			});
+		} finally {
+			await restore();
+		}
+	});
+});
+
+suite('resolvePlantUmlJarPath: normalization', () => {
+	let restoreFs;
+
+	teardown(() => {
+		restoreFs?.();
+		restoreFs = undefined;
+	});
+
+	test('a quoted, padded setting value resolves', async () => {
+		// What lands in settings.json when a path is pasted out of a shell.
+		const jarPath = '/opt/plantuml/plantuml.jar';
+		restoreFs = stubFilesystem([jarPath]);
+
+		const restore = await setJarSetting(`  "${jarPath}"  `);
+		try {
+			assert.strictEqual(resolvePlantUmlJarPath(), jarPath);
 		} finally {
 			await restore();
 		}

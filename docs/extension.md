@@ -102,6 +102,7 @@ Node side, `plantuml-extension/`:
 | --- | --- |
 | `package.json` | Manifest: the `plantuml-interactive-editor.openDiagram` command, the two settings, and the browser libraries as runtime dependencies. |
 | `extension.js` | Lifecycle, the command, the webview panel, document listeners, and the message handlers. The only writer of the document. |
+| `src/settings.js` | Only what more than one file needs: the configuration section, path normalization, and the is-it-a-file predicate. |
 | `src/sidecar.js` | Spawns and supervises the Python child; port handshake, token, health polling, error messages. |
 | `src/plantumlJar.js` | Resolves and validates the jar path before anything is spawned. |
 | `src/webviewPage.js` | Fetches the page from the sidecar and supplies the values Flask cannot know. |
@@ -300,14 +301,17 @@ file; neither the webview nor the sidecar can reach it.
    `PlantUML Interactive` output channel, registers sidecar disposal, and registers the
    command. Nothing is spawned yet.
 2. The command runs `openDiagramPanel()` against the active editor's document.
-3. `resolvePlantUmlJarPath()` resolves the jar from the setting, else `PLANTUML_JAR`, and
-   checks it exists. This happens **before** spawning, because `check_jar()` in `serve.py`
-   only warns on stderr — an unchecked bad path would first appear as a 500 on the user's
-   first render.
+3. `resolvePlantUmlJarPath()` resolves the jar: the setting, else `PLANTUML_JAR`, else the
+   shared internal install, and checks the winner is a file. A source that is set but
+   unusable stops resolution instead of falling through, so a mistyped setting cannot
+   silently render from a different jar. This happens **before** spawning, because
+   `check_jar()` in `serve.py` only warns on stderr — an unchecked bad path would first
+   appear as a 500 on the user's first render.
 4. `ensureSidecar()` starts the child if one is not already running. One sidecar is shared
    by every panel in the window; concurrent callers await the same start rather than racing
    to spawn two servers.
-5. `startSidecar()` resolves the interpreter, generates a per-launch token, and spawns
+5. `startSidecar()` resolves the interpreter the same way (setting, else
+   `PLANTUML_GUI_PYTHON`, checked to be a file), generates a per-launch token, and spawns
    `python -m plantuml_gui.serve`.
 6. The sidecar applies the jar override, warns if the jar is unusable, installs its routes,
    binds an ephemeral port, and prints `PLANTUML_GUI_PORT=<port>` to stdout.
@@ -322,7 +326,10 @@ file; neither the webview nor the sidecar can reach it.
 11. The host posts `documentChanged` with the file's text; the webview renders.
 
 Any failure between steps 3 and 9 becomes a notification naming the setting to change, and
-the panel is disposed rather than left blank.
+the panel is disposed rather than left blank. The two failures whose answer really is a
+setting — an unusable jar and an unusable interpreter — carry an **Open Settings** button
+that opens the Settings UI filtered to `plantumlInteractive`. A backend that failed to boot
+does not: `describeStartFailure()` has already said what to install.
 
 ## The sidecar
 
@@ -666,8 +673,51 @@ render from `/getActivityPositions` and `/getSequencePositions`.
 
 | Setting | Meaning |
 | --- | --- |
-| `plantumlInteractive.plantumlJar` | Absolute path to `plantuml.jar`. Defaults to a shared install path usable only where it is provisioned; clear it to fall back to the `PLANTUML_JAR` environment variable. |
 | `plantumlInteractive.pythonPath` | Absolute path to a Python interpreter that has `plantuml-gui` installed. Required. |
+| `plantumlInteractive.plantumlJar` | Absolute path to `plantuml.jar`. Optional where the shared internal install exists. |
+
+Both are declared `machine-overridable`: they are absolute paths to things installed on one
+machine, so they should neither ride Settings Sync to another nor be committed to a
+repository's `.vscode/settings.json`.
+
+Each has an environment-variable equivalent — `PLANTUML_GUI_PYTHON` and `PLANTUML_JAR`, the
+latter being the same variable the web app reads, so a repo `.env` configures both. The jar
+has a third source, the shared internal install path, which is tried only when neither of
+the other two is set.
+
+`src/settings.js` holds only what more than one file needs: the section name, `normalizePath()`
+and `isFile()`. It requires nothing from `vscode`, which is what makes it testable in plain
+Node. Each setting's own vocabulary — its key, its dotted id, its environment variable, and
+for the jar its fallback path — lives with the code that resolves it, so that reading
+`plantumlJar.js` or `sidecar.js` tells the whole story of where that value comes from without
+a detour. Each resolver also owns its error type. The ids the tests assert against are
+imported from the module that owns them rather than spelled out again.
+
+The two shared functions are shared because they are rules that have to agree across both
+settings: what counts as a pasteable path, and what counts as a usable file. Duplicating them
+would allow the jar and the interpreter to disagree about a quoted path, silently.
+
+Two properties of the resolution are worth stating because the alternatives are tempting:
+
+- **A source that is set but unusable stops resolution.** It does not fall through to the
+  next one. Falling through is how configuration comes to look ignored: the user fixes a
+  setting, mistypes it, and the extension renders from something they did not choose. The
+  error names the source that supplied the bad path, since the same path means "fix your
+  settings" or "fix your `.env`" depending on where it came from.
+- **The jar setting's default is empty**, and the shared install path is a constant in
+  `plantumlJar.js` instead. `get()` answers with the manifest default whenever a setting is
+  untouched, so a path declared there would rank ahead of `PLANTUML_JAR` for everyone who
+  never opens Settings.
+
+Values are trimmed, and one matching pair of surrounding quotes is removed, so a path pasted
+out of a terminal works. `~`, `${workspaceFolder}` and `${env:...}` are *not* expanded: VS
+Code does not expand them in values read with `get()`, and supporting them halfway is worse
+than not at all.
+
+Both paths are validated with `statSync().isFile()` — a file, not merely something that
+exists, matching `check_jar()` in `serve.py` — before the backend is spawned. For the jar
+that avoids a 500 on the first render; for the interpreter it avoids launching a process
+just to learn its path was wrong.
 
 Nothing is guessed. `resolvePythonPath()` will not fall back to a `python` on `PATH`,
 because the backend is a package no machine has by default: an interpreter found by

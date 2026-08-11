@@ -23,18 +23,25 @@
 // SOFTWARE.
 
 const assert = require('assert');
+const fs = require('fs');
 const { EventEmitter } = require('events');
 const { PassThrough } = require('stream');
+const vscode = require('vscode');
 
 const {
 	buildEnv,
 	describeStartFailure,
 	readPortLine,
 	resolvePythonPath,
+	PythonConfigError,
 	SidecarStartError,
+	PYTHON_KEY,
+	PYTHON_SETTING,
+	PYTHON_ENV,
 	PORT_LINE_PREFIX,
 	TOKEN_HEADER
 } = require('../src/sidecar');
+const settings = require('../src/settings');
 
 /** A stand-in for a spawned child process, so the port handshake can be
  * driven deterministically without launching Python. */
@@ -101,42 +108,170 @@ suite('sidecar: environment', () => {
 });
 
 suite('sidecar: interpreter resolution', () => {
-	const original = process.env.PLANTUML_GUI_PYTHON;
+	const original = process.env[PYTHON_ENV];
+	let restoreFs;
+
+	/**
+	 * Make `paths` the only files on disk for the duration of a test.
+	 *
+	 * @param {string[]} paths
+	 * @param {string[]} [directories] paths that exist but are not files
+	 */
+	function stubFilesystem(paths, directories = []) {
+		const originalStat = fs.statSync;
+
+		fs.statSync = (candidate) => {
+			if (paths.includes(candidate)) {
+				return { isFile: () => true };
+			}
+			if (directories.includes(candidate)) {
+				return { isFile: () => false };
+			}
+			const err = new Error(`ENOENT: ${candidate}`);
+			err.code = 'ENOENT';
+			throw err;
+		};
+
+		restoreFs = () => {
+			fs.statSync = originalStat;
+		};
+	}
+
+	/**
+	 * @param {string|undefined} value
+	 * @returns {Promise<() => Promise<void>>} a restore function
+	 */
+	async function setPythonSetting(value) {
+		const target = vscode.workspace.getConfiguration(settings.SECTION);
+		await target.update(PYTHON_KEY, value, vscode.ConfigurationTarget.Global);
+		return async () => {
+			await target.update(PYTHON_KEY, undefined, vscode.ConfigurationTarget.Global);
+		};
+	}
 
 	teardown(() => {
+		restoreFs?.();
+		restoreFs = undefined;
 		if (original === undefined) {
-			delete process.env.PLANTUML_GUI_PYTHON;
+			delete process.env[PYTHON_ENV];
 		} else {
-			process.env.PLANTUML_GUI_PYTHON = original;
+			process.env[PYTHON_ENV] = original;
 		}
 	});
 
-	test('honours PLANTUML_GUI_PYTHON', async () => {
+	test('the setting wins over PLANTUML_GUI_PYTHON', async () => {
+		stubFilesystem(['/configured/python', '/env/python']);
+		process.env[PYTHON_ENV] = '/env/python';
+
+		const restore = await setPythonSetting('/configured/python');
+		try {
+			assert.strictEqual(await resolvePythonPath(), '/configured/python');
+		} finally {
+			await restore();
+		}
+	});
+
+	test('honours PLANTUML_GUI_PYTHON when the setting is unset', async () => {
 		// The Extension Development Host launches with no folder open, so
 		// workspace settings are not read; the env var is how launch.json
 		// configures development.
-		process.env.PLANTUML_GUI_PYTHON = '/custom/python';
+		stubFilesystem(['/custom/python']);
+		process.env[PYTHON_ENV] = '/custom/python';
 
 		assert.strictEqual(await resolvePythonPath(), '/custom/python');
 	});
 
 	test('throws instead of guessing when nothing is configured', async () => {
-		delete process.env.PLANTUML_GUI_PYTHON;
+		delete process.env[PYTHON_ENV];
 
 		// The backend is a Python package no machine has by default, so an
 		// interpreter found by searching almost certainly cannot import
 		// plantuml_gui. Spawning one would blame the wrong thing.
+		await assert.rejects(() => resolvePythonPath(), PythonConfigError);
+	});
+
+	test('the unconfigured error is still a SidecarStartError', async () => {
+		// PythonConfigError is a subclass so that callers which only know about
+		// the base class keep working.
+		delete process.env[PYTHON_ENV];
+
 		await assert.rejects(() => resolvePythonPath(), SidecarStartError);
 	});
 
 	test('the unconfigured error names both knobs', async () => {
-		delete process.env.PLANTUML_GUI_PYTHON;
+		delete process.env[PYTHON_ENV];
 
 		await assert.rejects(() => resolvePythonPath(), (err) => {
-			assert.ok(err.message.includes('plantumlInteractive.pythonPath'), err.message);
-			assert.ok(err.message.includes('PLANTUML_GUI_PYTHON'), err.message);
+			assert.ok(err.message.includes(PYTHON_SETTING), err.message);
+			assert.ok(err.message.includes(PYTHON_ENV), err.message);
 			return true;
 		});
+	});
+
+	test('rejects a configured interpreter that does not exist, before spawning', async () => {
+		// The check belongs ahead of the spawn so the report names the knob,
+		// rather than arriving as an ENOENT once a panel is waiting on a child.
+		stubFilesystem([]);
+		delete process.env[PYTHON_ENV];
+
+		const restore = await setPythonSetting('/typo/python');
+		try {
+			await assert.rejects(() => resolvePythonPath(), (err) => {
+				assert.ok(err instanceof PythonConfigError, err.constructor.name);
+				assert.ok(err.message.includes('/typo/python'), err.message);
+				assert.ok(err.message.includes(PYTHON_SETTING), err.message);
+				return true;
+			});
+		} finally {
+			await restore();
+		}
+	});
+
+	test('rejects an interpreter path that is a directory', async () => {
+		stubFilesystem([], ['/usr/bin']);
+		delete process.env[PYTHON_ENV];
+
+		const restore = await setPythonSetting('/usr/bin');
+		try {
+			await assert.rejects(() => resolvePythonPath(), PythonConfigError);
+		} finally {
+			await restore();
+		}
+	});
+
+	test('a bad setting does not fall through to a working env var', async () => {
+		stubFilesystem(['/env/python']);
+		process.env[PYTHON_ENV] = '/env/python';
+
+		const restore = await setPythonSetting('/typo/python');
+		try {
+			await assert.rejects(() => resolvePythonPath(), PythonConfigError);
+		} finally {
+			await restore();
+		}
+	});
+
+	test('names the environment variable when that is the bad source', async () => {
+		stubFilesystem([]);
+		process.env[PYTHON_ENV] = '/typo/python';
+
+		await assert.rejects(() => resolvePythonPath(), (err) => {
+			assert.ok(err.message.includes(PYTHON_ENV), err.message);
+			return true;
+		});
+	});
+
+	test('a quoted, padded setting value resolves', async () => {
+		// What lands in settings.json when a path is pasted out of a shell.
+		stubFilesystem(['/usr/bin/python3']);
+		delete process.env[PYTHON_ENV];
+
+		const restore = await setPythonSetting('  "/usr/bin/python3"  ');
+		try {
+			assert.strictEqual(await resolvePythonPath(), '/usr/bin/python3');
+		} finally {
+			await restore();
+		}
 	});
 });
 
@@ -145,7 +280,7 @@ suite('sidecar: startup failure messages', () => {
 		const message = describeStartFailure('py3', '', { code: 'ENOENT' });
 
 		assert.ok(message.includes('py3'));
-		assert.ok(message.includes('plantumlInteractive.pythonPath'));
+		assert.ok(message.includes(PYTHON_SETTING));
 	});
 
 	test('a missing package says how to install it', () => {

@@ -21,15 +21,19 @@
     "configuration": {
       "title": "PlantUML Interactive Editor",
       "properties": {
-        "plantumlInteractive.plantumlJar": {
-          "type": "string",
-          "default": "/app/vbuild/tools/plantuml/1.2022.5/lib/plantuml.1.2022.5.jar",
-          "description": "Absolute path to plantuml.jar, used to render diagrams. Defaults to a shared install path that is only usable on networks where it's provisioned. If you don't have access to that path, either set this to your own plantuml.jar location, or clear this setting (set it to an empty string) to use the PLANTUML_JAR environment variable instead."
-        },
         "plantumlInteractive.pythonPath": {
           "type": "string",
           "default": "",
-          "description": "Absolute path to a Python interpreter that has the plantuml-gui package installed. Required: the extension runs that package as its rendering backend, and will not fall back to an interpreter on PATH because one is unlikely to have the package. Note that the Extension Development Host launches without a workspace folder, so workspace settings are not read there - during development, set PLANTUML_GUI_PYTHON in the \"env\" block of .vscode/launch.json instead."
+          "scope": "machine-overridable",
+          "order": 1,
+          "markdownDescription": "Absolute path to a Python interpreter that has the `plantuml-gui` package installed. Required: that package is the rendering backend. When empty, the `PLANTUML_GUI_PYTHON` environment variable is used."
+        },
+        "plantumlInteractive.plantumlJar": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "order": 2,
+          "markdownDescription": "Absolute path to `plantuml.jar`, used to render diagrams. When empty, the `PLANTUML_JAR` environment variable is used, then the shared internal install if this machine has it."
         }
       }
     }

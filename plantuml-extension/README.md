@@ -1,65 +1,67 @@
-# plantuml-editor README
+# PlantUML Interactive Editor (VS Code)
 
-This is the README for your extension "plantuml-editor". After writing up a brief description, we recommend including the following sections.
+Edit PlantUML diagrams by clicking them. Opens a diagram panel beside a `.puml`
+file: right-click elements for context menus, double-click to edit text, and
+every change is written back into the document as a single undoable edit.
 
-## Features
-
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
-
-For example if there is an image subfolder under your extension project workspace:
-
-\!\[feature X\]\(images/feature-x.png\)
-
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+Internal extension, distributed as a `.vsix`.
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+**A Python interpreter with the `plantuml-gui` package installed**:
 
-## Extension Settings
+```
+pip install /path/to/PlantUML-Interactive-Editor
+```
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+**Java and a `plantuml.jar`.** Rendering shells out to
+`java -jar plantuml.jar`. A shared internal install is used when the machine has
+one; otherwise set `plantumlInteractive.plantumlJar` to your own copy.
 
-For example:
+## Settings
 
-This extension contributes the following settings:
+| Setting | Environment variable | What it is |
+| --- | --- | --- |
+| `plantumlInteractive.pythonPath` | `PLANTUML_GUI_PYTHON` | Absolute path to the interpreter described above. Required. |
+| `plantumlInteractive.plantumlJar` | `PLANTUML_JAR` | Absolute path to `plantuml.jar`. Optional if one of the fallbacks below applies. |
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+Both settings can be overridden by their environment variable. `PLANTUML_JAR`
+is the same variable the web app reads, so a repository `.env` already
+configures the extension.
 
-## Known Issues
+Both settings are `machine-overridable`: set them in machine settings, not in
+a repository's `.vscode/settings.json`.
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+Whitespace and one matching pair of surrounding quotes are stripped, so a path
+pasted from a terminal works as-is. Nothing else is expanded — `~`,
+`${workspaceFolder}` and `${env:...}` are taken literally.
 
-## Release Notes
+## Which value wins
 
-Users appreciate release notes as you update your extension.
+The VS Code setting takes precedence over the environment variable. If neither
+is set, the jar falls back to the shared internal install. Both paths reach the
+backend when it starts, so a changed setting takes effect on the next start —
+reload the window if a diagram panel is already open.
 
-### 1.0.0
+## Usage
 
-Initial release of ...
+With a `.puml` file open in the active editor, run **PlantUML: Open Interactive
+Diagram** from the Command Palette.
 
-### 1.0.1
+## Development
 
-Fixed issue #.
+`F5` runs the Extension Development Host from `.vscode/launch.json`. That host
+launches **without a workspace folder**, so workspace-scoped settings are not
+read there; the `env` block in `launch.json` sets `PLANTUML_GUI_PYTHON` instead,
+which is why that variable exists.
 
-### 1.1.0
+```
+npm run lint     # eslint
+npm test         # eslint, then the Mocha suites inside a real VS Code
+```
 
-Added features X, Y, and Z.
+`npm test` launches an actual editor, so it needs a display — under a headless
+shell, run it with `xvfb-run`.
 
----
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code.  Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux)
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux)
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+Architecture, the sidecar protocol and the webview contract are documented in
+[`docs/extension.md`](../docs/extension.md).

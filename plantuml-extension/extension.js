@@ -33,7 +33,13 @@
 // src/webviewPage.js.
 const path = require('path');
 const vscode = require('vscode');
-const { startSidecar, SidecarStartError, TOKEN_HEADER } = require('./src/sidecar');
+const settings = require('./src/settings');
+const {
+	startSidecar,
+	SidecarStartError,
+	PythonConfigError,
+	TOKEN_HEADER
+} = require('./src/sidecar');
 const { resolvePlantUmlJarPath, PlantUmlConfigError } = require('./src/plantumlJar');
 const { fetchWebviewPage, vendorRoot, WebviewPageError } = require('./src/webviewPage');
 
@@ -41,6 +47,9 @@ const LIVE_UPDATE_DEBOUNCE_MS = 300;
 
 /** Generous because rendering shells out to java, once per request. */
 const RENDER_PNG_TIMEOUT_MS = 60000;
+
+/** Label of the action offered on errors the user fixes in Settings. */
+const OPEN_SETTINGS = 'Open Settings';
 
 /**
  * Line highlight for the diagram -> editor direction: hovering an element in
@@ -121,6 +130,26 @@ function disposeSidecar() {
 }
 
 /**
+ * Report a configuration problem, with a way to go and fix it.
+ *
+ * The message names the setting, but this extension is installed from a vsix by
+ * coworkers who have no particular reason to know where the Settings UI is, so
+ * the notification carries them there. Reserved for failures whose answer is a
+ * setting; see the call sites.
+ *
+ * @param {string} message
+ */
+async function showConfigError(message) {
+	const choice = await vscode.window.showErrorMessage(message, OPEN_SETTINGS);
+
+	if (choice === OPEN_SETTINGS) {
+		// Opens the Settings UI with the search box pre-filled, so both of this
+		// extension's settings are on screen and nothing else is.
+		await vscode.commands.executeCommand('workbench.action.openSettings', settings.SECTION);
+	}
+}
+
+/**
  * Open a diagram webview panel for the active editor's document, render its
  * current content, and keep the diagram in sync as the document changes.
  *
@@ -146,11 +175,13 @@ async function openDiagramPanel(context) {
 	try {
 		jarPath = resolvePlantUmlJarPath();
 	} catch (err) {
-		vscode.window.showErrorMessage(
-			err instanceof PlantUmlConfigError
-				? err.message
-				: `Unexpected error resolving the PlantUML jar: ${err.message}`
-		);
+		if (err instanceof PlantUmlConfigError) {
+			await showConfigError(err.message);
+		} else {
+			vscode.window.showErrorMessage(
+				`Unexpected error resolving the PlantUML jar: ${err.message}`
+			);
+		}
 		return;
 	}
 
@@ -158,11 +189,19 @@ async function openDiagramPanel(context) {
 	try {
 		active = await ensureSidecar(jarPath);
 	} catch (err) {
-		vscode.window.showErrorMessage(
-			err instanceof SidecarStartError
-				? err.message
-				: `Unexpected error starting the PlantUML backend: ${err.message}`
-		);
+		// A generic SidecarStartError is a backend that failed to boot -- a
+		// missing package, a traceback, a port that never answered -- and
+		// describeStartFailure has already said what to do about it, which is
+		// not to visit Settings.
+		if (err instanceof PythonConfigError) {
+			await showConfigError(err.message);
+		} else {
+			vscode.window.showErrorMessage(
+				err instanceof SidecarStartError
+					? err.message
+					: `Unexpected error starting the PlantUML backend: ${err.message}`
+			);
+		}
 		return;
 	}
 

@@ -57,6 +57,17 @@ suite('extension: activation', () => {
 		assert.ok(registered.includes(COMMAND_ID), 'command was not registered');
 	});
 
+	test('can dispatch the action offered on configuration errors', async () => {
+		// The Open Settings button runs a built-in command by name; a rename or
+		// a typo would leave a button that does nothing.
+		const registered = await vscode.commands.getCommands(true);
+
+		assert.ok(
+			registered.includes('workbench.action.openSettings'),
+			'workbench.action.openSettings is not available'
+		);
+	});
+
 	test('does not render in Node', () => {
 		// The single-renderer invariant: rendering happens in the sidecar, via
 		// shared/render.py. A second java invocation on this side would drift

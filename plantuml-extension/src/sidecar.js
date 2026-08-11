@@ -35,6 +35,20 @@
 const { spawn } = require('child_process');
 const crypto = require('crypto');
 const vscode = require('vscode');
+const { SECTION, normalizePath, isFile } = require('./settings');
+
+/** Key within SECTION, and the id the user sees in Settings. */
+const PYTHON_KEY = 'pythonPath';
+const PYTHON_SETTING = `${SECTION}.${PYTHON_KEY}`;
+
+/**
+ * The environment variable that stands in for the setting.
+ *
+ * It exists because the Extension Development Host launches without a workspace
+ * folder, where workspace settings are not read at all; see
+ * plantuml-extension/README.md.
+ */
+const PYTHON_ENV = 'PLANTUML_GUI_PYTHON';
 
 // Must match PORT_LINE_PREFIX in src/plantuml_gui/serve.py.
 const PORT_LINE_PREFIX = 'PLANTUML_GUI_PORT=';
@@ -51,6 +65,15 @@ const HEALTH_TIMEOUT_MS = 2000;
 
 /** Thrown when the sidecar cannot be started or does not become ready. */
 class SidecarStartError extends Error {}
+
+/**
+ * Thrown when the interpreter is missing or unusable, before anything is spawned.
+ *
+ * A subclass rather than a flag so `extension.js` can tell the one failure the
+ * user fixes in Settings apart from a spawn crash or a health timeout, while
+ * callers that only know the base class keep catching it.
+ */
+class PythonConfigError extends SidecarStartError {}
 
 /**
  * A running sidecar: the child process plus the address and token needed to
@@ -90,37 +113,57 @@ class Sidecar {
  * plantuml_gui, and spawning it would report the failure against the wrong
  * thing. Failing here names the knob to turn instead.
  *
- * Note that the Extension Development Host launches **without a workspace
- * folder**, so workspace-scoped settings are not read at all. During
- * development, PLANTUML_GUI_PYTHON in the `env` block of .vscode/launch.json is
- * the reliable knob.
+ * The path is checked here so that a mistake is reported against the knob that
+ * caused it, rather than as an ENOENT off the child's error event once a
+ * process has been launched and a panel is waiting on it.
+ *
+ * See plantuml-extension/README.md for which knob to use when.
  *
  * @returns {Promise<string>} an interpreter path.
- * @throws {SidecarStartError} when no interpreter has been configured
+ * @throws {PythonConfigError} when no interpreter is configured, or the
+ *   configured one is not a file
  */
 async function resolvePythonPath() {
-	const configured = vscode.workspace
-		.getConfiguration('plantumlInteractive')
-		.get('pythonPath');
+	const configured = normalizePath(
+		vscode.workspace.getConfiguration(SECTION).get(PYTHON_KEY)
+	);
 
 	// An explicit setting wins even if it is wrong: a clear "could not run X"
 	// beats silently running some other interpreter than the one asked for.
 	if (configured) {
-		return /** @type {string} */ (configured);
+		return requireInterpreter(configured, `the "${PYTHON_SETTING}" setting`);
 	}
 
-	// Lets launch.json configure development without a workspace folder,
-	// mirroring how it already passes PLANTUML_JAR.
-	if (process.env.PLANTUML_GUI_PYTHON) {
-		return process.env.PLANTUML_GUI_PYTHON;
+	const fromEnv = normalizePath(process.env[PYTHON_ENV]);
+
+	if (fromEnv) {
+		return requireInterpreter(fromEnv, `the ${PYTHON_ENV} environment variable`);
 	}
 
-	throw new SidecarStartError(
+	throw new PythonConfigError(
 		'No Python interpreter is configured for the PlantUML backend. Set ' +
-			'"plantumlInteractive.pythonPath" to an interpreter that has the ' +
-			'plantuml-gui package installed, or set PLANTUML_GUI_PYTHON (during ' +
-			'development, in the "env" block of .vscode/launch.json).'
+			`"${PYTHON_SETTING}" to an interpreter that has the ` +
+			`plantuml-gui package installed, or set ${PYTHON_ENV}.`
 	);
+}
+
+/**
+ * Return `candidate` if it is a file, otherwise say which knob produced it.
+ *
+ * @param {string} candidate
+ * @param {string} source human-readable description of where it came from
+ * @returns {string}
+ * @throws {PythonConfigError}
+ */
+function requireInterpreter(candidate, source) {
+	if (!isFile(candidate)) {
+		throw new PythonConfigError(
+			`The Python interpreter configured in ${source} is not a file: ` +
+				`"${candidate}". Check ${source}.`
+		);
+	}
+
+	return candidate;
 }
 
 /**
@@ -159,13 +202,12 @@ function buildEnv(token, jarPath) {
  */
 function describeStartFailure(pythonPath, stderr, spawnError) {
 	if (spawnError && spawnError.code === 'ENOENT') {
+		// resolvePythonPath already checked the path is a file, so reaching here
+		// means it stopped being runnable in between, or is not executable.
 		return (
-			`Could not run Python at "${pythonPath}". Set ` +
-			'"plantumlInteractive.pythonPath" in your USER settings to an interpreter ' +
-			'that has the plantuml-gui package installed. (Workspace settings are ' +
-			'not read when the Extension Development Host is launched without a ' +
-			'folder open - during development, set PLANTUML_GUI_PYTHON in the "env" ' +
-			'block of launch.json instead.)'
+			`Could not run Python at "${pythonPath}". Check that it is an ` +
+			`executable interpreter, and that "${PYTHON_SETTING}" (or ` +
+			`${PYTHON_ENV}) points at it.`
 		);
 	}
 
@@ -225,7 +267,7 @@ async function waitForHealthy(sidecar, deadline) {
  *
  * @param {object} [options]
  * @param {string} [options.jarPath] absolute path to plantuml.jar
- * @param {vscode.OutputChannel} [options.output] receives sidecar stderr, so
+ * @param {import('vscode').OutputChannel} [options.output] receives sidecar stderr, so
  *   Python tracebacks are visible instead of being swallowed
  * @returns {Promise<Sidecar>}
  * @throws {SidecarStartError}
@@ -348,6 +390,10 @@ module.exports = {
 	readPortLine,
 	Sidecar,
 	SidecarStartError,
+	PythonConfigError,
+	PYTHON_KEY,
+	PYTHON_SETTING,
+	PYTHON_ENV,
 	PORT_LINE_PREFIX,
 	TOKEN_HEADER
 };
