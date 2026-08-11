@@ -25,15 +25,12 @@ otherwise, point the extension at your own copy.
 | `plantumlInteractive.pythonPath` | `PLANTUML_GUI_PYTHON` | Absolute path to the interpreter described above. Required. |
 | `plantumlInteractive.plantumlJar` | `PLANTUML_JAR` | Absolute path to `plantuml.jar`. Optional if one of the fallbacks below applies. |
 
-Both settings can be overridden by their environment variable, read from the
-environment the extension host was launched with. `PLANTUML_JAR` is the same
-variable the web app reads, so a repository `.env` already configures the
-extension.
+Both settings can be overridden by their environment variable. `PLANTUML_JAR`
+is the same variable the web app reads, so a repository `.env` already
+configures the extension.
 
-Both settings are `machine-overridable`, because both are absolute paths to things
-installed on one particular machine: they are not carried between machines by
-Settings Sync, and they do not belong in a repository's
-`.vscode/settings.json`.
+Both settings are `machine-overridable`: set them in machine settings, not in
+a repository's `.vscode/settings.json`.
 
 Surrounding whitespace and one matching pair of surrounding quotes are stripped,
 so a path pasted out of a terminal works as-is. Nothing else is expanded — `~`,
@@ -43,17 +40,15 @@ so a path pasted out of a terminal works as-is. Nothing else is expanded — `~`
 
 For both, the VS Code setting takes precedence over the environment variable.
 If neither is set, the jar falls back to the shared internal install, if this
-machine has it.
-
-The jar path is handed to the backend when it starts, so changed settings take
-effect on restart — reload the window if a diagram panel is already open.
+machine has it. The jar path is handed to the backend when it starts, so changed
+settings takeeffect on restart — reload the window if a diagram panel is already open.
 
 ## Usage
 
 With a `.puml` file open in the active editor, run **PlantUML: Open Interactive
 Diagram** from the Command Palette.
 
-## Contributing
+## Development
 
 `F5` runs the Extension Development Host from `.vscode/launch.json`. That host
 launches **without a workspace folder**, so workspace-scoped settings are not
