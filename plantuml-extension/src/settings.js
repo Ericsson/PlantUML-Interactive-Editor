@@ -22,53 +22,27 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// The names and shapes of everything the user can configure.
+// The configuration section, and how configured paths are treated.
 //
-// One module so that a setting id exists in exactly two places: here and
-// package.json. Three of the callers need an id only to name the setting in an
-// error message, and an id spelled out at each of those sites is one a rename
-// leaves behind, pointing the user at a setting that does not exist.
+// Only what more than one file needs. Each setting's own vocabulary -- its key,
+// its dotted id, its environment variable, its fallback -- lives with the code
+// that resolves it, in plantumlJar.js and sidecar.js, so that reading either
+// one tells the whole story of where that value comes from without a detour
+// through here.
 //
-// Scope is values and predicates. The resolution policy -- which source wins,
-// and what happens when the winner is unusable -- lives with the callers,
-// plantumlJar.js and sidecar.js, because each owns its own error type and its
-// own notion of a usable value.
+// The section is shared because three files need it: the two resolvers, and
+// extension.js to open the Settings UI filtered to it. The two functions are
+// shared because they are rules that have to agree -- what counts as a
+// pasteable path, and what counts as a usable file -- and the alternative is
+// the same twenty lines copied into both resolvers, where one copy can be
+// changed without the other.
+//
+// Requires nothing from vscode, which is what makes it testable in plain Node.
 
 const fs = require('fs');
-const vscode = require('vscode');
 
 /** The configuration section every setting lives under. */
 const SECTION = 'plantumlInteractive';
-
-/** Keys within SECTION, as passed to `WorkspaceConfiguration.get`. */
-const JAR_KEY = 'plantumlJar';
-const PYTHON_KEY = 'pythonPath';
-
-/** Fully qualified ids, as shown to the user and typed into the Settings UI. */
-const JAR_SETTING = `${SECTION}.${JAR_KEY}`;
-const PYTHON_SETTING = `${SECTION}.${PYTHON_KEY}`;
-
-/**
- * Environment variables that stand in for the settings.
- *
- * PLANTUML_JAR is the same name the Flask app reads, so a repo .env already
- * configures the extension. PLANTUML_GUI_PYTHON exists because the Extension
- * Development Host launches without a workspace folder, where workspace
- * settings are not read at all; see plantuml-extension/README.md.
- */
-const JAR_ENV = 'PLANTUML_JAR';
-const PYTHON_ENV = 'PLANTUML_GUI_PYTHON';
-
-/**
- * The provisioned install used inside Ericsson.
- *
- * Lives here rather than as the setting's manifest default so that it stays a
- * last resort: `get()` returns the manifest default whenever a setting is
- * untouched, which would put this path ahead of PLANTUML_JAR for every user who
- * never opens Settings.
- */
-const SHARED_JAR_PATH =
-	'/app/vbuild/tools/plantuml/1.2022.5/lib/plantuml.1.2022.5.jar';
 
 /** Quote characters a shell would strip and users expect to be able to paste. */
 const QUOTES = ['"', "'"];
@@ -110,26 +84,6 @@ function normalizePath(value) {
 }
 
 /**
- * Read one of this extension's settings, normalized.
- *
- * @param {string} key one of JAR_KEY, PYTHON_KEY
- * @returns {string} the configured value, or '' when unset
- */
-function readSetting(key) {
-	return normalizePath(vscode.workspace.getConfiguration(SECTION).get(key));
-}
-
-/**
- * Read an environment variable as a path, normalized.
- *
- * @param {string} name one of JAR_ENV, PYTHON_ENV
- * @returns {string} the value, or '' when unset
- */
-function readEnv(name) {
-	return normalizePath(process.env[name]);
-}
-
-/**
  * Whether `candidate` is a file that exists.
  *
  * A file rather than merely something that exists, because a directory called
@@ -151,15 +105,6 @@ function isFile(candidate) {
 
 module.exports = {
 	SECTION,
-	JAR_KEY,
-	PYTHON_KEY,
-	JAR_SETTING,
-	PYTHON_SETTING,
-	JAR_ENV,
-	PYTHON_ENV,
-	SHARED_JAR_PATH,
 	normalizePath,
-	readSetting,
-	readEnv,
 	isFile
 };

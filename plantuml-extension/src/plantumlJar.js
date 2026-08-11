@@ -38,7 +38,31 @@
 // ignored: the user fixes the setting, mistypes it, and the extension renders
 // from a jar they did not choose.
 
-const config = require('./config');
+const vscode = require('vscode');
+const { SECTION, normalizePath, isFile } = require('./settings');
+
+/** Key within SECTION, and the id the user sees in Settings. */
+const JAR_KEY = 'plantumlJar';
+const JAR_SETTING = `${SECTION}.${JAR_KEY}`;
+
+/**
+ * The environment variable that stands in for the setting.
+ *
+ * The same name the Flask app reads, so a repo .env already configures the
+ * extension.
+ */
+const JAR_ENV = 'PLANTUML_JAR';
+
+/**
+ * The provisioned install used inside Ericsson.
+ *
+ * Here rather than as the setting's manifest default so that it stays a last
+ * resort: `get()` returns the manifest default whenever a setting is untouched,
+ * which is what used to put this path ahead of PLANTUML_JAR for every user who
+ * never opened Settings.
+ */
+const SHARED_JAR_PATH =
+	'/app/vbuild/tools/plantuml/1.2022.5/lib/plantuml.1.2022.5.jar';
 
 /** Thrown when the PlantUML jar is not configured or not on disk. */
 class PlantUmlConfigError extends Error {}
@@ -51,27 +75,29 @@ class PlantUmlConfigError extends Error {}
  *   configured is not a file
  */
 function resolvePlantUmlJarPath() {
-	const configured = config.readSetting(config.JAR_KEY);
+	const configured = normalizePath(
+		vscode.workspace.getConfiguration(SECTION).get(JAR_KEY)
+	);
 
 	if (configured) {
-		return requireFile(configured, `the "${config.JAR_SETTING}" setting`);
+		return requireFile(configured, `the "${JAR_SETTING}" setting`);
 	}
 
-	const fromEnv = config.readEnv(config.JAR_ENV);
+	const fromEnv = normalizePath(process.env[JAR_ENV]);
 
 	if (fromEnv) {
-		return requireFile(fromEnv, `the ${config.JAR_ENV} environment variable`);
+		return requireFile(fromEnv, `the ${JAR_ENV} environment variable`);
 	}
 
-	if (config.isFile(config.SHARED_JAR_PATH)) {
-		return config.SHARED_JAR_PATH;
+	if (isFile(SHARED_JAR_PATH)) {
+		return SHARED_JAR_PATH;
 	}
 
 	throw new PlantUmlConfigError(
 		'PlantUML jar path is not configured, and the shared install at ' +
-			`"${config.SHARED_JAR_PATH}" is not available on this machine. Set ` +
-			`"${config.JAR_SETTING}" in your VS Code settings (or the ` +
-			`${config.JAR_ENV} environment variable) to the path of plantuml.jar.`
+			`"${SHARED_JAR_PATH}" is not available on this machine. Set ` +
+			`"${JAR_SETTING}" in your VS Code settings (or the ` +
+			`${JAR_ENV} environment variable) to the path of plantuml.jar.`
 	);
 }
 
@@ -88,7 +114,7 @@ function resolvePlantUmlJarPath() {
  * @throws {PlantUmlConfigError}
  */
 function requireFile(candidate, source) {
-	if (!config.isFile(candidate)) {
+	if (!isFile(candidate)) {
 		throw new PlantUmlConfigError(
 			`The PlantUML jar configured in ${source} is not a file: "${candidate}". ` +
 				`Check ${source}.`
@@ -100,5 +126,9 @@ function requireFile(candidate, source) {
 
 module.exports = {
 	resolvePlantUmlJarPath,
-	PlantUmlConfigError
+	PlantUmlConfigError,
+	JAR_KEY,
+	JAR_SETTING,
+	JAR_ENV,
+	SHARED_JAR_PATH
 };

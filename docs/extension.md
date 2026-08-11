@@ -102,7 +102,7 @@ Node side, `plantuml-extension/`:
 | --- | --- |
 | `package.json` | Manifest: the `plantuml-interactive-editor.openDiagram` command, the two settings, and the browser libraries as runtime dependencies. |
 | `extension.js` | Lifecycle, the command, the webview panel, document listeners, and the message handlers. The only writer of the document. |
-| `src/config.js` | The names and shapes of everything the user can configure: the section, the setting ids, the environment variables, the shared jar fallback, path normalization and the is-it-a-file predicate. No resolution policy. |
+| `src/settings.js` | Only what more than one file needs: the configuration section, path normalization, and the is-it-a-file predicate. No setting ids, no resolution policy. Requires nothing from `vscode`. |
 | `src/sidecar.js` | Spawns and supervises the Python child; port handshake, token, health polling, error messages. |
 | `src/plantumlJar.js` | Resolves and validates the jar path before anything is spawned. |
 | `src/webviewPage.js` | Fetches the page from the sidecar and supplies the values Flask cannot know. |
@@ -685,11 +685,17 @@ latter being the same variable the web app reads, so a repo `.env` configures bo
 has a third source, the shared internal install path, which is tried only when neither of
 the other two is set.
 
-`src/config.js` owns the names: the section, the keys, the dotted ids used in messages, the
-variable names, that fallback path, `normalizePath()` and `isFile()`. Its scope stops there;
-the resolution policy lives with `plantumlJar.js` and `sidecar.js` because each owns its own
-error type. Three of those call sites need an id only to name a setting in an error message,
-which is exactly the kind of literal a rename leaves behind.
+`src/settings.js` holds only what more than one file needs: the section name, `normalizePath()`
+and `isFile()`. It requires nothing from `vscode`, which is what makes it testable in plain
+Node. Each setting's own vocabulary — its key, its dotted id, its environment variable, and
+for the jar its fallback path — lives with the code that resolves it, so that reading
+`plantumlJar.js` or `sidecar.js` tells the whole story of where that value comes from without
+a detour. Each resolver also owns its error type. The ids the tests assert against are
+imported from the module that owns them rather than spelled out again.
+
+The two shared functions are shared because they are rules that have to agree across both
+settings: what counts as a pasteable path, and what counts as a usable file. Duplicating them
+would allow the jar and the interpreter to disagree about a quoted path, silently.
 
 Two properties of the resolution are worth stating because the alternatives are tempting:
 
@@ -698,10 +704,10 @@ Two properties of the resolution are worth stating because the alternatives are 
   setting, mistypes it, and the extension renders from something they did not choose. The
   error names the source that supplied the bad path, since the same path means "fix your
   settings" or "fix your `.env`" depending on where it came from.
-- **The jar setting's default is empty**, and the shared install path lives in `config.js`
-  instead. `get()` answers with the manifest default whenever a setting is untouched, so a
-  path declared there would rank ahead of `PLANTUML_JAR` for everyone who never opens
-  Settings.
+- **The jar setting's default is empty**, and the shared install path is a constant in
+  `plantumlJar.js` instead. `get()` answers with the manifest default whenever a setting is
+  untouched, so a path declared there would rank ahead of `PLANTUML_JAR` for everyone who
+  never opens Settings.
 
 Values are trimmed, and one matching pair of surrounding quotes is removed, so a path pasted
 out of a terminal works. `~`, `${workspaceFolder}` and `${env:...}` are *not* expanded: VS
