@@ -35,10 +35,13 @@ const {
 	resolvePythonPath,
 	PythonConfigError,
 	SidecarStartError,
+	PYTHON_KEY,
+	PYTHON_SETTING,
+	PYTHON_ENV,
 	PORT_LINE_PREFIX,
 	TOKEN_HEADER
 } = require('../src/sidecar');
-const config = require('../src/config');
+const settings = require('../src/settings');
 
 /** A stand-in for a spawned child process, so the port handshake can be
  * driven deterministically without launching Python. */
@@ -105,7 +108,7 @@ suite('sidecar: environment', () => {
 });
 
 suite('sidecar: interpreter resolution', () => {
-	const original = process.env[config.PYTHON_ENV];
+	const original = process.env[PYTHON_ENV];
 	let restoreFs;
 
 	/**
@@ -139,10 +142,10 @@ suite('sidecar: interpreter resolution', () => {
 	 * @returns {Promise<() => Promise<void>>} a restore function
 	 */
 	async function setPythonSetting(value) {
-		const target = vscode.workspace.getConfiguration(config.SECTION);
-		await target.update(config.PYTHON_KEY, value, vscode.ConfigurationTarget.Global);
+		const target = vscode.workspace.getConfiguration(settings.SECTION);
+		await target.update(PYTHON_KEY, value, vscode.ConfigurationTarget.Global);
 		return async () => {
-			await target.update(config.PYTHON_KEY, undefined, vscode.ConfigurationTarget.Global);
+			await target.update(PYTHON_KEY, undefined, vscode.ConfigurationTarget.Global);
 		};
 	}
 
@@ -150,15 +153,15 @@ suite('sidecar: interpreter resolution', () => {
 		restoreFs?.();
 		restoreFs = undefined;
 		if (original === undefined) {
-			delete process.env[config.PYTHON_ENV];
+			delete process.env[PYTHON_ENV];
 		} else {
-			process.env[config.PYTHON_ENV] = original;
+			process.env[PYTHON_ENV] = original;
 		}
 	});
 
 	test('the setting wins over PLANTUML_GUI_PYTHON', async () => {
 		stubFilesystem(['/configured/python', '/env/python']);
-		process.env[config.PYTHON_ENV] = '/env/python';
+		process.env[PYTHON_ENV] = '/env/python';
 
 		const restore = await setPythonSetting('/configured/python');
 		try {
@@ -173,13 +176,13 @@ suite('sidecar: interpreter resolution', () => {
 		// workspace settings are not read; the env var is how launch.json
 		// configures development.
 		stubFilesystem(['/custom/python']);
-		process.env[config.PYTHON_ENV] = '/custom/python';
+		process.env[PYTHON_ENV] = '/custom/python';
 
 		assert.strictEqual(await resolvePythonPath(), '/custom/python');
 	});
 
 	test('throws instead of guessing when nothing is configured', async () => {
-		delete process.env[config.PYTHON_ENV];
+		delete process.env[PYTHON_ENV];
 
 		// The backend is a Python package no machine has by default, so an
 		// interpreter found by searching almost certainly cannot import
@@ -190,17 +193,17 @@ suite('sidecar: interpreter resolution', () => {
 	test('the unconfigured error is still a SidecarStartError', async () => {
 		// PythonConfigError is a subclass so that callers which only know about
 		// the base class keep working.
-		delete process.env[config.PYTHON_ENV];
+		delete process.env[PYTHON_ENV];
 
 		await assert.rejects(() => resolvePythonPath(), SidecarStartError);
 	});
 
 	test('the unconfigured error names both knobs', async () => {
-		delete process.env[config.PYTHON_ENV];
+		delete process.env[PYTHON_ENV];
 
 		await assert.rejects(() => resolvePythonPath(), (err) => {
-			assert.ok(err.message.includes(config.PYTHON_SETTING), err.message);
-			assert.ok(err.message.includes(config.PYTHON_ENV), err.message);
+			assert.ok(err.message.includes(PYTHON_SETTING), err.message);
+			assert.ok(err.message.includes(PYTHON_ENV), err.message);
 			return true;
 		});
 	});
@@ -209,14 +212,14 @@ suite('sidecar: interpreter resolution', () => {
 		// The check belongs ahead of the spawn so the report names the knob,
 		// rather than arriving as an ENOENT once a panel is waiting on a child.
 		stubFilesystem([]);
-		delete process.env[config.PYTHON_ENV];
+		delete process.env[PYTHON_ENV];
 
 		const restore = await setPythonSetting('/typo/python');
 		try {
 			await assert.rejects(() => resolvePythonPath(), (err) => {
 				assert.ok(err instanceof PythonConfigError, err.constructor.name);
 				assert.ok(err.message.includes('/typo/python'), err.message);
-				assert.ok(err.message.includes(config.PYTHON_SETTING), err.message);
+				assert.ok(err.message.includes(PYTHON_SETTING), err.message);
 				return true;
 			});
 		} finally {
@@ -226,7 +229,7 @@ suite('sidecar: interpreter resolution', () => {
 
 	test('rejects an interpreter path that is a directory', async () => {
 		stubFilesystem([], ['/usr/bin']);
-		delete process.env[config.PYTHON_ENV];
+		delete process.env[PYTHON_ENV];
 
 		const restore = await setPythonSetting('/usr/bin');
 		try {
@@ -238,7 +241,7 @@ suite('sidecar: interpreter resolution', () => {
 
 	test('a bad setting does not fall through to a working env var', async () => {
 		stubFilesystem(['/env/python']);
-		process.env[config.PYTHON_ENV] = '/env/python';
+		process.env[PYTHON_ENV] = '/env/python';
 
 		const restore = await setPythonSetting('/typo/python');
 		try {
@@ -250,10 +253,10 @@ suite('sidecar: interpreter resolution', () => {
 
 	test('names the environment variable when that is the bad source', async () => {
 		stubFilesystem([]);
-		process.env[config.PYTHON_ENV] = '/typo/python';
+		process.env[PYTHON_ENV] = '/typo/python';
 
 		await assert.rejects(() => resolvePythonPath(), (err) => {
-			assert.ok(err.message.includes(config.PYTHON_ENV), err.message);
+			assert.ok(err.message.includes(PYTHON_ENV), err.message);
 			return true;
 		});
 	});
@@ -261,7 +264,7 @@ suite('sidecar: interpreter resolution', () => {
 	test('a quoted, padded setting value resolves', async () => {
 		// What lands in settings.json when a path is pasted out of a shell.
 		stubFilesystem(['/usr/bin/python3']);
-		delete process.env[config.PYTHON_ENV];
+		delete process.env[PYTHON_ENV];
 
 		const restore = await setPythonSetting('  "/usr/bin/python3"  ');
 		try {
@@ -277,7 +280,7 @@ suite('sidecar: startup failure messages', () => {
 		const message = describeStartFailure('py3', '', { code: 'ENOENT' });
 
 		assert.ok(message.includes('py3'));
-		assert.ok(message.includes(config.PYTHON_SETTING));
+		assert.ok(message.includes(PYTHON_SETTING));
 	});
 
 	test('a missing package says how to install it', () => {

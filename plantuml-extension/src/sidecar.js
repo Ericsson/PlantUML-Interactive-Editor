@@ -34,7 +34,21 @@
 
 const { spawn } = require('child_process');
 const crypto = require('crypto');
-const config = require('./config');
+const vscode = require('vscode');
+const { SECTION, normalizePath, isFile } = require('./settings');
+
+/** Key within SECTION, and the id the user sees in Settings. */
+const PYTHON_KEY = 'pythonPath';
+const PYTHON_SETTING = `${SECTION}.${PYTHON_KEY}`;
+
+/**
+ * The environment variable that stands in for the setting.
+ *
+ * It exists because the Extension Development Host launches without a workspace
+ * folder, where workspace settings are not read at all; see
+ * plantuml-extension/README.md.
+ */
+const PYTHON_ENV = 'PLANTUML_GUI_PYTHON';
 
 // Must match PORT_LINE_PREFIX in src/plantuml_gui/serve.py.
 const PORT_LINE_PREFIX = 'PLANTUML_GUI_PORT=';
@@ -110,24 +124,26 @@ class Sidecar {
  *   configured one is not a file
  */
 async function resolvePythonPath() {
-	const configured = config.readSetting(config.PYTHON_KEY);
+	const configured = normalizePath(
+		vscode.workspace.getConfiguration(SECTION).get(PYTHON_KEY)
+	);
 
 	// An explicit setting wins even if it is wrong: a clear "could not run X"
 	// beats silently running some other interpreter than the one asked for.
 	if (configured) {
-		return requireInterpreter(configured, `the "${config.PYTHON_SETTING}" setting`);
+		return requireInterpreter(configured, `the "${PYTHON_SETTING}" setting`);
 	}
 
-	const fromEnv = config.readEnv(config.PYTHON_ENV);
+	const fromEnv = normalizePath(process.env[PYTHON_ENV]);
 
 	if (fromEnv) {
-		return requireInterpreter(fromEnv, `the ${config.PYTHON_ENV} environment variable`);
+		return requireInterpreter(fromEnv, `the ${PYTHON_ENV} environment variable`);
 	}
 
 	throw new PythonConfigError(
 		'No Python interpreter is configured for the PlantUML backend. Set ' +
-			`"${config.PYTHON_SETTING}" to an interpreter that has the ` +
-			`plantuml-gui package installed, or set ${config.PYTHON_ENV}.`
+			`"${PYTHON_SETTING}" to an interpreter that has the ` +
+			`plantuml-gui package installed, or set ${PYTHON_ENV}.`
 	);
 }
 
@@ -140,7 +156,7 @@ async function resolvePythonPath() {
  * @throws {PythonConfigError}
  */
 function requireInterpreter(candidate, source) {
-	if (!config.isFile(candidate)) {
+	if (!isFile(candidate)) {
 		throw new PythonConfigError(
 			`The Python interpreter configured in ${source} is not a file: ` +
 				`"${candidate}". Check ${source}.`
@@ -190,8 +206,8 @@ function describeStartFailure(pythonPath, stderr, spawnError) {
 		// means it stopped being runnable in between, or is not executable.
 		return (
 			`Could not run Python at "${pythonPath}". Check that it is an ` +
-			`executable interpreter, and that "${config.PYTHON_SETTING}" (or ` +
-			`${config.PYTHON_ENV}) points at it.`
+			`executable interpreter, and that "${PYTHON_SETTING}" (or ` +
+			`${PYTHON_ENV}) points at it.`
 		);
 	}
 
@@ -375,6 +391,9 @@ module.exports = {
 	Sidecar,
 	SidecarStartError,
 	PythonConfigError,
+	PYTHON_KEY,
+	PYTHON_SETTING,
+	PYTHON_ENV,
 	PORT_LINE_PREFIX,
 	TOKEN_HEADER
 };

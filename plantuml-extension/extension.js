@@ -33,7 +33,7 @@
 // src/webviewPage.js.
 const path = require('path');
 const vscode = require('vscode');
-const config = require('./src/config');
+const settings = require('./src/settings');
 const {
 	startSidecar,
 	SidecarStartError,
@@ -145,7 +145,7 @@ async function showConfigError(message) {
 	if (choice === OPEN_SETTINGS) {
 		// Opens the Settings UI with the search box pre-filled, so both of this
 		// extension's settings are on screen and nothing else is.
-		await vscode.commands.executeCommand('workbench.action.openSettings', config.SECTION);
+		await vscode.commands.executeCommand('workbench.action.openSettings', settings.SECTION);
 	}
 }
 
