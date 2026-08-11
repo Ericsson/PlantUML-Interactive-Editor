@@ -102,7 +102,7 @@ Node side, `plantuml-extension/`:
 | --- | --- |
 | `package.json` | Manifest: the `plantuml-interactive-editor.openDiagram` command, the two settings, and the browser libraries as runtime dependencies. |
 | `extension.js` | Lifecycle, the command, the webview panel, document listeners, and the message handlers. The only writer of the document. |
-| `src/settings.js` | Only what more than one file needs: the configuration section, path normalization, and the is-it-a-file predicate. No setting ids, no resolution policy. Requires nothing from `vscode`. |
+| `src/settings.js` | Only what more than one file needs: the configuration section, path normalization, and the is-it-a-file predicate. |
 | `src/sidecar.js` | Spawns and supervises the Python child; port handshake, token, health polling, error messages. |
 | `src/plantumlJar.js` | Resolves and validates the jar path before anything is spawned. |
 | `src/webviewPage.js` | Fetches the page from the sidecar and supplies the values Flask cannot know. |
