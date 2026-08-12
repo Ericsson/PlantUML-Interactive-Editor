@@ -245,8 +245,7 @@ function describeStartFailure(pythonPath, stderr, spawnError) {
 	if (/No module named ['"]?plantuml_gui/.test(stderr)) {
 		return (
 			`Python at "${pythonPath}" does not have the plantuml-gui package. ` +
-			'Install it into that interpreter, e.g. "pip install -e ." from the ' +
-			'repository root.'
+			`Install it with:\n\n  "${pythonPath}" -m pip install <path to plantuml_gui-*.whl>`
 		);
 	}
 

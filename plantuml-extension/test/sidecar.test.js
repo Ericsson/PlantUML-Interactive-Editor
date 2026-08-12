@@ -398,7 +398,9 @@ suite('sidecar: startup failure messages', () => {
 		);
 
 		assert.ok(message.includes('plantuml-gui'));
-		assert.ok(message.includes('pip install'));
+		// Into the interpreter that is actually configured, since that is the
+		// mismatch causing this: the wheel went somewhere else.
+		assert.ok(message.includes('"python" -m pip install'), message);
 	});
 
 	test('any other failure surfaces the sidecar stderr', () => {
