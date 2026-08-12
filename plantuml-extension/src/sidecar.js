@@ -34,6 +34,8 @@
 
 const { spawn } = require('child_process');
 const crypto = require('crypto');
+const os = require('os');
+const path = require('path');
 const vscode = require('vscode');
 const { SECTION, normalizePath, isFile } = require('./settings');
 
@@ -49,6 +51,34 @@ const PYTHON_SETTING = `${SECTION}.${PYTHON_KEY}`;
  * plantuml-extension/README.md.
  */
 const PYTHON_ENV = 'PLANTUML_GUI_PYTHON';
+
+/** Directory name for this extension's own data, under the XDG data home. */
+const DATA_DIR_NAME = 'plantuml-gui';
+
+/**
+ * The venv the setup instructions create, tried when nothing is configured.
+ *
+ * A blessed location is what lets a user on a standard machine configure
+ * nothing at all: install the wheel here and the extension finds it, the same
+ * way the jar is found without a setting. It also gives the not-found message
+ * somewhere concrete to point, so the fix is a command to paste rather than a
+ * decision to make.
+ *
+ * Under the XDG data home because a venv is application data. Computed per call
+ * rather than at import so that HOME and XDG_DATA_HOME are read when they are
+ * used. POSIX layout: elsewhere this simply will not be a file, and resolution
+ * falls through to the same message as an empty machine.
+ *
+ * @returns {{ dir: string, python: string }} the venv and its interpreter
+ */
+function standardVenv() {
+	const dataHome =
+		normalizePath(process.env.XDG_DATA_HOME) ||
+		path.join(os.homedir(), '.local', 'share');
+	const dir = path.join(dataHome, DATA_DIR_NAME, 'venv');
+
+	return { dir, python: path.join(dir, 'bin', 'python') };
+}
 
 // Must match PORT_LINE_PREFIX in src/plantuml_gui/serve.py.
 const PORT_LINE_PREFIX = 'PLANTUML_GUI_PORT=';
@@ -107,11 +137,12 @@ class Sidecar {
 /**
  * Resolve the Python interpreter to run the sidecar with.
  *
- * Two explicit sources only, most explicit first. Nothing is guessed: the
- * backend is a Python package that no machine has by default, so an
- * interpreter found by searching is one that almost certainly cannot import
+ * Three sources, most explicit first: the setting, the environment variable,
+ * then the venv the setup instructions create. Nothing is searched for on PATH:
+ * the backend is a Python package that no machine has by default, so an
+ * interpreter found that way is one that almost certainly cannot import
  * plantuml_gui, and spawning it would report the failure against the wrong
- * thing. Failing here names the knob to turn instead.
+ * thing.
  *
  * The path is checked here so that a mistake is reported against the knob that
  * caused it, rather than as an ENOENT off the child's error event once a
@@ -120,8 +151,8 @@ class Sidecar {
  * See plantuml-extension/README.md for which knob to use when.
  *
  * @returns {Promise<string>} an interpreter path.
- * @throws {PythonConfigError} when no interpreter is configured, or the
- *   configured one is not a file
+ * @throws {PythonConfigError} when no interpreter is configured and the
+ *   standard venv is absent, or when a configured one is not a file
  */
 async function resolvePythonPath() {
 	const configured = normalizePath(
@@ -140,10 +171,18 @@ async function resolvePythonPath() {
 		return requireInterpreter(fromEnv, `the ${PYTHON_ENV} environment variable`);
 	}
 
+	const standard = standardVenv();
+
+	if (isFile(standard.python)) {
+		return standard.python;
+	}
+
 	throw new PythonConfigError(
-		'No Python interpreter is configured for the PlantUML backend. Set ' +
-			`"${PYTHON_SETTING}" to an interpreter that has the ` +
-			`plantuml-gui package installed, or set ${PYTHON_ENV}.`
+		'The PlantUML backend is not installed. Create it with:\n\n' +
+			`  python3 -m venv ${standard.dir}\n` +
+			`  ${standard.dir}/bin/pip install <path to plantuml_gui-*.whl>\n\n` +
+			`Or set "${PYTHON_SETTING}" to an interpreter that already has the ` +
+			`plantuml-gui package installed (or ${PYTHON_ENV}).`
 	);
 }
 
@@ -385,6 +424,7 @@ function readPortLine(child, pythonPath, getStderr) {
 module.exports = {
 	startSidecar,
 	resolvePythonPath,
+	standardVenv,
 	buildEnv,
 	describeStartFailure,
 	readPortLine,
