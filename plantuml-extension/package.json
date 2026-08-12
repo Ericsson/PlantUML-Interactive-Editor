@@ -2,7 +2,7 @@
   "name": "plantuml-editor",
   "displayName": "PlantUML Editor",
   "description": "PlantUML Interactive Editor",
-  "version": "0.0.1",
+  "version": "0.31.0",
   "publisher": "ericsson",
   "license": "MIT",
   "repository": {

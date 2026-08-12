@@ -1,9 +1,13 @@
 # Change Log
 
-All notable changes to the "plantuml-editor" extension will be documented in this file.
+The extension's version tracks the `plantuml-gui` backend it is built against,
+since the two are installed as a pair and the frontend ships inside the backend.
+A VS Code manifest requires three-component semver, so backend `0.31` is
+extension `0.31.0`.
 
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
+Changes to the diagram editing itself are listed in the repository's
+[CHANGELOG.md](../CHANGELOG.md).
 
-## [Unreleased]
+## [0.31.0]
 
-- Initial release
+- First packaged release.
