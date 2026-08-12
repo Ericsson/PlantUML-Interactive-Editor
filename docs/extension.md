@@ -311,8 +311,8 @@ file; neither the webview nor the sidecar can reach it.
    by every panel in the window; concurrent callers await the same start rather than racing
    to spawn two servers.
 5. `startSidecar()` resolves the interpreter the same way (setting, else
-   `PLANTUML_GUI_PYTHON`, checked to be a file), generates a per-launch token, and spawns
-   `python -m plantuml_gui.serve`.
+   `PLANTUML_GUI_PYTHON`, else the standard venv, checked to be a file), generates a
+   per-launch token, and spawns `python -m plantuml_gui.serve`.
 6. The sidecar applies the jar override, warns if the jar is unusable, installs its routes,
    binds an ephemeral port, and prints `PLANTUML_GUI_PORT=<port>` to stdout.
 7. Node reads that line off stdout, then polls `GET /health` until it answers.
@@ -673,7 +673,7 @@ render from `/getActivityPositions` and `/getSequencePositions`.
 
 | Setting | Meaning |
 | --- | --- |
-| `plantumlInteractive.pythonPath` | Absolute path to a Python interpreter that has `plantuml-gui` installed. Required. |
+| `plantumlInteractive.pythonPath` | Absolute path to a Python interpreter that has `plantuml-gui` installed. Optional where the standard venv exists. |
 | `plantumlInteractive.plantumlJar` | Absolute path to `plantuml.jar`. Optional where the shared internal install exists. |
 
 Both are declared `machine-overridable`: they are absolute paths to things installed on one
@@ -681,9 +681,15 @@ machine, so they should neither ride Settings Sync to another nor be committed t
 repository's `.vscode/settings.json`.
 
 Each has an environment-variable equivalent — `PLANTUML_GUI_PYTHON` and `PLANTUML_JAR`, the
-latter being the same variable the web app reads, so a repo `.env` configures both. The jar
-has a third source, the shared internal install path, which is tried only when neither of
-the other two is set.
+latter being the same variable the web app reads, so a repo `.env` configures both. Each also
+has a third source, tried only when neither of the other two is set: the shared internal
+install for the jar, and for the interpreter the venv the setup instructions create, at
+`$XDG_DATA_HOME/plantuml-gui/venv` falling back to `~/.local/share`. On a machine set up as
+documented, both settings can stay empty.
+
+`standardVenv()` in `sidecar.js` computes that path per call rather than at import, so `HOME`
+and `XDG_DATA_HOME` are read when the interpreter is resolved. It cannot be a manifest
+default: a default is a fixed string, and neither VS Code nor `normalizePath()` expands `~`.
 
 `src/settings.js` holds only what more than one file needs: the section name, `normalizePath()`
 and `isFile()`. It requires nothing from `vscode`, which is what makes it testable in plain
@@ -719,10 +725,10 @@ exists, matching `check_jar()` in `serve.py` — before the backend is spawned. 
 that avoids a 500 on the first render; for the interpreter it avoids launching a process
 just to learn its path was wrong.
 
-Nothing is guessed. `resolvePythonPath()` will not fall back to a `python` on `PATH`,
-because the backend is a package no machine has by default: an interpreter found by
-searching almost certainly cannot import `plantuml_gui`, and spawning it would report the
-failure against the wrong thing. Failing early names the knob to turn.
+Nothing is searched for. `resolvePythonPath()` will not fall back to a `python` on `PATH`,
+because the backend is a package no machine has by default: an interpreter found that way
+almost certainly cannot import `plantuml_gui`, and spawning it would report the failure
+against the wrong thing. The standard venv is a documented location, not a search.
 
 ## Development
 

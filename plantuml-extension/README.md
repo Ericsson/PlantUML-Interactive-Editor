@@ -23,19 +23,21 @@ routes live in the Python wheel. Install both from the same build — an older
 wheel means an older UI.
 
 ```
-python3 -m venv ~/.venvs/plantuml
-~/.venvs/plantuml/bin/pip install plantuml_gui-<version>-py3-none-any.whl
+python3 -m venv ~/.local/share/plantuml-gui/venv
+~/.local/share/plantuml-gui/venv/bin/pip install plantuml_gui-<version>-py3-none-any.whl
 code --install-extension plantuml-editor-<version>.vsix
 ```
 
-Then set `plantumlInteractive.pythonPath` to that interpreter's absolute path.
-Any interpreter works so long as `import plantuml_gui` succeeds from it.
+The extension looks there, so there is nothing to configure. Installing
+somewhere else works too — point `plantumlInteractive.pythonPath` at that
+interpreter instead. Any interpreter will do so long as `import plantuml_gui`
+succeeds from it.
 
 ## Settings
 
 | Setting | Environment variable | What it is |
 | --- | --- | --- |
-| `plantumlInteractive.pythonPath` | `PLANTUML_GUI_PYTHON` | Absolute path to the interpreter described above. Required. |
+| `plantumlInteractive.pythonPath` | `PLANTUML_GUI_PYTHON` | Absolute path to the interpreter described above. Optional if the venv is in the standard location. |
 | `plantumlInteractive.plantumlJar` | `PLANTUML_JAR` | Absolute path to `plantuml.jar`. Optional if one of the fallbacks below applies. |
 
 Both settings can be overridden by their environment variable. `PLANTUML_JAR`
@@ -53,9 +55,14 @@ pasted from a terminal works as-is. Nothing else is expanded — `~`,
 ## Which value wins
 
 The VS Code setting takes precedence over the environment variable. If neither
-is set, the jar falls back to the shared internal install. Both paths reach the
-backend when it starts, so a changed setting takes effect on the next start —
-reload the window if a diagram panel is already open.
+is set, the interpreter falls back to `~/.local/share/plantuml-gui/venv`
+(`$XDG_DATA_HOME` is honoured) and the jar to the shared internal install.
+
+If you do set one and the path is wrong, you get an error naming it — the
+fallbacks are not tried, so a typo cannot look like it worked.
+
+Both paths reach the backend when it starts, so a changed setting takes effect
+on the next start — reload the window if a diagram panel is already open.
 
 ## Usage
 
