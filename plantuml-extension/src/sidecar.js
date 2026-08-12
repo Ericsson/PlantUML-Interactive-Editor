@@ -58,13 +58,8 @@ const DATA_DIR_NAME = 'plantuml-gui';
 /**
  * The venv the setup instructions create, tried when nothing is configured.
  *
- * A known location is what lets a stock machine work with no setting at all,
- * the same way the jar resolves without one.
- *
  * Under the XDG data home because a venv is application data. Computed per call
- * rather than at import so that HOME and XDG_DATA_HOME are read when they are
- * used. POSIX layout: elsewhere this simply will not be a file, and resolution
- * falls through to the same message as an empty machine.
+ * so HOME and XDG_DATA_HOME are read when used, not at import.
  *
  * @returns {{ dir: string, python: string }} the venv and its interpreter
  */
