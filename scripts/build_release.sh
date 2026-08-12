@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build the extension and its backend
 #
-# Usage: build_release.sh [destination]
+# Usage: scripts/build_release.sh [destination]
 #
 # Both artefacts must come from the same commit: the frontend ships inside the
 # wheel, so a mismatched pair means an old UI.
