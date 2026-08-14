@@ -686,12 +686,9 @@ has a third source, tried only when neither of the other two is set: the shared 
 install for the jar, and for the interpreter a virtual environment created at install time.
 The backend is a Python package and needs one to live in, so `plantuml-extension/README.md`
 has the user create it at `~/.local/share/plantuml-gui/venv` — or under `$XDG_DATA_HOME` when
-that is set — and install the wheel into it. On a machine set up as documented, both settings
-can stay empty.
-
-`standardVenv()` in `sidecar.js` computes that path per call rather than at import, so `HOME`
-and `XDG_DATA_HOME` are read when the interpreter is resolved. It cannot be a manifest
-default: a default is a fixed string, and neither VS Code nor `normalizePath()` expands `~`.
+that is set — and install the wheel into it. `standardVenv()` in `sidecar.js` computes that
+path per call rather than at import, so `HOME` and `XDG_DATA_HOME` are read when the
+interpreter is resolved. On a machine set up as documented, both settings can stay empty.
 
 `src/settings.js` holds only what more than one file needs: the section name, `normalizePath()`
 and `isFile()`. It requires nothing from `vscode`, which is what makes it testable in plain
