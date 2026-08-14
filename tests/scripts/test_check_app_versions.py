@@ -97,3 +97,23 @@ class TestCheckAppVersions:
         commit, not just acknowledged by this test.
         """
         assert check_app_versions()
+
+    def test_missing_backend_version_raises(self, tmp_path):
+        about_path = tmp_path / "__about__.py"
+        about_path.write_text("# no __version__ here\n", encoding="utf-8")
+        package_json_path = tmp_path / "package.json"
+        package_json_path.write_text(
+            json.dumps({"name": "fixture", "version": "0.31.0"}), encoding="utf-8"
+        )
+
+        with pytest.raises(VersionCheckError, match="__version__"):
+            check_app_versions(about_path, package_json_path)
+
+    def test_missing_extension_version_raises(self, tmp_path):
+        about_path = tmp_path / "__about__.py"
+        about_path.write_text('__version__ = "0.31"\n', encoding="utf-8")
+        package_json_path = tmp_path / "package.json"
+        package_json_path.write_text(json.dumps({"name": "fixture"}), encoding="utf-8")
+
+        with pytest.raises(VersionCheckError, match="no version field"):
+            check_app_versions(about_path, package_json_path)
