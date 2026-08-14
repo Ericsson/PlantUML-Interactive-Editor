@@ -683,9 +683,11 @@ repository's `.vscode/settings.json`.
 Each has an environment-variable equivalent — `PLANTUML_GUI_PYTHON` and `PLANTUML_JAR`, the
 latter being the same variable the web app reads, so a repo `.env` configures both. Each also
 has a third source, tried only when neither of the other two is set: the shared internal
-install for the jar, and for the interpreter the venv the setup instructions create, at
-`$XDG_DATA_HOME/plantuml-gui/venv`, or `~/.local/share/plantuml-gui/venv` when that variable
-is unset. On a machine set up as documented, both settings can stay empty.
+install for the jar, and for the interpreter a virtual environment created at install time.
+The backend is a Python package and needs one to live in, so `plantuml-extension/README.md`
+has the user create it at `~/.local/share/plantuml-gui/venv` — or under `$XDG_DATA_HOME` when
+that is set — and install the wheel into it. On a machine set up as documented, both settings
+can stay empty.
 
 `standardVenv()` in `sidecar.js` computes that path per call rather than at import, so `HOME`
 and `XDG_DATA_HOME` are read when the interpreter is resolved. It cannot be a manifest
@@ -724,11 +726,6 @@ Both paths are validated with `statSync().isFile()` — a file, not merely somet
 exists, matching `check_jar()` in `serve.py` — before the backend is spawned. For the jar
 that avoids a 500 on the first render; for the interpreter it avoids launching a process
 just to learn its path was wrong.
-
-Nothing is searched for. `resolvePythonPath()` will not fall back to a `python` on `PATH`,
-because the backend is a package no machine has by default: an interpreter found that way
-almost certainly cannot import `plantuml_gui`, and spawning it would report the failure
-against the wrong thing. The standard venv is a documented location, not a search.
 
 ## Development
 
