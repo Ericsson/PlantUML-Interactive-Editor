@@ -8,9 +8,8 @@ Internal extension, distributed as a `.vsix`.
 
 ## Requirements
 
-**Python 3.10 or newer** with the `plantuml-gui` package installed — the
-extension runs that package as a local child process to render diagrams and
-rewrite their source.
+**Python 3.10 or newer** on your `PATH` (check with `python3 --version`) — used
+to create the virtual environment the extension runs as a local child process.
 
 **Java and a `plantuml.jar`.** Rendering shells out to
 `java -jar plantuml.jar`. A shared internal install is used when the machine has
