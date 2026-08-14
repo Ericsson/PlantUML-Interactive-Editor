@@ -80,11 +80,12 @@ npm test         # eslint, then the Mocha suites inside a real VS Code
 `npm test` launches an actual editor, so it needs a display — under a headless
 shell, run it with `xvfb-run`.
 
-A release is those two files, built from the same commit:
+A release is those two files, built from the same commit. Both end up in the
+repo root's `dist/` directory:
 
 ```
-uv build --wheel                            # repo root -> dist/*.whl
-cd plantuml-extension && npm run package    # -> plantuml-editor-<version>.vsix
+uv build --wheel                                    # from repo root -> dist/*.whl
+cd plantuml-extension && npm run package -- -o ../dist/  # -> dist/plantuml-editor-<version>.vsix
 ```
 
 Architecture, the sidecar protocol and the webview contract are documented in
