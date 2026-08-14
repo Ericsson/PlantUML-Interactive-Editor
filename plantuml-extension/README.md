@@ -42,7 +42,10 @@ succeeds from it.
 
 Both settings can be overridden by their environment variable. `PLANTUML_JAR`
 is the same variable the web app reads, so a repository `.env` already
-configures the extension.
+configures the extension. The VS Code setting takes precedence over the
+environment variable; if you do set one and the path is wrong, you get an
+error naming it — the fallbacks are not tried, so a typo cannot look like it
+worked.
 
 Both settings are `machine-overridable`: set them in machine settings, not in
 a repository's `.vscode/settings.json`. In a remote window they appear under the
@@ -51,15 +54,6 @@ Settings editor's **Remote** tab.
 Whitespace and one matching pair of surrounding quotes are stripped, so a path
 pasted from a terminal works as-is. Nothing else is expanded — `~`,
 `${workspaceFolder}` and `${env:...}` are taken literally.
-
-## Which value wins
-
-The VS Code setting takes precedence over the environment variable. If neither
-is set, the interpreter falls back to `~/.local/share/plantuml-gui/venv`
-(`$XDG_DATA_HOME` is honoured) and the jar to the shared internal install.
-
-If you do set one and the path is wrong, you get an error naming it — the
-fallbacks are not tried, so a typo cannot look like it worked.
 
 Both paths reach the backend when it starts, so a changed setting takes effect
 on the next start — reload the window if a diagram panel is already open.
