@@ -684,8 +684,8 @@ Each has an environment-variable equivalent — `PLANTUML_GUI_PYTHON` and `PLANT
 latter being the same variable the web app reads, so a repo `.env` configures both. Each also
 has a third source, tried only when neither of the other two is set: the shared internal
 install for the jar, and for the interpreter the venv the setup instructions create, at
-`$XDG_DATA_HOME/plantuml-gui/venv` falling back to `~/.local/share`. On a machine set up as
-documented, both settings can stay empty.
+`$XDG_DATA_HOME/plantuml-gui/venv`, or `~/.local/share/plantuml-gui/venv` when that variable
+is unset. On a machine set up as documented, both settings can stay empty.
 
 `standardVenv()` in `sidecar.js` computes that path per call rather than at import, so `HOME`
 and `XDG_DATA_HOME` are read when the interpreter is resolved. It cannot be a manifest
