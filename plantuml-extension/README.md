@@ -19,7 +19,10 @@ one; otherwise set `plantumlInteractive.plantumlJar` to your own copy.
 
 The `.vsix` carries the extension alone; the frontend and the diagram-rewriting
 routes live in the Python wheel. Install both from the same build — an older
-wheel means an older UI.
+wheel means an older UI. Check the internal setup guide for where to get them,
+or build them yourself (see "Development" below).
+
+From the directory containing the wheel and `.vsix`:
 
 ```
 python3 -m venv ~/.local/share/plantuml-gui/venv
