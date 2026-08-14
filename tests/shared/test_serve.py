@@ -30,6 +30,7 @@ from urllib.parse import urlsplit
 import pytest
 from flask import Flask, jsonify
 from plantuml_gui import serve
+from plantuml_gui.__about__ import __version__
 from pyquery import PyQuery
 
 # plantuml_gui is a namespace package, so it has no __file__ of its own.
@@ -117,7 +118,19 @@ def test_health_route_reports_ok(bare_app):
     response = bare_app.test_client().get("/health")
 
     assert response.status_code == 200
-    assert response.get_json() == {"status": "ok"}
+    assert response.get_json()["status"] == "ok"
+
+
+def test_health_route_reports_the_package_version(bare_app):
+    """The extension's runtime compatibility check
+    (warnOnBackendVersionMismatch in extension.js) reads this field to notice a
+    venv left behind by an older release -- something the build-time pairing in
+    scripts/check_app_versions.py cannot catch."""
+    serve.install_health_route(bare_app)
+
+    response = bare_app.test_client().get("/health")
+
+    assert response.get_json()["version"] == __version__
 
 
 def test_no_token_configured_leaves_routes_open(bare_app):

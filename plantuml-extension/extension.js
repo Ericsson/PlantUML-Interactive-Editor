@@ -38,6 +38,7 @@ const {
 	startSidecar,
 	SidecarStartError,
 	PythonConfigError,
+	EXPECTED_BACKEND_VERSION,
 	TOKEN_HEADER
 } = require('./src/sidecar');
 const { resolvePlantUmlJarPath, PlantUmlConfigError } = require('./src/plantumlJar');
@@ -106,6 +107,7 @@ function ensureSidecar(jarPath) {
 	if (!sidecarStarting) {
 		sidecarStarting = startSidecar({ jarPath, output: outputChannel })
 			.then((started) => {
+				warnOnBackendVersionMismatch(started);
 				sidecar = started;
 				// Drop the handle when the child dies, so the next open starts a
 				// fresh one instead of rendering against a dead process forever.
@@ -147,6 +149,36 @@ async function showConfigError(message) {
 		// extension's settings are on screen and nothing else is.
 		await vscode.commands.executeCommand('workbench.action.openSettings', settings.SECTION);
 	}
+}
+
+/**
+ * Warn, once per sidecar start, when the running backend is not the version
+ * this extension was built against.
+ *
+ * The build-time pairing (scripts/check_app_versions.py) only holds for an
+ * install built from one commit; it says nothing about a venv left on an older
+ * release than the .vsix now talking to it. A mismatch still runs -- the routes
+ * this extension calls have generally not gone away across a minor version --
+ * so this warns rather than blocking.
+ *
+ * The message names both versions but no fix: either side can be the stale one,
+ * and the wheel the user would reinstall from may no longer be on the machine.
+ * Reinstalling both from one release is the whole remedy, in either direction.
+ *
+ * @param {import('./src/sidecar').Sidecar} activeSidecar
+ */
+function warnOnBackendVersionMismatch(activeSidecar) {
+	const backendVersion = activeSidecar.backendVersion;
+
+	if (backendVersion === EXPECTED_BACKEND_VERSION) {
+		return;
+	}
+
+	vscode.window.showWarningMessage(
+		`PlantUML backend ${backendVersion ?? 'of unknown version'} does not match ` +
+			`this extension (expects ${EXPECTED_BACKEND_VERSION}). Install the wheel ` +
+			'and the .vsix from the same release.'
+	);
 }
 
 /**

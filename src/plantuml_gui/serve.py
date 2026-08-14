@@ -53,6 +53,7 @@ from flask import Flask, Response, jsonify, render_template, request
 from flask.typing import ResponseReturnValue
 from werkzeug.serving import make_server
 
+from .__about__ import __version__
 from .app import app
 from .shared.routes import generate_static_js_hash
 
@@ -228,11 +229,14 @@ def install_health_route(flask_app: Flask) -> None:
 
     Registered here rather than on the blueprints so the web app's route table
     is unchanged; only the sidecar exposes it.
+
+    The version lets the parent notice a venv left on an older wheel than the
+    .vsix talking to it; see docs/extension.md, "Version compatibility".
     """
 
     @flask_app.route("/health")
     def _health() -> ResponseReturnValue:
-        return jsonify({"status": "ok"})
+        return jsonify({"status": "ok", "version": __version__})
 
 
 def _is_safe_value(value: str) -> bool:

@@ -172,7 +172,7 @@ instead. All three carry `X-PlantUML-Token`.
 
 | Request | When | Response | On failure |
 | --- | --- | --- | --- |
-| `GET /health` | Every 100 ms after the port line until it answers or 30 s passes; 2 s per attempt. | `{"status": "ok"}` — the body is never read, only the fact that something answered. | Not-ready-yet; the deadline is what gives up. |
+| `GET /health` | Every 100 ms after the port line until it answers or 30 s passes; 2 s per attempt. | `{"status": "ok", "version": "<backend __about__.py version>"}` — `status` is never read, only the fact that something answered; `version` lands in `Sidecar.backendVersion`, see [Version compatibility](#version-compatibility). | Not-ready-yet; the deadline is what gives up. |
 | `GET /webview?…` | Once per panel, 5 s timeout. | `text/html`, assigned verbatim to `panel.webview.html`. | `400` + `{"error": …}` on a bad parameter, `WebviewPageError` otherwise. |
 | `POST /renderPNG` | On `savePng`, 60 s timeout — the render shells out to java. | `image/png` bytes, written to the file the save dialog returns. | Notification; nothing is written. |
 
@@ -330,6 +330,17 @@ the panel is disposed rather than left blank. The two failures whose answer real
 setting — an unusable jar and an unusable interpreter — carry an **Open Settings** button
 that opens the Settings UI filtered to `plantumlInteractive`. A backend that failed to boot
 does not: `describeStartFailure()` has already said what to install.
+
+## Version compatibility
+
+Once a fresh sidecar has answered `/health` (between steps 4 and 5 above),
+`warnOnBackendVersionMismatch()` in `extension.js` compares `Sidecar.backendVersion` against
+`EXPECTED_BACKEND_VERSION` in `src/sidecar.js` — this extension's own `major.minor`, the same
+rule as the `scripts/check_app_versions.py` pre-commit hook applies at build time. On a
+mismatch it warns, naming both versions and saying to reinstall both from one release; it names
+no command, since either side can be the stale one. It is non-blocking (the panel still opens),
+and runs once per sidecar start rather than once per panel, since every panel in the window
+shares one sidecar.
 
 ## The sidecar
 
@@ -759,6 +770,7 @@ Each site carries a comment naming the other.
 | `/renderPNG` | `extension.js` (`savePng`) | `shared/routes.py` (`renderpng`) |
 | `PLANTUML_GUI_TOKEN`, `PLANTUML_GUI_JAR_OVERRIDE` | `src/sidecar.js` (`buildEnv`) | `serve.py` (`TOKEN_ENV`, `JAR_ENV`) |
 | The six message types | `extension.js` | `static/vscode/` shims |
+| `major.minor` version compatibility rule | `src/sidecar.js` (`EXPECTED_BACKEND_VERSION`) | `scripts/check_app_versions.py` (`_major_minor`) |
 
 One more invariant lives entirely in the page: the script load order in `webview.html` —
 vendor, then shims, then app, then boot. Every step of it is justified in that file.
@@ -768,6 +780,7 @@ vendor, then shims, then app, then boot. Every step of it is justified in that f
 | Symptom | Where to look |
 | --- | --- |
 | Notification on opening the panel | The message names the setting to change. |
+| "PlantUML backend X does not match this extension" | Non-blocking warning; the venv and the `.vsix` are from different releases. Reinstall both from one release. See [Version compatibility](#version-compatibility). |
 | Diagram never renders, menus work | Jar problem. Check the `PlantUML Interactive` output channel for `check_jar`'s warning. |
 | Nothing is interactive but the diagram renders | Likely a missing DOM id throwing during setup. Open the webview devtools: *Developer: Open Webview Developer Tools*. |
 | Python traceback | The `PlantUML Interactive` output channel, which receives the sidecar's stderr. |

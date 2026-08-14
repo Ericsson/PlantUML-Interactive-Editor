@@ -38,6 +38,7 @@ const os = require('os');
 const path = require('path');
 const vscode = require('vscode');
 const { SECTION, normalizePath, isFile } = require('./settings');
+const extensionPackage = require('../package.json');
 
 /** Key within SECTION, and the id the user sees in Settings. */
 const PYTHON_KEY = 'pythonPath';
@@ -85,6 +86,20 @@ const STARTUP_TIMEOUT_MS = 30000;
 
 const HEALTH_TIMEOUT_MS = 2000;
 
+/**
+ * The backend version this extension expects: its own, trimmed to major.minor.
+ * Extension `0.31.0` gives `"0.31"`, which is what a matching backend's
+ * __about__.py reports -- a VS Code manifest must carry three components and
+ * the backend has two, so untrimmed, a correct pair would look mismatched.
+ * Trimming also leaves the patch free, so an extension-only fix can ship as
+ * `0.31.1` against an unchanged backend. Same rule as `_major_minor` in
+ * scripts/check_app_versions.py, which enforces it at commit time.
+ */
+const EXPECTED_BACKEND_VERSION = extensionPackage.version
+	.split('.')
+	.slice(0, 2)
+	.join('.');
+
 /** Thrown when the sidecar cannot be started or does not become ready. */
 class SidecarStartError extends Error {}
 
@@ -112,6 +127,9 @@ class Sidecar {
 		this.port = port;
 		this.token = token;
 		this.baseUrl = `http://127.0.0.1:${port}/`;
+		// Filled in by waitForHealthy once /health has answered.
+		/** @type {string | undefined} */
+		this.backendVersion = undefined;
 	}
 
 	/** @returns {boolean} whether the child is still running. */
@@ -276,6 +294,12 @@ async function waitForHealthy(sidecar, deadline) {
 				signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS)
 			});
 			if (response.ok) {
+				// Best-effort: a body that is not JSON, or has no version
+				// field, leaves backendVersion undefined rather than failing
+				// startup -- the backend answered, which is what this
+				// function promises.
+				const body = await response.json().catch(() => undefined);
+				sidecar.backendVersion = body?.version;
 				return;
 			}
 			lastError = new Error(`/health returned ${response.status}`);
@@ -422,6 +446,7 @@ module.exports = {
 	Sidecar,
 	SidecarStartError,
 	PythonConfigError,
+	EXPECTED_BACKEND_VERSION,
 	PYTHON_KEY,
 	PYTHON_SETTING,
 	PYTHON_ENV,
