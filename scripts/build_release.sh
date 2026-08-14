@@ -1,15 +1,23 @@
 #!/bin/bash
 # Build the extension and its backend
 #
-# Usage: scripts/build_release.sh [destination]
+# Usage: scripts/build_release.sh [destination] [--force]
 #
 # Both artefacts must come from the same commit: the frontend ships inside the
 # wheel, so a mismatched pair means an old UI.
+#
+# If destination already contains a published wheel/vsix pair, publishing
+# aborts unless --force is given, so you don't accidentally clobber a
+# colleague's not-yet-downloaded release.
 set -euo pipefail
 shopt -s nullglob
 
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 DEST=${1:-}
+FORCE=0
+for arg in "$@"; do
+	[[ $arg == --force ]] && FORCE=1
+done
 
 cd "$REPO"
 
@@ -39,6 +47,12 @@ ls -1 dist/plantuml_gui-*.whl plantuml-extension/plantuml-editor-*.vsix
 # the filenames, so a leftover would make the glob match two files
 old=("$DEST"/plantuml_gui-*.whl "$DEST"/plantuml-editor-*.vsix)
 if (( ${#old[@]} )); then
+	if (( ! FORCE )); then
+		echo "error: $DEST already contains a published release:" >&2
+		printf '  %s\n' "${old[@]}" >&2
+		echo "rerun with --force to overwrite" >&2
+		exit 1
+	fi
 	rm -f "${old[@]}"
 fi
 
