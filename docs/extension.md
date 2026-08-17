@@ -207,7 +207,7 @@ instances do not. Every message carries a `type` discriminator.
 
 | Direction | Message | Payload | Sent when |
 | --- | --- | --- | --- |
-| host → webview | `documentChanged` | `{ text }` | Once after the panel opens, then on every document change, debounced 300 ms. |
+| host → webview | `documentChanged` | `{ text }` | Once the webview has posted `ready`, then on every document change, debounced 300 ms. |
 | host → webview | `cursorMoved` | `{ row, column }` | On `onDidChangeTextEditorSelection`, undebounced, zero-based. |
 | webview → host | `applyPuml` | `{ text }` | A diagram operation produced new source. |
 | webview → host | `setHighlight` | `{ rows }`, zero-based line numbers | The shim's marker table changed. |

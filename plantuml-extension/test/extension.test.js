@@ -125,6 +125,35 @@ suite('extension: message protocol', () => {
 			'posted by the webview, not handled by the host'
 		);
 	});
+
+	test('sends the first document only once the webview says it is ready', () => {
+		// Regression: the initial documentChanged was posted immediately after
+		// panel.webview.html was set, before the page had registered its
+		// `message` listener. A message posted then is dropped in silence, so
+		// the panel opened with a toolbar and no diagram, and stayed that way
+		// until the next document change happened to post again.
+		//
+		// Checked in the source because the host end of this is unreachable
+		// from a test: it needs a running sidecar, a panel and a real webview.
+		const [, source] = readSources().find(([relative]) => relative === 'extension.js');
+
+		const listenerIndex = source.indexOf('panel.webview.onDidReceiveMessage');
+		assert.notStrictEqual(listenerIndex, -1, 'the webview message listener is gone');
+
+		assert.strictEqual(
+			source.slice(0, listenerIndex).indexOf('postDocument()'),
+			-1,
+			'the document is posted before the webview can listen for it'
+		);
+
+		const readyIndex = source.indexOf("message.type === 'ready'");
+		assert.notStrictEqual(readyIndex, -1, 'the host no longer handles ready');
+		assert.notStrictEqual(
+			source.indexOf('postDocument()', readyIndex),
+			-1,
+			'nothing sends the first document once the webview is ready'
+		);
+	});
 });
 
 /**

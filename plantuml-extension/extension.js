@@ -276,13 +276,14 @@ async function openDiagramPanel(context) {
 	// are what actually terminate the write-back loop.
 	let applyingEdit = false;
 
+	// Hands the whole source over; the frontend renders itself from it through
+	// the app's own renderPlantUml(). The text is read at call time, so
+	// whatever the document holds when this runs is what the diagram shows.
+	// Called from the `ready` handler for the first render, and from the
+	// change listener below for every one after it.
 	const postDocument = () => {
 		panel.webview.postMessage({ type: 'documentChanged', text: document.getText() });
 	};
-
-	// The frontend renders itself from this, through the app's own
-	// renderPlantUml(); the first message also primes its cached text.
-	postDocument();
 
 	const changeListener = vscode.workspace.onDidChangeTextDocument((event) => {
 		if (event.document !== document) {
@@ -310,6 +311,12 @@ async function openDiagramPanel(context) {
 			await savePng(document, active);
 		} else if (message.type === 'ready') {
 			outputChannel?.appendLine('[webview] frontend loaded');
+			// `ready` is the frontend's word that its `message` listener is
+			// live, which makes this the first moment a post reaches it: the
+			// channel delivers only to a listening page, and drops the rest in
+			// silence. So the first document goes out from here, priming the
+			// page's cached text and triggering its initial render.
+			postDocument();
 		}
 	});
 
