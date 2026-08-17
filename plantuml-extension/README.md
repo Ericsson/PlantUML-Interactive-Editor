@@ -65,6 +65,11 @@ on the next start — reload the window if a diagram panel is already open.
 With a `.puml` file open in the active editor, run **PlantUML: Open Interactive
 Diagram** from the Command Palette.
 
+The panel then shows whichever PlantUML file you are in — the last one you
+opened or switched to — so the command is needed once per window, and the tab
+names the file on show. A `.txt` counts when it starts with a `@startuml` block;
+a file that is not a diagram leaves the panel as it was.
+
 ## Development
 
 `F5` runs the Extension Development Host from `.vscode/launch.json`. That host

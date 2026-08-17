@@ -207,7 +207,7 @@ instances do not. Every message carries a `type` discriminator.
 
 | Direction | Message | Payload | Sent when |
 | --- | --- | --- | --- |
-| host → webview | `documentChanged` | `{ text }` | Once the webview has posted `ready`, then on every document change, debounced 300 ms. |
+| host → webview | `documentChanged` | `{ text }` | Once the webview has posted `ready`, on every document change, debounced 300 ms, and on a switch to another diagram file. |
 | host → webview | `cursorMoved` | `{ row, column }` | On `onDidChangeTextEditorSelection`, undebounced, zero-based. |
 | webview → host | `applyPuml` | `{ text }` | A diagram operation produced new source. |
 | webview → host | `setHighlight` | `{ rows }`, zero-based line numbers | The shim's marker table changed. |
@@ -294,6 +294,20 @@ Not cross-process, but the link that closes the loop. The host reads with
 `document.getText()` and writes with a `WorkspaceEdit` replacing the full range — one edit,
 so one undo step, so Ctrl+Z undoes a diagram click. It is the **only** write path to the
 file; neither the webview nor the sidecar can reach it.
+
+Which document that is follows the active editor: clicking into another diagram file points
+the panel at it, resends its text and retitles the tab, so one panel serves every diagram in
+the window.
+
+`isPlantUmlDocument()` decides which files may take it over. A PlantUML extension —
+`.puml`, `.plantuml`, `.pu`, `.iuml`, `.wsd`, `.uml` — qualifies whatever the file holds, and
+so does a `plantuml` language id. A `plaintext` document qualifies once it opens a `@start…`
+block within its first `DIAGRAM_SNIFF_LINES` lines, which is what makes diagrams kept in
+`.txt` work. Any other language never qualifies: the whole document is the source, so a
+diagram quoted in a docstring would be rendered with the code around it.
+
+A document that is not followed leaves the panel on the file it was showing. So does a
+settings tab, and so does focus in the panel itself — there is no active text editor then.
 
 ## Startup sequence
 

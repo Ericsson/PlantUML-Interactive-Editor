@@ -52,6 +52,12 @@ const RENDER_PNG_TIMEOUT_MS = 60000;
 /** Label of the action offered on errors the user fixes in Settings. */
 const OPEN_SETTINGS = 'Open Settings';
 
+/** The file extensions the diagram panel follows; see isPlantUmlDocument. */
+const PLANTUML_EXTENSIONS = new Set(['.puml', '.plantuml', '.pu', '.iuml', '.wsd', '.uml']);
+
+/** How far into a plain-text file to look for a `@start…` block. */
+const DIAGRAM_SNIFF_LINES = 200;
+
 /**
  * Line highlight for the diagram -> editor direction: hovering an element in
  * the diagram paints the puml line that produced it. Created once, since each
@@ -195,7 +201,11 @@ async function openDiagramPanel(context) {
 		return;
 	}
 
-	const document = editor.document;
+	// The document this panel shows, and the one every listener below reads:
+	// the writer in applyPuml, the PNG source, the highlight target. It moves
+	// when the user switches to another PlantUML file (see the active-editor
+	// listener), so it is read at use rather than captured.
+	let document = editor.document;
 
 	// Checked before anything is spawned: serve.py only warns about a bad jar
 	// on stderr, so catching it here makes it a notification naming the setting,
@@ -239,7 +249,7 @@ async function openDiagramPanel(context) {
 
 	const panel = vscode.window.createWebviewPanel(
 		'plantumlInteractiveDiagram',
-		'PlantUML Interactive Diagram',
+		panelTitle(document),
 		vscode.ViewColumn.Beside,
 		{
 			enableScripts: true,
@@ -279,11 +289,36 @@ async function openDiagramPanel(context) {
 	// Hands the whole source over; the frontend renders itself from it through
 	// the app's own renderPlantUml(). The text is read at call time, so
 	// whatever the document holds when this runs is what the diagram shows.
-	// Called from the `ready` handler for the first render, and from the
-	// change listener below for every one after it.
+	// Called from the `ready` handler for the first render, from the change
+	// listener for every edit, and on a switch to another file.
 	const postDocument = () => {
 		panel.webview.postMessage({ type: 'documentChanged', text: document.getText() });
 	};
+
+	// One panel serves every diagram in the window: opening another PlantUML
+	// file points it at that file, the way the Markdown preview follows the
+	// editor. The command is invoked once and the panel keeps up from there.
+	//
+	// Only PlantUML files take it over, by isPlantUmlDocument's reading; the
+	// panel stays on its current file while the user is in a .py or a settings
+	// tab, and while the panel itself has focus, which leaves no active text
+	// editor at all.
+	const activeEditorListener = vscode.window.onDidChangeActiveTextEditor((next) => {
+		if (!next || next.document === document || !isPlantUmlDocument(next.document)) {
+			return;
+		}
+
+		// Painted for the file the panel is leaving, and about to mean nothing.
+		clearHighlight(document);
+		// A post left pending by the previous file would fire just after this
+		// one and resend what it is about to send.
+		clearTimeout(debounceTimer);
+
+		document = next.document;
+		panel.title = panelTitle(document);
+		outputChannel?.appendLine(`[panel] now showing ${document.fileName}`);
+		postDocument();
+	});
 
 	const changeListener = vscode.workspace.onDidChangeTextDocument((event) => {
 		if (event.document !== document) {
@@ -337,6 +372,7 @@ async function openDiagramPanel(context) {
 
 	panel.onDidDispose(() => {
 		clearTimeout(debounceTimer);
+		activeEditorListener.dispose();
 		changeListener.dispose();
 		messageListener.dispose();
 		selectionListener.dispose();
@@ -456,6 +492,72 @@ function defaultPngUri(document) {
 }
 
 /**
+ * Which file the panel is showing, in its tab.
+ *
+ * The panel follows the active editor, so its title names the file it is
+ * currently pointed at.
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {string}
+ */
+function panelTitle(document) {
+	return `PlantUML: ${path.basename(document.fileName)}`;
+}
+
+/**
+ * Whether the panel should follow `document` when it becomes active.
+ *
+ * No single signal identifies a PlantUML source: VS Code registers no language
+ * for one, the id a `.puml` file ends up with depends on which other PlantUML
+ * extension is installed, and plenty of diagrams live in `.txt`. So:
+ *
+ *   - a PlantUML file extension, or a `plantuml` language id, is followed
+ *     whatever the file holds. An empty `.puml` is a diagram being started.
+ *   - a plain-text file is followed once it opens a `@start…` block. The name
+ *     says nothing, so the content decides, which is what lets `.txt` work and
+ *     what leaves a notes file alone.
+ *   - any other language is left alone. The whole document is the source, so a
+ *     diagram quoted in a docstring would be rendered with the code around it.
+ *
+ * This gates the automatic following only; the command opens whatever the user
+ * ran it on.
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {boolean}
+ */
+function isPlantUmlDocument(document) {
+	if (document.languageId === 'plantuml') {
+		return true;
+	}
+
+	if (PLANTUML_EXTENSIONS.has(path.extname(document.uri.path).toLowerCase())) {
+		return true;
+	}
+
+	return document.languageId === 'plaintext' && opensDiagramBlock(document);
+}
+
+/**
+ * Whether the document's opening lines start a PlantUML block.
+ *
+ * Any `@start…` counts, not just `@startuml`: which flavour a file holds is not
+ * this function's business.
+ *
+ * Only the head is read. A file that begins with something other than its
+ * diagram is prose that mentions one, and a plain-text file can be a log of any
+ * size.
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {boolean}
+ */
+function opensDiagramBlock(document) {
+	// The range is clamped to the document, so a short file reads whole.
+	const head = document.getText(new vscode.Range(0, 0, DIAGRAM_SNIFF_LINES, 0));
+
+	return /^[ \t]*@start\w+/m.test(head);
+}
+
+/**
  * Paint the given puml lines in every editor showing `document`.
  *
  * The diagram -> editor direction: the editor shim turns the app's Ace
@@ -497,5 +599,9 @@ function deactivate() {
 
 module.exports = {
 	activate,
-	deactivate
+	deactivate,
+	// The panel's targeting rules, exported for the tests: which files it
+	// follows and what it calls itself once it has.
+	isPlantUmlDocument,
+	panelTitle
 };
