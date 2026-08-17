@@ -36,6 +36,7 @@ const {
 	standardVenv,
 	EXPECTED_BACKEND_VERSION,
 	PythonConfigError,
+	Sidecar,
 	SidecarStartError,
 	PYTHON_KEY,
 	PYTHON_SETTING,
@@ -520,5 +521,43 @@ suite('sidecar: port handshake', () => {
 		child.emit('exit', 1);
 
 		await assert.rejects(port, /pip install/);
+	});
+});
+
+suite('sidecar: telling a stop we asked for from a death', () => {
+	// The child's `exit` event is the same event either way, so whoever listens
+	// needs this flag to know whether to report it: killing the backend in
+	// deactivate() must not raise an error notification on the way out, and a
+	// backend that died on its own must not pass for an orderly stop.
+	const liveChild = () => Object.assign(fakeChild(), { exitCode: null, signalCode: null });
+
+	test('is not marked while running', () => {
+		assert.strictEqual(new Sidecar(liveChild(), 1234, 'token').disposing, false);
+	});
+
+	test('marks a stop before killing, so the exit handler cannot miss it', () => {
+		const child = liveChild();
+		let markedAtKill;
+		const sidecar = new Sidecar(child, 1234, 'token');
+		child.kill = () => {
+			markedAtKill = sidecar.disposing;
+		};
+
+		sidecar.dispose();
+
+		assert.strictEqual(markedAtKill, true, 'killed before the stop was marked');
+		assert.strictEqual(sidecar.disposing, true);
+	});
+
+	test('leaves a child killed from outside unmarked', () => {
+		// The reproducer for the bug this flag exists to keep fixed: `kill
+		// <pid>` from a terminal. Nothing called dispose, so the exit is a
+		// failure to report.
+		const child = liveChild();
+		const sidecar = new Sidecar(child, 1234, 'token');
+
+		child.emit('exit', null, 'SIGTERM');
+
+		assert.strictEqual(sidecar.disposing, false);
 	});
 });

@@ -52,6 +52,12 @@ const RENDER_PNG_TIMEOUT_MS = 60000;
 /** Label of the action offered on errors the user fixes in Settings. */
 const OPEN_SETTINGS = 'Open Settings';
 
+/** Label of the action offered when the answer is in the output channel. */
+const SHOW_OUTPUT = 'Show Output';
+
+/** This command's title in the palette, as contributed in package.json. */
+const OPEN_DIAGRAM_TITLE = 'PlantUML: Open Interactive Diagram';
+
 /** The file extensions the diagram panel follows; see isPlantUmlDocument. */
 const PLANTUML_EXTENSIONS = new Set(['.puml', '.plantuml', '.pu', '.iuml', '.wsd', '.uml']);
 
@@ -74,6 +80,16 @@ let sidecar;
 let sidecarStarting;
 /** @type {vscode.OutputChannel | undefined} */
 let outputChannel;
+/**
+ * The diagram panels currently open.
+ *
+ * The sidecar outlives them -- it is disposed with the extension, not with the
+ * last panel -- so this is what tells a backend death the user is waiting on
+ * from one they will never see. See reportBackendExit.
+ *
+ * @type {Set<vscode.WebviewPanel>}
+ */
+const livePanels = new Set();
 
 /**
  * Entry point, run the first time the command is invoked.
@@ -117,10 +133,11 @@ function ensureSidecar(jarPath) {
 				sidecar = started;
 				// Drop the handle when the child dies, so the next open starts a
 				// fresh one instead of rendering against a dead process forever.
-				started.process.on('exit', () => {
+				started.process.on('exit', (code, signal) => {
 					if (sidecar === started) {
 						sidecar = undefined;
 					}
+					reportBackendExit(started, code, signal);
 				});
 				return started;
 			})
@@ -130,6 +147,75 @@ function ensureSidecar(jarPath) {
 	}
 
 	return sidecarStarting;
+}
+
+/**
+ * Announce a backend that went away on its own.
+ *
+ * Always logged; only raised as a notification when a panel is open. The
+ * sidecar outlives panels, so without that gate, closing the diagram and
+ * carrying on with the day would still be interrupted by an error about a
+ * diagram that is not there -- and the recovery this offers, reopening the
+ * panel, is not something the user asked to be told about.
+ *
+ * The notification says only what to do. Reopening the panel is the whole
+ * remedy: ensureSidecar spawns a fresh child, since the handle was dropped when
+ * this one died. The old panel cannot be salvaged either way -- its page holds
+ * the dead child's address and token -- so there is nothing to choose between.
+ *
+ * Silent either way when we asked for the stop (dispose on deactivate), and
+ * when the child never got as far as being handed out -- startSidecar reports
+ * its own failures, with a message that says what to install.
+ *
+ * @param {import('./src/sidecar').Sidecar} stopped
+ * @param {number | null} code
+ * @param {string | null} signal
+ */
+async function reportBackendExit(stopped, code, signal) {
+	if (stopped.disposing) {
+		return;
+	}
+
+	const cause = signal ? `signal ${signal}` : `exit code ${code}`;
+	outputChannel?.appendLine(`[backend] the PlantUML backend stopped (${cause})`);
+
+	if (livePanels.size === 0) {
+		return;
+	}
+
+	// The cause stays out of the notification: a signal number tells the user
+	// nothing they can act on, and the only action is the same either way. It is
+	// on the line just logged, which Show Output goes to.
+	const choice = await vscode.window.showErrorMessage(
+		`The PlantUML backend stopped. Run "${OPEN_DIAGRAM_TITLE}" again to restart it.`,
+		SHOW_OUTPUT
+	);
+
+	if (choice === SHOW_OUTPUT) {
+		outputChannel?.show();
+	}
+}
+
+/**
+ * Log a request from the webview that never reached the sidecar.
+ *
+ * The webview talks to the sidecar directly, so this process sees none of that
+ * traffic and werkzeug's request log -- the output channel's record of the
+ * requests that did arrive -- stops dead when the backend does. The frontend's
+ * fetch shim posts the failures so that the channel shows those too, instead of
+ * simply going quiet while the panel stops responding.
+ *
+ * Output only, no notification: one diagram gesture fires several requests, and
+ * the diagnosis worth interrupting the user for is the child's exit, which
+ * reportBackendExit announces once.
+ *
+ * @param {{ route?: string, detail?: string }} message
+ */
+function reportBackendUnreachable({ route, detail }) {
+	outputChannel?.appendLine(
+		`[webview] request to ${route ?? '<unknown>'} did not reach the backend: ` +
+			`${detail ?? 'no detail given'}`
+	);
 }
 
 function disposeSidecar() {
@@ -280,6 +366,11 @@ async function openDiagramPanel(context) {
 		return;
 	}
 
+	// Counted from here, not from createWebviewPanel: the early return above
+	// disposes the panel before onDidDispose is registered, which would leave it
+	// in the set for good.
+	livePanels.add(panel);
+
 	let debounceTimer;
 
 	// Reentrancy guard for applyEdit only. The text comparisons on both sides
@@ -344,6 +435,8 @@ async function openDiagramPanel(context) {
 			applyHighlight(document, message.rows);
 		} else if (message.type === 'savePng') {
 			await savePng(document, active);
+		} else if (message.type === 'backendUnreachable') {
+			reportBackendUnreachable(message);
 		} else if (message.type === 'ready') {
 			outputChannel?.appendLine('[webview] frontend loaded');
 			// `ready` is the frontend's word that its `message` listener is
@@ -371,6 +464,7 @@ async function openDiagramPanel(context) {
 	});
 
 	panel.onDidDispose(() => {
+		livePanels.delete(panel);
 		clearTimeout(debounceTimer);
 		activeEditorListener.dispose();
 		changeListener.dispose();

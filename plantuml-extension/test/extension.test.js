@@ -126,6 +126,32 @@ suite('extension: message protocol', () => {
 		);
 	});
 
+	test('reports a backend that stops on its own', () => {
+		// Regression: the exit handler only dropped the sidecar handle, so
+		// killing the Python process left no trace anywhere -- the open panel
+		// kept accepting gestures, the output channel simply stopped growing,
+		// and the user had nothing to go on.
+		//
+		// Source-checked because the host end needs a running sidecar, a panel
+		// and a real webview to exercise. What reportBackendExit then does with
+		// the exit is covered for real in sidecar.test.js, through dispose() and
+		// an emitted exit event.
+		const [, source] = readSources().find(([relative]) => relative === 'extension.js');
+
+		const exitIndex = source.indexOf("process.on('exit'");
+		assert.notStrictEqual(exitIndex, -1, 'nothing listens for the backend exiting');
+		assert.notStrictEqual(
+			source.indexOf('reportBackendExit', exitIndex),
+			-1,
+			'the backend can exit without anything being reported'
+		);
+
+		assert.ok(
+			readWebviewShims().some((shim) => shim.includes('backendUnreachable')),
+			'the webview no longer reports requests that did not reach the backend'
+		);
+	});
+
 	test('sends the first document only once the webview says it is ready', () => {
 		// Regression: the initial documentChanged was posted immediately after
 		// panel.webview.html was set, before the page had registered its

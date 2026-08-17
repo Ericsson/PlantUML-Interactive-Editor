@@ -130,6 +130,9 @@ class Sidecar {
 		// Filled in by waitForHealthy once /health has answered.
 		/** @type {string | undefined} */
 		this.backendVersion = undefined;
+		// Set by dispose(), read by whoever listens for the child's exit: a
+		// stop we asked for is not a failure to report.
+		this.disposing = false;
 	}
 
 	/** @returns {boolean} whether the child is still running. */
@@ -138,6 +141,9 @@ class Sidecar {
 	}
 
 	dispose() {
+		// Before the kill, so the exit handler sees it however fast the child goes away.
+		this.disposing = true;
+
 		if (this.isRunning) {
 			this.process.kill();
 		}

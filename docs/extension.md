@@ -117,7 +117,7 @@ Python side, `src/plantuml_gui/`:
 | `templates/partials/app_scripts.html` | The frontend's script list, shared by `index.html` and `webview.html`. |
 | `templates/partials/diagram_toolbar.html` | The toolbar markup, shared by the same two pages; takes the attributes they differ on. |
 | `static/diagram-toolbar.js` | Panzoom and the zoom buttons, for both pages. Loads at the end of `<body>`, not with `app_scripts`. |
-| `static/vscode/fetchShim.js` | Rewrites the app's relative `fetch()` URLs and attaches the token. |
+| `static/vscode/fetchShim.js` | Rewrites the app's relative `fetch()` URLs, attaches the token, and reports requests that never reached the sidecar. |
 | `static/vscode/editorShim.js` | An Ace-shaped object backed by the VS Code document. |
 | `static/vscode/webviewInit.js` | Boots the reused app code inside the webview. |
 | `static/vscode/webview.css` | Lays out the toolbar and the diagram, repaints them in the editor's theme, and hides the DOM elements that exist only to satisfy the app's code. |
@@ -162,7 +162,8 @@ channel and kept in a rolling 8 KB buffer (see [Failure reporting](#failure-repo
 
 One sidecar per window, shared by every panel, killed in `deactivate()`. Spawn `ENOENT`, an
 import error, and no port line within 30 s all end the same way: panel disposed, notification
-naming the setting to fix.
+naming the setting to fix. A child that dies later is reported too, but differently — see
+[Failure reporting](#failure-reporting).
 
 ### 2. Host → sidecar: HTTP
 
@@ -212,6 +213,7 @@ instances do not. Every message carries a `type` discriminator.
 | webview → host | `applyPuml` | `{ text }` | A diagram operation produced new source. |
 | webview → host | `setHighlight` | `{ rows }`, zero-based line numbers | The shim's marker table changed. |
 | webview → host | `savePng` | `{}` | The toolbar's PNG button was clicked. Carries no source: the host renders from the document. |
+| webview → host | `backendUnreachable` | `{ route, detail }` | A `fetch()` to the sidecar was rejected rather than answered. See [Failure reporting](#failure-reporting). |
 | webview → host | `ready` | `{}` | The page finished booting. |
 
 Four properties of the channel shape the code on both sides. There is **no
@@ -434,6 +436,29 @@ The child's stderr is streamed to the output channel and kept in a rolling 8 KB 
 `describeStartFailure()` turns it into actionable text: `ENOENT` names the `pythonPath`
 setting, `No module named plantuml_gui` says to install the package into that interpreter,
 and anything else is reported with the traceback.
+
+That covers startup. A backend that dies later is reported by both runtimes, because neither
+can see what the other sees: only the host holds the `ChildProcess`, and only the page knows a
+request went nowhere — the webview's traffic does not pass through the host, so werkzeug's
+request log just stops, and the frontend's `fetch()` call sites do not handle a rejection.
+
+| Signal | Seen by | Reported as |
+| --- | --- | --- |
+| The child's `exit` event | `reportBackendExit()` | Output line with the exit code or signal, plus, while a panel is open, one notification: *The PlantUML backend stopped. Run "PlantUML: Open Interactive Diagram" again to restart it.* |
+| A rejected `fetch()` | `fetchShim.js` posts `backendUnreachable`, the host logs it | Output line naming the route and the error. No notification — one gesture fires several requests. |
+
+Three details decide the shape of that:
+
+- **`Sidecar.disposing`**, set by `dispose()` *before* `process.kill()`. The `exit` event is
+  identical whoever caused it, and `deactivate()` must not report its own shutdown.
+- **The panel gate.** The sidecar outlives panels, so a death with none open is logged and
+  nothing more.
+- **`reportFailuresTo(post)`.** `fetchShim.js` cannot call `acquireVsCodeApi()` — once per
+  page, and `webviewInit.js` has it — so the host's `post` is handed in at boot. The rejection
+  is rethrown regardless: the shim changes where requests go, not what callers observe.
+
+Recovery is a new panel: the handle is dropped on `exit`, so the next command spawns a fresh
+child, and the old page holds the dead child's port and token.
 
 ## The webview page
 
