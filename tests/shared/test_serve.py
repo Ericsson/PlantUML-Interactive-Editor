@@ -33,7 +33,8 @@ from plantuml_gui import serve
 from plantuml_gui.__about__ import __version__
 from pyquery import PyQuery
 
-# plantuml_gui is a namespace package, so it has no __file__ of its own.
+# Where the templates and static files are, found through a module rather than
+# by walking up from this file.
 PACKAGE_DIR = Path(serve.__file__).parent
 
 TOKEN = "s3cret"
