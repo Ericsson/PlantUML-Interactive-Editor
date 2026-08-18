@@ -36,6 +36,7 @@ const {
 	standardVenv,
 	EXPECTED_BACKEND_VERSION,
 	PythonConfigError,
+	BackendMissingError,
 	Sidecar,
 	SidecarStartError,
 	PYTHON_KEY,
@@ -305,6 +306,99 @@ suite('sidecar: interpreter resolution', () => {
 		delete process.env[PYTHON_ENV];
 
 		assert.strictEqual(await resolvePythonPath(), standard.python);
+	});
+
+	test('the managed venv is used when nothing is configured', async () => {
+		// The ordinary path for anyone who only installed the vsix: the venv the
+		// extension built for itself, passed in by ensureBackendPython.
+		stubFilesystem(['/storage/venv-0.31/bin/python']);
+		delete process.env[PYTHON_ENV];
+
+		assert.strictEqual(
+			await resolvePythonPath({ managedPython: '/storage/venv-0.31/bin/python' }),
+			'/storage/venv-0.31/bin/python'
+		);
+	});
+
+	test('the managed venv wins over the hand-made one', async () => {
+		// It was built from the wheel inside this build of the extension, so it
+		// is the one whose version matches the frontend.
+		const standard = standardVenv();
+		stubFilesystem(['/storage/venv-0.31/bin/python', standard.python]);
+		delete process.env[PYTHON_ENV];
+
+		assert.strictEqual(
+			await resolvePythonPath({ managedPython: '/storage/venv-0.31/bin/python' }),
+			'/storage/venv-0.31/bin/python'
+		);
+	});
+
+	test('the setting wins over the managed venv', async () => {
+		stubFilesystem(['/configured/python', '/storage/venv-0.31/bin/python']);
+		delete process.env[PYTHON_ENV];
+
+		const restore = await setPythonSetting('/configured/python');
+		try {
+			assert.strictEqual(
+				await resolvePythonPath({ managedPython: '/storage/venv-0.31/bin/python' }),
+				'/configured/python'
+			);
+		} finally {
+			await restore();
+		}
+	});
+
+	test('the environment variable wins over the managed venv', async () => {
+		stubFilesystem(['/env/python', '/storage/venv-0.31/bin/python']);
+		process.env[PYTHON_ENV] = '/env/python';
+
+		assert.strictEqual(
+			await resolvePythonPath({ managedPython: '/storage/venv-0.31/bin/python' }),
+			'/env/python'
+		);
+	});
+
+	test('a managed venv that has not been built yet is passed over', async () => {
+		// The state of a first run: the path is known, nothing is there yet.
+		const standard = standardVenv();
+		stubFilesystem([standard.python]);
+		delete process.env[PYTHON_ENV];
+
+		assert.strictEqual(
+			await resolvePythonPath({ managedPython: '/storage/venv-0.31/bin/python' }),
+			standard.python
+		);
+	});
+
+	test('nothing installed at all asks for an install, not for Settings', async () => {
+		// BackendMissingError is what extension.js answers by installing the
+		// bundled wheel; every other resolution failure is the user's to fix.
+		stubFilesystem([]);
+		delete process.env[PYTHON_ENV];
+
+		await assert.rejects(
+			() => resolvePythonPath({ managedPython: '/storage/venv-0.31/bin/python' }),
+			BackendMissingError
+		);
+	});
+
+	test('a bad setting is not answered by installing', async () => {
+		stubFilesystem([]);
+		delete process.env[PYTHON_ENV];
+
+		const restore = await setPythonSetting('/typo/python');
+		try {
+			await assert.rejects(
+				() => resolvePythonPath({ managedPython: '/storage/venv-0.31/bin/python' }),
+				(err) => {
+					assert.ok(err instanceof PythonConfigError, err.constructor.name);
+					assert.ok(!(err instanceof BackendMissingError), 'wrong subclass');
+					return true;
+				}
+			);
+		} finally {
+			await restore();
+		}
 	});
 
 	test('the setting wins over the standard venv', async () => {
