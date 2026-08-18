@@ -21,11 +21,19 @@ done
 
 cd "$REPO"
 
-# The Python backend -> dist/. Old wheels are cleared first because the publish
-# step below globs for one file, and a version bump would otherwise leave two
-# in dist/ and publish both.
+# The Python backend -> dist/, and a copy into plantuml-extension/backend/,
+# which is inside the vsix packaged below: the extension installs that copy
+# into a venv of its own on first use, so the vsix is the whole install.
+#
+# Both directories are cleared first because everything downstream globs for
+# exactly one wheel -- the publish step here, and the extension's lookup of the
+# wheel it ships -- and a version bump would otherwise leave two behind.
 rm -f dist/*.whl
 uv build --wheel
+
+rm -rf plantuml-extension/backend
+mkdir -p plantuml-extension/backend
+install -m 644 dist/plantuml_gui-*.whl plantuml-extension/backend/
 
 # The extension -> plantuml-extension/, cleared for the same reason. npm ci
 # because the browser libraries are bundled into the vsix, and lint because
