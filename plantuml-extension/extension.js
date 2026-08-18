@@ -31,16 +31,29 @@
 // webview calls directly; this file owns the document and is its only writer.
 // The webview's page is rendered by that same backend and fetched by
 // src/webviewPage.js.
+//
+// That backend is installed on first use, out of a wheel inside the vsix, into
+// a virtual environment under this extension's global storage; see
+// src/backendInstall.js.
 const path = require('path');
 const vscode = require('vscode');
 const settings = require('./src/settings');
 const {
 	startSidecar,
+	resolvePythonPath,
 	SidecarStartError,
 	PythonConfigError,
+	BackendMissingError,
 	EXPECTED_BACKEND_VERSION,
 	TOKEN_HEADER
 } = require('./src/sidecar');
+const {
+	bundledWheel,
+	managedVenv,
+	installBackend,
+	BundledWheelError,
+	BackendInstallError
+} = require('./src/backendInstall');
 const { resolvePlantUmlJarPath, PlantUmlConfigError } = require('./src/plantumlJar');
 const { fetchWebviewPage, vendorRoot, WebviewPageError } = require('./src/webviewPage');
 
@@ -57,6 +70,9 @@ const SHOW_OUTPUT = 'Show Output';
 
 /** This command's title in the palette, as contributed in package.json. */
 const OPEN_DIAGRAM_TITLE = 'PlantUML: Open Interactive Diagram';
+
+/** The reinstall command's title, as contributed in package.json. */
+const REINSTALL_TITLE = 'PlantUML: Reinstall Backend';
 
 /** The file extensions the diagram panel follows; see isPlantUmlDocument. */
 const PLANTUML_EXTENSIONS = new Set(['.puml', '.plantuml', '.pu', '.iuml', '.wsd', '.uml']);
@@ -78,6 +94,8 @@ const hoverDecoration = vscode.window.createTextEditorDecorationType({
 let sidecar;
 /** @type {Promise<import('./src/sidecar').Sidecar> | undefined} */
 let sidecarStarting;
+/** @type {Promise<string> | undefined} */
+let backendInstalling;
 /** @type {vscode.OutputChannel | undefined} */
 let outputChannel;
 /**
@@ -111,6 +129,143 @@ function activate(context) {
 	);
 
 	context.subscriptions.push(disposable);
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand(
+			'plantuml-interactive-editor.reinstallBackend',
+			() => reinstallBackend(context)
+		)
+	);
+}
+
+/**
+ * The interpreter the backend will be run with, installed if it is not there.
+ *
+ * @param {vscode.ExtensionContext} context
+ * @returns {Promise<string | undefined>} the managed venv's interpreter, for
+ *   startSidecar to resolve against, or undefined when this build ships no
+ *   wheel to install
+ */
+async function ensureBackendPython(context) {
+	const managedPython = managedPythonPath(context);
+
+	try {
+		await resolvePythonPath({ managedPython });
+	} catch (err) {
+		if (!(err instanceof BackendMissingError) || !managedPython) {
+			throw err;
+		}
+		await installBackendOnce(context);
+	}
+
+	return managedPython;
+}
+
+/**
+ * Where this build's backend would live, if it ships one.
+ *
+ * Undefined in a development checkout, where `backend/` has never been built:
+ * resolution then falls back to the setting or PLANTUML_GUI_PYTHON, which is
+ * what .vscode/launch.json sets for the Extension Development Host.
+ *
+ * @param {vscode.ExtensionContext} context
+ * @returns {string | undefined}
+ */
+function managedPythonPath(context) {
+	try {
+		const wheel = bundledWheel(context.extensionPath);
+		return managedVenv(context.globalStorageUri.fsPath, wheel.version).python;
+	} catch (err) {
+		if (err instanceof BundledWheelError) {
+			outputChannel?.appendLine(`[backend] no bundled wheel: ${err.message}`);
+			return undefined;
+		}
+		throw err;
+	}
+}
+
+/**
+ * Install the managed backend, showing progress, once per window.
+ *
+ * Concurrent callers await the same install, as with ensureSidecar: two
+ * commands run in quick succession would otherwise put two progress
+ * notifications on screen for the one directory. Windows racing each other is
+ * settled in install_venv.py, which is the only place that can settle it.
+ *
+ * @param {vscode.ExtensionContext} context
+ * @returns {Promise<string>} the installed interpreter
+ */
+function installBackendOnce(context) {
+	if (!backendInstalling) {
+		backendInstalling = vscode.window
+			.withProgress(
+				{
+					location: vscode.ProgressLocation.Notification,
+					title: 'Setting up the PlantUML backend…'
+				},
+				() =>
+					installBackend({
+						extensionPath: context.extensionPath,
+						globalStoragePath: context.globalStorageUri.fsPath,
+						output: outputChannel
+					})
+			)
+			.finally(() => {
+				backendInstalling = undefined;
+			});
+	}
+
+	return backendInstalling;
+}
+
+/**
+ * Delete the managed backend and install it again.
+ *
+ * The recovery for a venv that is present but broken -- a disk that filled
+ * during the first install, an interpreter upgraded out from under it, a
+ * half-removed package. The running backend is stopped first, because it is the
+ * process living in the directory about to be deleted.
+ *
+ * @param {vscode.ExtensionContext} context
+ */
+async function reinstallBackend(context) {
+	let wheel;
+
+	try {
+		wheel = bundledWheel(context.extensionPath);
+	} catch (err) {
+		vscode.window.showErrorMessage(
+			err instanceof BundledWheelError
+				? `${REINSTALL_TITLE} is not available: ${err.message}`
+				: `Unexpected error finding the bundled backend: ${err.message}`
+		);
+		return;
+	}
+
+	const venv = managedVenv(context.globalStorageUri.fsPath, wheel.version);
+
+	disposeSidecar();
+
+	try {
+		await vscode.workspace.fs.delete(vscode.Uri.file(venv.dir), {
+			recursive: true,
+			useTrash: false
+		});
+	} catch {
+		// Nothing there to delete is the normal case for a first run, and any
+		// other reason it cannot go is reported by the install that follows.
+	}
+
+	try {
+		await installBackendOnce(context);
+	} catch (err) {
+		await showInstallError(err);
+		return;
+	}
+
+	vscode.window.showInformationMessage(
+		`The PlantUML backend was reinstalled. Run "${OPEN_DIAGRAM_TITLE}" to use it.`
+	);
 }
 
 /**
@@ -119,15 +274,17 @@ function activate(context) {
  * two servers.
  *
  * @param {string} jarPath validated by the caller, passed to the child's env
+ * @param {string | undefined} managedPython the interpreter ensureBackendPython
+ *   made sure of, offered to resolvePythonPath as one of its sources
  * @returns {Promise<import('./src/sidecar').Sidecar>}
  */
-function ensureSidecar(jarPath) {
+function ensureSidecar(jarPath, managedPython) {
 	if (sidecar && sidecar.isRunning) {
 		return Promise.resolve(sidecar);
 	}
 
 	if (!sidecarStarting) {
-		sidecarStarting = startSidecar({ jarPath, output: outputChannel })
+		sidecarStarting = startSidecar({ jarPath, managedPython, output: outputChannel })
 			.then((started) => {
 				warnOnBackendVersionMismatch(started);
 				sidecar = started;
@@ -244,6 +401,24 @@ async function showConfigError(message) {
 }
 
 /**
+ * Report a failed install, with the log that says what pip made of it.
+ *
+ * @param {Error} err
+ */
+async function showInstallError(err) {
+	const choice = await vscode.window.showErrorMessage(
+		err instanceof BackendInstallError || err instanceof BundledWheelError
+			? err.message
+			: `Unexpected error installing the PlantUML backend: ${err.message}`,
+		SHOW_OUTPUT
+	);
+
+	if (choice === SHOW_OUTPUT) {
+		outputChannel?.show();
+	}
+}
+
+/**
  * Warn, once per sidecar start, when the running backend is not the version
  * this extension was built against.
  *
@@ -315,13 +490,16 @@ async function openDiagramPanel(context) {
 
 	let active;
 	try {
-		active = await ensureSidecar(jarPath);
+		const managedPython = await ensureBackendPython(context);
+		active = await ensureSidecar(jarPath, managedPython);
 	} catch (err) {
 		// A generic SidecarStartError is a backend that failed to boot -- a
 		// missing package, a traceback, a port that never answered -- and
 		// describeStartFailure has already said what to do about it, which is
 		// not to visit Settings.
-		if (err instanceof PythonConfigError) {
+		if (err instanceof BackendInstallError || err instanceof BundledWheelError) {
+			await showInstallError(err);
+		} else if (err instanceof PythonConfigError) {
 			await showConfigError(err.message);
 		} else {
 			vscode.window.showErrorMessage(
@@ -697,5 +875,8 @@ module.exports = {
 	// The panel's targeting rules, exported for the tests: which files it
 	// follows and what it calls itself once it has.
 	isPlantUmlDocument,
-	panelTitle
+	panelTitle,
+	// Exported for the tests: which interpreter a window ends up using, and
+	// whether it had to install one to get there.
+	ensureBackendPython
 };
