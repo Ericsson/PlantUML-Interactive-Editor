@@ -100,12 +100,14 @@ Node side, `plantuml-extension/`:
 
 | File | Responsibility |
 | --- | --- |
-| `package.json` | Manifest: the `plantuml-interactive-editor.openDiagram` command, the two settings, and the browser libraries as runtime dependencies. |
-| `extension.js` | Lifecycle, the command, the webview panel, document listeners, and the message handlers. The only writer of the document. |
+| `package.json` | Manifest: the `plantuml-interactive-editor.openDiagram` and `.reinstallBackend` commands, the two settings, and the browser libraries as runtime dependencies. |
+| `extension.js` | Lifecycle, the commands, the webview panel, document listeners, and the message handlers. The only writer of the document. |
 | `src/settings.js` | Only what more than one file needs: the configuration section, path normalization, and the is-it-a-file predicate. |
 | `src/sidecar.js` | Spawns and supervises the Python child; port handshake, token, health polling, error messages. |
+| `src/backendInstall.js` | Finds the wheel inside the vsix, decides where its virtual environment goes, and drives the installer under each candidate interpreter. |
 | `src/plantumlJar.js` | Resolves and validates the jar path before anything is spawned. |
 | `src/webviewPage.js` | Fetches the page from the sidecar and supplies the values Flask cannot know. |
+| `backend/` | Build product, gitignored: the one wheel this vsix ships. Written by `scripts/build_release.sh`. |
 | `test/` | Mocha unit tests run by `@vscode/test-cli`. |
 
 Python side, `src/plantuml_gui/`:
@@ -113,6 +115,8 @@ Python side, `src/plantuml_gui/`:
 | File | Responsibility |
 | --- | --- |
 | `serve.py` | The sidecar entry point. Same Flask `app`, different startup: ephemeral port, `/health`, `/webview`, token auth, CORS, jar override. |
+| `install_venv.py` | Creates the virtual environment the extension runs the backend in, and judges whether the interpreter running it can host the backend. Runs out of the wheel, before the wheel is installed. |
+| `__init__.py` | Empty, and load-bearing: it makes the package importable from inside the wheel, which `install_venv.py` depends on. |
 | `templates/webview.html` | The page the panel loads. Standalone, not a child of `index.html`. |
 | `templates/partials/app_scripts.html` | The frontend's script list, shared by `index.html` and `webview.html`. |
 | `templates/partials/diagram_toolbar.html` | The toolbar markup, shared by the same two pages; takes the attributes they differ on. |
@@ -314,8 +318,8 @@ settings tab, and so does focus in the panel itself — there is no active text 
 ## Startup sequence
 
 1. VS Code loads `extension.js` and calls `activate()`, which creates the
-   `PlantUML Interactive` output channel, registers sidecar disposal, and registers the
-   command. Nothing is spawned yet.
+   `PlantUML Interactive` output channel, registers sidecar disposal, and registers the two
+   commands. Nothing is spawned yet.
 2. The command runs `openDiagramPanel()` against the active editor's document.
 3. `resolvePlantUmlJarPath()` resolves the jar: the setting, else `PLANTUML_JAR`, else the
    shared internal install, and checks the winner is a file. A source that is set but
@@ -323,40 +327,171 @@ settings tab, and so does focus in the panel itself — there is no active text 
    silently render from a different jar. This happens **before** spawning, because
    `check_jar()` in `serve.py` only warns on stderr — an unchecked bad path would first
    appear as a 500 on the user's first render.
-4. `ensureSidecar()` starts the child if one is not already running. One sidecar is shared
+4. `ensureBackendPython()` resolves the interpreter, and installs the managed backend if
+   nothing is configured and no venv exists yet — the `BackendMissingError` case, shown as a
+   progress notification while pip runs. Once per machine per backend version; see
+   [The managed backend](#the-managed-backend).
+5. `ensureSidecar()` starts the child if one is not already running. One sidecar is shared
    by every panel in the window; concurrent callers await the same start rather than racing
    to spawn two servers.
-5. `startSidecar()` resolves the interpreter the same way (setting, else
-   `PLANTUML_GUI_PYTHON`, else the standard venv, checked to be a file), generates a
-   per-launch token, and spawns `python -m plantuml_gui.serve`.
-6. The sidecar applies the jar override, warns if the jar is unusable, installs its routes,
+6. `startSidecar()` resolves the interpreter again — the setting, else
+   `PLANTUML_GUI_PYTHON`, else the managed venv, else the hand-made one, checked to be a
+   file — generates a per-launch token, and spawns `python -m plantuml_gui.serve`.
+7. The sidecar applies the jar override, warns if the jar is unusable, installs its routes,
    binds an ephemeral port, and prints `PLANTUML_GUI_PORT=<port>` to stdout.
-7. Node reads that line off stdout, then polls `GET /health` until it answers.
-8. `createWebviewPanel()` opens the panel beside the editor, with `enableScripts`,
+8. Node reads that line off stdout, then polls `GET /health` until it answers.
+9. `createWebviewPanel()` opens the panel beside the editor, with `enableScripts`,
    `node_modules` as the single `localResourceRoots` entry, and `retainContextWhenHidden`
    — without the last one, VS Code tears the page down whenever the panel is hidden, and
    restoring it costs a full render plus a rewalk of every handler the frontend attached.
-9. `fetchWebviewPage()` GETs `/webview` from the sidecar and assigns the result to
-   `panel.webview.html`.
-10. The page loads its scripts in a fixed order and posts `ready`.
-11. The host posts `documentChanged` with the file's text; the webview renders.
+10. `fetchWebviewPage()` GETs `/webview` from the sidecar and assigns the result to
+    `panel.webview.html`.
+11. The page loads its scripts in a fixed order and posts `ready`.
+12. The host posts `documentChanged` with the file's text; the webview renders.
 
-Any failure between steps 3 and 9 becomes a notification naming the setting to change, and
-the panel is disposed rather than left blank. The two failures whose answer really is a
-setting — an unusable jar and an unusable interpreter — carry an **Open Settings** button
-that opens the Settings UI filtered to `plantumlInteractive`. A backend that failed to boot
-does not: `describeStartFailure()` has already said what to install.
+Any failure between steps 3 and 10 becomes a notification, and the panel is disposed rather
+than left blank. The failures whose answer really is a setting — an unusable jar and an
+unusable interpreter — carry an **Open Settings** button that opens the Settings UI filtered
+to `plantumlInteractive`. A backend that failed to boot does not:
+`describeStartFailure()` has already said what to install. A failed *install* carries
+**Show Output** instead, because the account of what went wrong is pip's.
+
+## The managed backend
+
+A release is one file. The `.vsix` carries the backend wheel in `backend/`, and the
+extension installs it into a virtual environment of its own the first time a diagram is
+opened, so installing the extension is the whole install.
+
+`scripts/build_release.sh` builds the wheel straight into `plantuml-extension/backend/`,
+which is inside the directory `vsce package` zips. The directory is gitignored as the build
+product it is, and still ships: `vsce` reads `.vscodeignore` **or** `.gitignore`, never
+both, and `.vscodeignore` exists. Excluding `backend/` there — which tidying up a generated
+directory would suggest — would ship an extension that cannot install its own backend.
+
+### Who does what
+
+The install spans both languages, and the division is worth stating because the obvious
+split is the wrong one:
+
+> `src/backendInstall.js` discovers, `install_venv.py` judges.
+
+Nothing can run Python to find Python, so enumerating candidate interpreters —
+`python3` first, then `python3.13` down to `python3.10` — is necessarily the extension's
+job. It then spawns each candidate against the installer module and reads the exit code,
+making no assessment of its own:
+
+| Exit code | Meaning | What the extension does |
+| --- | --- | --- |
+| `0` | Installed, or already there | Use the venv's interpreter |
+| `2` (`EXIT_UNSUITABLE_INTERPRETER`) | This interpreter cannot host the backend | Try the next candidate |
+| anything else | The install failed | Stop, and report it with the installer's output |
+
+That keeps the version rule in one place, next to `requires-python`, and has it applied
+*by* the interpreter under judgement rather than by parsing its `--version`. Distinguishing
+the third row from the second is what stops a failed install being reported as "no Python
+found", which is why `NoInterpreterError` is a subclass of `BackendInstallError` rather
+than the other way round.
+
+### Running out of the wheel
+
+The extension spawns the installer like this:
+
+```
+PYTHONPATH=<the bundled wheel> python3 -m plantuml_gui.install_venv \
+    --wheel <the same wheel> --target <the venv to create>
+```
+
+A wheel is a zip, and Python imports out of a zip on `sys.path`, so the installer runs
+before it is installed. The wheel is named twice on purpose: `PYTHONPATH` is how the module
+is found, `--wheel` is what pip installs.
+
+Two constraints follow, both easy to undo by accident:
+
+- **`src/plantuml_gui/__init__.py` must exist.** `zipimport` finds regular packages inside
+  a zip but not namespace packages. Without it the import fails on every machine — except
+  one with an editable install of this repository, whose import hook answers from the
+  checkout before `PYTHONPATH` is consulted, which is exactly how this went unnoticed
+  once. `TestRunningOutOfTheWheel` in `tests/shared/test_install_venv.py` guards it, using
+  `python -S` so that hook cannot answer.
+- **`install_venv.py` is held to Python 3.8 syntax.** It runs on whatever interpreter the
+  user has, and Python compiles a whole module before running any of it, so a `match`
+  statement or a `X | Y` annotation would turn "this interpreter is too old" into a
+  `SyntaxError` and lose the message that says so.
+
+Importing the package must also stay dependency-free, which is why `__init__.py` is empty:
+`install_venv` is imported before Flask and the rest exist.
+
+### Where it goes, and updates
+
+`managedVenv()` puts it at `<globalStorageUri>/venv-<version>/`, the directory VS Code
+hands each extension for machine-local data. Under Remote-SSH that resolves on the remote
+machine, which is where the extension host runs and therefore where the venv has to be.
+
+The version in the directory name is the whole of the update story: after an extension
+update the path for the newly bundled wheel does not exist yet, so the install runs again,
+and reinstalling an older `.vsix` finds its own venv still beside it. Nothing is upgraded in
+place. The version comes from the wheel's filename, so there is no second record of what is
+installed, and an extension-only patch release — `0.31.1` against backend `0.31` — reuses
+the venv it already has.
+
+Two consequences worth knowing:
+
+- **Old environments are not pruned.** They accumulate one per backend version at roughly
+  50 MB each, mostly lxml. Deleting `venv-0.30` while another window's sidecar is still
+  running out of it would break that window, and that hazard was judged worse than the
+  disk. Removing the extension's global storage directory clears them all.
+- **An existing hand-made venv keeps winning.** `~/.local/share/plantuml-gui/venv` is still
+  a resolution source, so anyone who set the extension up the old way resolves to it and
+  never triggers an install — and stays on whatever version it holds until they delete it.
+  `warnOnBackendVersionMismatch()` is what catches that drift.
+
+### Atomicity
+
+`install_venv.py` builds into `<target>.tmp-<pid>` and renames the finished result into
+place. Two properties come out of that:
+
+- **A half-built venv is never visible.** The extension decides the backend is installed by
+  looking for the interpreter inside the target. Building there directly would mean an
+  install interrupted between `venv.create` and pip leaves that interpreter present but
+  unable to import `plantuml_gui` — forever, since the directory exists.
+- **Two windows racing cannot corrupt each other.** Each extension host is its own process,
+  so no in-process guard can help. Both build, both rename, and the filesystem settles it:
+  the loser finds the target already a directory, discards its own build, and uses the
+  winner's. Safe precisely because of the previous point.
+
+Renaming a venv is sound for the two ways this one is used, though the instinct is that it
+cannot be: `pyvenv.cfg` records the *base* interpreter's location, not the venv's own, and
+`sys.prefix` is derived at run time from the path the interpreter was invoked by. What a
+move breaks is the absolute shebang in `bin/pip` and other console scripts, and neither side
+ever runs one — it is `python -m pip` here and `python -m plantuml_gui.serve` there, and
+this package installs no console scripts of its own.
+
+Within one window, `installBackendOnce()` in `extension.js` latches the install behind a
+promise, the same way `ensureSidecar()` does, so two commands in quick succession raise one
+progress notification rather than two.
+
+### Recovery
+
+**PlantUML: Reinstall Backend** deletes the virtual environment and builds it again, for the
+state nothing else recovers from: a venv that exists — and is therefore used — but does not
+work. It stops the sidecar first, that being the process living in the directory about to be
+deleted.
 
 ## Version compatibility
 
-Once a fresh sidecar has answered `/health` (between steps 4 and 5 above),
+Once a fresh sidecar has answered `/health` (between steps 8 and 9 above),
 `warnOnBackendVersionMismatch()` in `extension.js` compares `Sidecar.backendVersion` against
 `EXPECTED_BACKEND_VERSION` in `src/sidecar.js` — this extension's own `major.minor`, the same
-rule as the `scripts/check_app_versions.py` pre-commit hook applies at build time. On a
-mismatch it warns, naming both versions and saying to reinstall both from one release; it names
-no command, since either side can be the stale one. It is non-blocking (the panel still opens),
-and runs once per sidecar start rather than once per panel, since every panel in the window
-shares one sidecar.
+rule as the `scripts/check_app_versions.py` pre-commit hook applies at build time. It is
+non-blocking (the panel still opens), and runs once per sidecar start rather than once per
+panel, since every panel in the window shares one sidecar.
+
+A managed backend cannot drift: the only wheel available is the one inside the `.vsix` asking
+for it, and the pre-commit hook pairs their versions. So a mismatch means the backend came
+from somewhere else — a `pythonPath` pointed at an environment holding an older wheel, or the
+hand-made `~/.local/share/plantuml-gui/venv` that still outranks the managed one when it
+exists — and the message says so, offering the two ways out: update that environment, or
+clear the setting and let the extension install its own.
 
 ## The sidecar
 
@@ -723,7 +858,7 @@ render from `/getActivityPositions` and `/getSequencePositions`.
 
 | Setting | Meaning |
 | --- | --- |
-| `plantumlInteractive.pythonPath` | Absolute path to a Python interpreter that has `plantuml-gui` installed. Optional where the standard venv exists. |
+| `plantumlInteractive.pythonPath` | Absolute path to a Python interpreter that has `plantuml-gui` installed. Optional: the extension installs one for itself. |
 | `plantumlInteractive.plantumlJar` | Absolute path to `plantuml.jar`. Optional where the shared internal install exists. |
 
 Both are declared `machine-overridable`: they are absolute paths to things installed on one
@@ -731,14 +866,28 @@ machine, so they should neither ride Settings Sync to another nor be committed t
 repository's `.vscode/settings.json`.
 
 Each has an environment-variable equivalent — `PLANTUML_GUI_PYTHON` and `PLANTUML_JAR`, the
-latter being the same variable the web app reads, so a repo `.env` configures both. Each also
-has a third source, tried only when neither of the other two is set: the shared internal
-install for the jar, and for the interpreter a virtual environment created at install time.
-The backend is a Python package and needs one to live in, so `plantuml-extension/README.md`
-has the user create it at `~/.local/share/plantuml-gui/venv` — or under `$XDG_DATA_HOME` when
-that is set — and install the wheel into it. `standardVenv()` in `sidecar.js` computes that
-path per call rather than at import, so `HOME` and `XDG_DATA_HOME` are read when the
-interpreter is resolved. On a machine set up as documented, both settings can stay empty.
+latter being the same variable the web app reads, so a repo `.env` configures both.
+
+The interpreter has four sources, `resolvePythonPath()` in `sidecar.js` taking them in this
+order:
+
+1. the `plantumlInteractive.pythonPath` setting
+2. the `PLANTUML_GUI_PYTHON` environment variable
+3. the managed venv, passed in by `ensureBackendPython()` — see
+   [The managed backend](#the-managed-backend)
+4. `~/.local/share/plantuml-gui/venv`, or under `$XDG_DATA_HOME` when that is set, which is
+   where the setup instructions used to have the user build one by hand
+
+The managed venv sits above the hand-made one because it was built from the wheel in this
+build of the extension, and below both explicit knobs so that anyone naming their own
+environment keeps it. `standardVenv()` computes the fourth per call rather than at import, so
+`HOME` and `XDG_DATA_HOME` are read when the interpreter is resolved.
+
+Exhausting all four throws `BackendMissingError`, a subclass of `PythonConfigError`. That
+distinction is what makes the install possible: it is the one resolution failure with an
+automatic answer, and `ensureBackendPython()` acts on it while treating every other failure
+as the user's to fix. The jar has three sources, most explicit first: the setting, then
+`PLANTUML_JAR`, then the shared internal install path.
 
 `src/settings.js` holds only what more than one file needs: the section name, `normalizePath()`
 and `isFile()`. It requires nothing from `vscode`, which is what makes it testable in plain
@@ -794,7 +943,17 @@ Extension changes:
 
 The Extension Development Host launches **without a workspace folder**, so workspace-scoped
 settings are not read there at all. `.vscode/launch.json` sets `PLANTUML_GUI_PYTHON` in its
-`env` block instead, which `resolvePythonPath()` accepts as a second source.
+`env` block instead, which `resolvePythonPath()` accepts as a second source. That also means
+F5 never exercises the managed backend: the environment variable outranks it. To work on the
+install itself, run `scripts/build_release.sh` with no destination — which builds
+`backend/` and stops before publishing — then unset the variable in `launch.json`.
+
+`npm test` launches a real editor and needs a display; under a headless shell, `xvfb-run`.
+Two of the suites can also be run directly, which is quicker and needs no display:
+`test/backendInstall.test.js` requires nothing from `vscode`, and `test/sidecar.test.js`
+touches three members of it (`workspace.getConfiguration`, its `get` and `update`, and
+`ConfigurationTarget.Global`), so a few lines of stub injected with `mocha --require` covers
+it.
 
 ## Cross-runtime contracts
 
@@ -810,6 +969,15 @@ Each site carries a comment naming the other.
 | `PLANTUML_GUI_TOKEN`, `PLANTUML_GUI_JAR_OVERRIDE` | `src/sidecar.js` (`buildEnv`) | `serve.py` (`TOKEN_ENV`, `JAR_ENV`) |
 | The six message types | `extension.js` | `static/vscode/` shims |
 | `major.minor` version compatibility rule | `src/sidecar.js` (`EXPECTED_BACKEND_VERSION`) | `scripts/check_app_versions.py` (`_major_minor`) |
+| `plantuml_gui.install_venv`, and its `--wheel` / `--target` arguments | `src/backendInstall.js` (`INSTALLER_MODULE`) | `install_venv.py` (`parse_args`) |
+| Installer exit code 2 | `src/backendInstall.js` (`EXIT_UNSUITABLE_INTERPRETER`) | `install_venv.py` (`EXIT_UNSUITABLE_INTERPRETER`) |
+| `bin/python` inside a venv | `src/backendInstall.js` (`managedVenv`), `src/sidecar.js` (`standardVenv`) | `install_venv.py` (`venv_python`) |
+| Python 3.10 as the floor | — | `install_venv.py` (`MIN_PYTHON`), `pyproject.toml` (`requires-python`) |
+
+The last four are asserted by tests rather than left to the comments:
+`tests/shared/test_install_venv.py` reads the exit code out of `backendInstall.js` and the
+floor out of `pyproject.toml`, and `test/backendInstall.test.js` reads the module name and
+arguments out of `install_venv.py`.
 
 One more invariant lives entirely in the page: the script load order in `webview.html` —
 vendor, then shims, then app, then boot. Every step of it is justified in that file.
@@ -819,8 +987,13 @@ vendor, then shims, then app, then boot. Every step of it is justified in that f
 | Symptom | Where to look |
 | --- | --- |
 | Notification on opening the panel | The message names the setting to change. |
-| "PlantUML backend X does not match this extension" | Non-blocking warning; the venv and the `.vsix` are from different releases. Reinstall both from one release. See [Version compatibility](#version-compatibility). |
+| "The PlantUML backend needs Python 3.10 or newer to install itself" | No candidate interpreter qualified; the message lists each and why. Install one, or set `pythonPath`. |
+| "cannot create a virtual environment with pip in it" | `ensurepip` is missing — the `python3-venv` package on Debian and Ubuntu. |
+| "Could not install the PlantUML backend" | pip failed; usually no route to the index. Its output is in the `PlantUML Interactive` output channel. |
+| A backend that used to start now fails | Run **PlantUML: Reinstall Backend**. See [Recovery](#recovery). |
+| "PlantUML backend X does not match this extension" | Non-blocking warning; the backend came from somewhere other than the bundled wheel. See [Version compatibility](#version-compatibility). |
 | Diagram never renders, menus work | Jar problem. Check the `PlantUML Interactive` output channel for `check_jar`'s warning. |
 | Nothing is interactive but the diagram renders | Likely a missing DOM id throwing during setup. Open the webview devtools: *Developer: Open Webview Developer Tools*. |
 | Python traceback | The `PlantUML Interactive` output channel, which receives the sidecar's stderr. |
 | Frontend change not visible | Reopen the panel; the page is only fetched on open. |
+| Global storage filling up | One `venv-<version>` per backend version installed, ~50 MB each, not pruned. See [Where it goes, and updates](#where-it-goes-and-updates). |

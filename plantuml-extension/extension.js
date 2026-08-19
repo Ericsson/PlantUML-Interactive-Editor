@@ -422,15 +422,13 @@ async function showInstallError(err) {
  * Warn, once per sidecar start, when the running backend is not the version
  * this extension was built against.
  *
- * The build-time pairing (scripts/check_app_versions.py) only holds for an
- * install built from one commit; it says nothing about a venv left on an older
- * release than the .vsix now talking to it. A mismatch still runs -- the routes
- * this extension calls have generally not gone away across a minor version --
- * so this warns rather than blocking.
+ * The build-time pairing (scripts/check_app_versions.py) holds for the wheel
+ * inside this vsix, so the backend the extension installs for itself always
+ * matches. This catches one that came from somewhere else: an interpreter named
+ * by the setting, or the venv the older instructions had the user build.
  *
- * The message names both versions but no fix: either side can be the stale one,
- * and the wheel the user would reinstall from may no longer be on the machine.
- * Reinstalling both from one release is the whole remedy, in either direction.
+ * A mismatch still runs -- the routes this extension calls have generally not
+ * gone away across a minor version -- so this warns rather than blocking.
  *
  * @param {import('./src/sidecar').Sidecar} activeSidecar
  */
@@ -443,8 +441,9 @@ function warnOnBackendVersionMismatch(activeSidecar) {
 
 	vscode.window.showWarningMessage(
 		`PlantUML backend ${backendVersion ?? 'of unknown version'} does not match ` +
-			`this extension (expects ${EXPECTED_BACKEND_VERSION}). Install the wheel ` +
-			'and the .vsix from the same release.'
+			`this extension (expects ${EXPECTED_BACKEND_VERSION}). It is not the one ` +
+			'this extension installs: update the interpreter it came from, or clear ' +
+			`"${settings.SECTION}.pythonPath" to use the bundled backend.`
 	);
 }
 
