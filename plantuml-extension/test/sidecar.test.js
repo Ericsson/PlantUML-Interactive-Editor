@@ -33,7 +33,6 @@ const {
 	describeStartFailure,
 	readPortLine,
 	resolvePythonPath,
-	standardVenv,
 	EXPECTED_BACKEND_VERSION,
 	PythonConfigError,
 	BackendMissingError,
@@ -146,53 +145,6 @@ suite('sidecar: version compatibility', () => {
 	});
 });
 
-suite('sidecar: the standard venv location', () => {
-	const originalXdg = process.env.XDG_DATA_HOME;
-
-	teardown(() => {
-		if (originalXdg === undefined) {
-			delete process.env.XDG_DATA_HOME;
-		} else {
-			process.env.XDG_DATA_HOME = originalXdg;
-		}
-	});
-
-	test('sits under the XDG data home when one is set', () => {
-		process.env.XDG_DATA_HOME = '/data/home';
-
-		assert.deepStrictEqual(standardVenv(), {
-			dir: '/data/home/plantuml-gui/venv',
-			python: '/data/home/plantuml-gui/venv/bin/python'
-		});
-	});
-
-	test('falls back to ~/.local/share', () => {
-		delete process.env.XDG_DATA_HOME;
-		const home = require('os').homedir();
-
-		assert.deepStrictEqual(standardVenv(), {
-			dir: `${home}/.local/share/plantuml-gui/venv`,
-			python: `${home}/.local/share/plantuml-gui/venv/bin/python`
-		});
-	});
-
-	test('is read when used, not frozen at import', () => {
-		// The setup instructions name this path, so it has to reflect the
-		// environment the interpreter is resolved in.
-		process.env.XDG_DATA_HOME = '/first';
-		const first = standardVenv().python;
-		process.env.XDG_DATA_HOME = '/second';
-
-		assert.notStrictEqual(standardVenv().python, first);
-	});
-
-	test('tolerates a quoted XDG_DATA_HOME', () => {
-		process.env.XDG_DATA_HOME = '"/data/home"';
-
-		assert.strictEqual(standardVenv().dir, '/data/home/plantuml-gui/venv');
-	});
-});
-
 suite('sidecar: interpreter resolution', () => {
 	const original = process.env[PYTHON_ENV];
 	let restoreFs;
@@ -298,33 +250,10 @@ suite('sidecar: interpreter resolution', () => {
 		});
 	});
 
-	test('the standard venv is used when nothing is configured', async () => {
-		// What makes a stock machine need no configuration at all: install the
-		// backend where the instructions say, and this is how it is found.
-		const standard = standardVenv();
-		stubFilesystem([standard.python]);
-		delete process.env[PYTHON_ENV];
-
-		assert.strictEqual(await resolvePythonPath(), standard.python);
-	});
-
 	test('the managed venv is used when nothing is configured', async () => {
 		// The ordinary path for anyone who only installed the vsix: the venv the
 		// extension built for itself, passed in by ensureBackendPython.
 		stubFilesystem(['/storage/venv-0.31/bin/python']);
-		delete process.env[PYTHON_ENV];
-
-		assert.strictEqual(
-			await resolvePythonPath({ managedPython: '/storage/venv-0.31/bin/python' }),
-			'/storage/venv-0.31/bin/python'
-		);
-	});
-
-	test('the managed venv wins over the hand-made one', async () => {
-		// It was built from the wheel inside this build of the extension, so it
-		// is the one whose version matches the frontend.
-		const standard = standardVenv();
-		stubFilesystem(['/storage/venv-0.31/bin/python', standard.python]);
 		delete process.env[PYTHON_ENV];
 
 		assert.strictEqual(
@@ -355,18 +284,6 @@ suite('sidecar: interpreter resolution', () => {
 		assert.strictEqual(
 			await resolvePythonPath({ managedPython: '/storage/venv-0.31/bin/python' }),
 			'/env/python'
-		);
-	});
-
-	test('a managed venv that has not been built yet is passed over', async () => {
-		// The state of a first run: the path is known, nothing is there yet.
-		const standard = standardVenv();
-		stubFilesystem([standard.python]);
-		delete process.env[PYTHON_ENV];
-
-		assert.strictEqual(
-			await resolvePythonPath({ managedPython: '/storage/venv-0.31/bin/python' }),
-			standard.python
 		);
 	});
 
@@ -401,47 +318,27 @@ suite('sidecar: interpreter resolution', () => {
 		}
 	});
 
-	test('the setting wins over the standard venv', async () => {
-		const standard = standardVenv();
-		stubFilesystem(['/configured/python', standard.python]);
-		delete process.env[PYTHON_ENV];
-
-		const restore = await setPythonSetting('/configured/python');
-		try {
-			assert.strictEqual(await resolvePythonPath(), '/configured/python');
-		} finally {
-			await restore();
-		}
-	});
-
-	test('the environment variable wins over the standard venv', async () => {
-		const standard = standardVenv();
-		stubFilesystem(['/env/python', standard.python]);
-		process.env[PYTHON_ENV] = '/env/python';
-
-		assert.strictEqual(await resolvePythonPath(), '/env/python');
-	});
-
-	test('a bad environment variable does not fall through to the standard venv', async () => {
+	test('a bad environment variable does not fall through to the managed venv', async () => {
 		// Same rule as every other source: set but unusable stops resolution,
 		// so a typo cannot be masked by a working fallback.
-		const standard = standardVenv();
-		stubFilesystem([standard.python]);
+		stubFilesystem(['/storage/venv-0.31/bin/python']);
 		process.env[PYTHON_ENV] = '/typo/python';
 
-		await assert.rejects(() => resolvePythonPath(), PythonConfigError);
+		await assert.rejects(
+			() => resolvePythonPath({ managedPython: '/storage/venv-0.31/bin/python' }),
+			PythonConfigError
+		);
 	});
 
-	test('the not-found message is a command the user can paste', async () => {
-		// The likeliest first run is an empty machine, so the message carries
-		// the fix rather than a decision.
-		const standard = standardVenv();
+	test('the not-found message says where a backend comes from', async () => {
+		// Only reachable with no wheel bundled, since a bundled one is
+		// installed instead; so the fix is to build one, or to name your own.
 		stubFilesystem([]);
 		delete process.env[PYTHON_ENV];
 
 		await assert.rejects(() => resolvePythonPath(), (err) => {
-			assert.ok(err.message.includes(`python3 -m venv ${standard.dir}`), err.message);
-			assert.ok(err.message.includes(`${standard.dir}/bin/pip install`), err.message);
+			assert.ok(err.message.includes('build_release.sh'), err.message);
+			assert.ok(err.message.includes(PYTHON_SETTING), err.message);
 			return true;
 		});
 	});
@@ -521,7 +418,10 @@ suite('sidecar: startup failure messages', () => {
 		assert.ok(message.includes(PYTHON_SETTING));
 	});
 
-	test('a missing package says how to install it', () => {
+	test('a missing package blames the interpreter that was named', () => {
+		// Only reachable through a configured interpreter now, the managed venv
+		// having the package installed into it by construction. So the fix is
+		// that setting: point it somewhere else, or stop pointing it anywhere.
 		const message = describeStartFailure(
 			'python',
 			"ModuleNotFoundError: No module named 'plantuml_gui'",
@@ -529,9 +429,8 @@ suite('sidecar: startup failure messages', () => {
 		);
 
 		assert.ok(message.includes('plantuml-gui'));
-		// Into the interpreter that is actually configured, since that is the
-		// mismatch causing this: the wheel went somewhere else.
-		assert.ok(message.includes('"python" -m pip install'), message);
+		assert.ok(message.includes('"python"'), message);
+		assert.ok(message.includes(PYTHON_SETTING), message);
 	});
 
 	test('any other failure surfaces the sidecar stderr', () => {
@@ -614,7 +513,7 @@ suite('sidecar: port handshake', () => {
 
 		child.emit('exit', 1);
 
-		await assert.rejects(port, /pip install/);
+		await assert.rejects(port, /does not have the plantuml-gui package/);
 	});
 });
 

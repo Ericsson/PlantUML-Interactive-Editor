@@ -34,8 +34,6 @@
 
 const { spawn } = require('child_process');
 const crypto = require('crypto');
-const os = require('os');
-const path = require('path');
 const vscode = require('vscode');
 const { SECTION, normalizePath, isFile } = require('./settings');
 const extensionPackage = require('../package.json');
@@ -52,26 +50,6 @@ const PYTHON_SETTING = `${SECTION}.${PYTHON_KEY}`;
  * plantuml-extension/README.md.
  */
 const PYTHON_ENV = 'PLANTUML_GUI_PYTHON';
-
-/** Directory name for this extension's own data, under the XDG data home. */
-const DATA_DIR_NAME = 'plantuml-gui';
-
-/**
- * The venv the setup instructions create, tried when nothing is configured.
- *
- * Under the XDG data home because a venv is application data. Computed per call
- * so HOME and XDG_DATA_HOME are read when used, not at import.
- *
- * @returns {{ dir: string, python: string }} the venv and its interpreter
- */
-function standardVenv() {
-	const dataHome =
-		normalizePath(process.env.XDG_DATA_HOME) ||
-		path.join(os.homedir(), '.local', 'share');
-	const dir = path.join(dataHome, DATA_DIR_NAME, 'venv');
-
-	return { dir, python: path.join(dir, 'bin', 'python') };
-}
 
 // Must match PORT_LINE_PREFIX in src/plantuml_gui/serve.py.
 const PORT_LINE_PREFIX = 'PLANTUML_GUI_PORT=';
@@ -163,10 +141,9 @@ class Sidecar {
 /**
  * Resolve the Python interpreter to run the sidecar with.
  *
- * Four sources, most explicit first: the setting, the environment variable, the
- * venv the extension installed for itself, then the venv the older setup
- * instructions had the user create by hand. Nothing is searched for on PATH:
- * the backend is a Python package that no machine has by default, so an
+ * Three sources, most explicit first: the setting, the environment variable,
+ * then the venv the extension installed for itself. Nothing is searched for on
+ * PATH: the backend is a Python package that no machine has by default, so an
  * interpreter found that way is one that almost certainly cannot import
  * plantuml_gui, and spawning it would report the failure against the wrong
  * thing.
@@ -203,24 +180,17 @@ async function resolvePythonPath(options = {}) {
 		return requireInterpreter(fromEnv, `the ${PYTHON_ENV} environment variable`);
 	}
 
-	// Ahead of the hand-made venv below: this one was built from the wheel in
-	// this build of the extension, so it is the one whose version matches.
 	if (managedPython && isFile(managedPython)) {
 		return managedPython;
 	}
 
-	const standard = standardVenv();
-
-	if (isFile(standard.python)) {
-		return standard.python;
-	}
-
+	// Reached on a first run, and in a checkout with no wheel built. The caller
+	// answers the first case by installing; see ensureBackendPython().
 	throw new BackendMissingError(
-		'The PlantUML backend is not installed. Create it with:\n\n' +
-			`  python3 -m venv ${standard.dir}\n` +
-			`  ${standard.dir}/bin/pip install <path to plantuml_gui-*.whl>\n\n` +
-			`Or set "${PYTHON_SETTING}" to an interpreter that already has the ` +
-			`plantuml-gui package installed (or ${PYTHON_ENV}).`
+		'The PlantUML backend is not installed, and this build of the extension ' +
+			'is not carrying a wheel to install it from. Build one with ' +
+			`scripts/build_release.sh, or set "${PYTHON_SETTING}" to an interpreter ` +
+			`that already has the plantuml-gui package installed (or ${PYTHON_ENV}).`
 	);
 }
 
@@ -291,7 +261,8 @@ function describeStartFailure(pythonPath, stderr, spawnError) {
 	if (/No module named ['"]?plantuml_gui/.test(stderr)) {
 		return (
 			`Python at "${pythonPath}" does not have the plantuml-gui package. ` +
-			`Install it with:\n\n  "${pythonPath}" -m pip install <path to plantuml_gui-*.whl>`
+			`Point "${PYTHON_SETTING}" at an interpreter that does, or clear it to ` +
+			'use the backend this extension installs for itself.'
 		);
 	}
 
@@ -469,7 +440,6 @@ function readPortLine(child, pythonPath, getStderr) {
 module.exports = {
 	startSidecar,
 	resolvePythonPath,
-	standardVenv,
 	buildEnv,
 	describeStartFailure,
 	readPortLine,

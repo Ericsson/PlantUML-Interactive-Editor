@@ -157,8 +157,8 @@ function bundledWheel(extensionPath) {
  * venv still beside it.
  *
  * `bin/python`, and so Linux and macOS only; Windows puts it in
- * `Scripts/python.exe`. Matches standardVenv() in sidecar.js and venv_python()
- * in install_venv.py.
+ * `Scripts/python.exe`. Matches venv_python() in install_venv.py, which builds
+ * the venv this points into.
  *
  * @param {string} globalStoragePath `context.globalStorageUri.fsPath`
  * @param {string} version as returned by bundledWheel

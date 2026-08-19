@@ -335,8 +335,8 @@ settings tab, and so does focus in the panel itself — there is no active text 
    by every panel in the window; concurrent callers await the same start rather than racing
    to spawn two servers.
 6. `startSidecar()` resolves the interpreter again — the setting, else
-   `PLANTUML_GUI_PYTHON`, else the managed venv, else the hand-made one, checked to be a
-   file — generates a per-launch token, and spawns `python -m plantuml_gui.serve`.
+   `PLANTUML_GUI_PYTHON`, else the managed venv, checked to be a file — generates a
+   per-launch token, and spawns `python -m plantuml_gui.serve`.
 7. The sidecar applies the jar override, warns if the jar is unusable, installs its routes,
    binds an ephemeral port, and prints `PLANTUML_GUI_PORT=<port>` to stdout.
 8. Node reads that line off stdout, then polls `GET /health` until it answers.
@@ -434,17 +434,12 @@ place. The version comes from the wheel's filename, so there is no second record
 installed, and an extension-only patch release — `0.31.1` against backend `0.31` — reuses
 the venv it already has.
 
-Two consequences worth knowing:
+One consequence worth knowing:
 
 - **Old environments are not pruned.** They accumulate one per backend version at roughly
   50 MB each, mostly lxml. Deleting `venv-0.30` while another window's sidecar is still
   running out of it would break that window, and that hazard was judged worse than the
   disk. Removing the extension's global storage directory clears them all.
-- **An existing hand-made venv keeps winning.** `~/.local/share/plantuml-gui/venv` is still
-  a resolution source, so anyone who set the extension up the old way resolves to it and
-  never triggers an install — and stays on whatever version it holds until they delete it.
-  `warnOnBackendVersionMismatch()` is what catches that drift.
-
 ### Atomicity
 
 `install_venv.py` builds into `<target>.tmp-<pid>` and renames the finished result into
@@ -488,10 +483,9 @@ panel, since every panel in the window shares one sidecar.
 
 A managed backend cannot drift: the only wheel available is the one inside the `.vsix` asking
 for it, and the pre-commit hook pairs their versions. So a mismatch means the backend came
-from somewhere else — a `pythonPath` pointed at an environment holding an older wheel, or the
-hand-made `~/.local/share/plantuml-gui/venv` that still outranks the managed one when it
-exists — and the message says so, offering the two ways out: update that environment, or
-clear the setting and let the extension install its own.
+from somewhere else: a `pythonPath` pointed at an environment holding an older wheel. The
+message says so, and offers the two ways out — update that environment, or clear the setting
+and let the extension install its own.
 
 ## The sidecar
 
@@ -868,22 +862,19 @@ repository's `.vscode/settings.json`.
 Each has an environment-variable equivalent — `PLANTUML_GUI_PYTHON` and `PLANTUML_JAR`, the
 latter being the same variable the web app reads, so a repo `.env` configures both.
 
-The interpreter has four sources, `resolvePythonPath()` in `sidecar.js` taking them in this
+The interpreter has three sources, `resolvePythonPath()` in `sidecar.js` taking them in this
 order:
 
 1. the `plantumlInteractive.pythonPath` setting
 2. the `PLANTUML_GUI_PYTHON` environment variable
 3. the managed venv, passed in by `ensureBackendPython()` — see
    [The managed backend](#the-managed-backend)
-4. `~/.local/share/plantuml-gui/venv`, or under `$XDG_DATA_HOME` when that is set, which is
-   where the setup instructions used to have the user build one by hand
 
-The managed venv sits above the hand-made one because it was built from the wheel in this
-build of the extension, and below both explicit knobs so that anyone naming their own
-environment keeps it. `standardVenv()` computes the fourth per call rather than at import, so
-`HOME` and `XDG_DATA_HOME` are read when the interpreter is resolved.
+The managed venv comes last so that anyone naming their own environment keeps it. Nothing is
+searched for on `PATH`: the backend is a package no machine has by default, so an interpreter
+found that way almost certainly cannot import it, and spawning it would blame the wrong thing.
 
-Exhausting all four throws `BackendMissingError`, a subclass of `PythonConfigError`. That
+Exhausting all three throws `BackendMissingError`, a subclass of `PythonConfigError`. That
 distinction is what makes the install possible: it is the one resolution failure with an
 automatic answer, and `ensureBackendPython()` acts on it while treating every other failure
 as the user's to fix. The jar has three sources, most explicit first: the setting, then
@@ -971,7 +962,7 @@ Each site carries a comment naming the other.
 | `major.minor` version compatibility rule | `src/sidecar.js` (`EXPECTED_BACKEND_VERSION`) | `scripts/check_app_versions.py` (`_major_minor`) |
 | `plantuml_gui.install_venv`, and its `--wheel` / `--target` arguments | `src/backendInstall.js` (`INSTALLER_MODULE`) | `install_venv.py` (`parse_args`) |
 | Installer exit code 2 | `src/backendInstall.js` (`EXIT_UNSUITABLE_INTERPRETER`) | `install_venv.py` (`EXIT_UNSUITABLE_INTERPRETER`) |
-| `bin/python` inside a venv | `src/backendInstall.js` (`managedVenv`), `src/sidecar.js` (`standardVenv`) | `install_venv.py` (`venv_python`) |
+| `bin/python` inside a venv | `src/backendInstall.js` (`managedVenv`) | `install_venv.py` (`venv_python`) |
 | Python 3.10 as the floor | — | `install_venv.py` (`MIN_PYTHON`), `pyproject.toml` (`requires-python`) |
 
 The last four are asserted by tests rather than left to the comments:
