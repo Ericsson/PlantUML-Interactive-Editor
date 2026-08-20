@@ -428,10 +428,11 @@ Two constraints follow, both easy to undo by accident:
   checkout before `PYTHONPATH` is consulted, which is exactly how this went unnoticed
   once. `TestRunningOutOfTheWheel` in `tests/shared/test_install_venv.py` guards it, using
   `python -S` so that hook cannot answer.
-- **`install_venv.py` is held to Python 3.8 syntax.** It runs on whatever interpreter the
-  user has, and Python compiles a whole module before running any of it, so a `match`
-  statement or a `X | Y` annotation would turn "this interpreter is too old" into a
-  `SyntaxError` and lose the message that says so.
+- **`install_venv.py` is held to Python 3.8 syntax.** Python compiles a whole file before
+  running any of it, and the "too old" message is inside `main()`, so one unparseable line
+  anywhere in this file means an old interpreter never reaches it. What it does instead is
+  exit 1 with a traceback — and 1 is `EXIT_FAILED`, so the extension stops the search and
+  reports a broken install, never trying the newer Python further down the candidate list.
 
 Importing the package must also stay dependency-free, which is why `__init__.py` is empty:
 `install_venv` is imported before Flask and the rest exist.
@@ -456,10 +457,10 @@ directory clears the lot.
 
 ### Platforms
 
-One code path, with two places that know the platform: the interpreter inside a venv, and the
-candidate list above. `venvInterpreter()` in `backendInstall.js` and `venv_python()` in
-`install_venv.py` each choose `Scripts\python.exe` on Windows and `bin/python` elsewhere.
-They have to agree, and both run on the machine being installed to, so their answers do.
+Only two things here depend on the platform: the candidate list above, and the path to the
+interpreter inside a venv — `Scripts\python.exe` on Windows, `bin/python` elsewhere.
+`venvInterpreter()` in `backendInstall.js` and `venv_python()` in `install_venv.py` both
+compute that path and must agree; both run on the machine being installed to, so they do.
 
 Linux and macOS share every path here, and pip finds a wheel for each of the compiled
 dependencies on both. Windows reaches its interpreter through the `py` launcher, keeps the
