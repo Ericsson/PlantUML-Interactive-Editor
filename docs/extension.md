@@ -375,22 +375,37 @@ split is the wrong one:
 
 > `src/backendInstall.js` discovers, `install_venv.py` judges.
 
-Nothing can run Python to find Python, so enumerating candidate interpreters —
-`python3` first, then `python3.13` down to `python3.10` — is necessarily the extension's
-job. It then spawns each candidate against the installer module and reads the exit code,
-making no assessment of its own:
+Nothing can run Python to find Python, so enumerating candidate interpreters is necessarily
+the extension's job. It then spawns each candidate against the installer module and reads
+the exit code, making no assessment of its own:
 
 | Exit code | Meaning | What the extension does |
 | --- | --- | --- |
-| `0` | Installed, or already there | Use the venv's interpreter |
+| `0`, and an interpreter appeared | Installed, or already there | Use the venv's interpreter |
 | `2` (`EXIT_UNSUITABLE_INTERPRETER`) | This interpreter cannot host the backend | Try the next candidate |
-| anything else | The install failed | Stop, and report it with the installer's output |
+| `1` (`EXIT_FAILED`) | The install ran and failed | Stop, and report it with the installer's output |
+| anything else | The command was never running the installer | Try the next candidate |
 
 That keeps the version rule in one place, next to `requires-python`, and has it applied
 *by* the interpreter under judgement rather than by parsing its `--version`. Distinguishing
-the third row from the second is what stops a failed install being reported as "no Python
-found", which is why `NoInterpreterError` is a subclass of `BackendInstallError` rather
-than the other way round.
+the third row from the fourth is what lets a broken install be reported as one, and
+`NoInterpreterError` is a subclass of `BackendInstallError` for the same reason.
+
+The fourth row is what makes the search robust on Windows, where a `python3` on PATH is
+usually an App Execution Alias that opens the Microsoft Store. Anything that answers while
+not running the installer — that alias, a shell reporting 9009, a wrapper script — sends the
+search on to the next candidate. Row one applies the same scepticism from the other side: an
+exit code of 0 is believed once the interpreter it claims to have built is there.
+
+### Which interpreters are tried
+
+`PYTHON_CANDIDATES` holds argv prefixes rather than bare names, because the usual way to
+reach a chosen Python on Windows takes the version as an argument:
+
+| Platform | Tried, in order | Why |
+| --- | --- | --- |
+| Linux, macOS | `python3`, then `python3.13` … `python3.10` | `python3` is what the machine calls its Python; the versioned names reach a newer one on a machine whose `python3` is older than 3.10 |
+| Windows | `py -3`, then `python` | The launcher ships with every python.org install and already means "the newest Python 3 here", so it needs no version list. `python` reaches an interpreter that is on PATH without one |
 
 ### Running out of the wheel
 
@@ -438,6 +453,21 @@ Each backend version therefore keeps its own environment, at roughly 50 MB apiec
 lxml. They stay where they are for the life of the extension, which is what lets a window
 still running an older sidecar carry on with it; removing the extension's global storage
 directory clears the lot.
+
+### Platforms
+
+One code path, with two places that know the platform: the interpreter inside a venv, and the
+candidate list above. `venvInterpreter()` in `backendInstall.js` and `venv_python()` in
+`install_venv.py` each choose `Scripts\python.exe` on Windows and `bin/python` elsewhere.
+They have to agree, and both run on the machine being installed to, so their answers do.
+
+Linux and macOS share every path here, and pip finds a wheel for each of the compiled
+dependencies on both. Windows reaches its interpreter through the `py` launcher, keeps the
+venv's interpreter in `Scripts`, and wants long paths enabled where a global storage path
+plus a venv plus `site-packages` runs close to 260 characters.
+
+`scripts/build_release.sh` is bash, so releases are built on Linux or macOS. The
+`plantumlJar` fallback is an internal Linux path; elsewhere that setting names the jar.
 
 ### Atomicity
 
@@ -960,8 +990,8 @@ Each site carries a comment naming the other.
 | The six message types | `extension.js` | `static/vscode/` shims |
 | `major.minor` version compatibility rule | `src/sidecar.js` (`EXPECTED_BACKEND_VERSION`) | `scripts/check_app_versions.py` (`_major_minor`) |
 | `plantuml_gui.install_venv`, and its `--wheel` / `--target` arguments | `src/backendInstall.js` (`INSTALLER_MODULE`) | `install_venv.py` (`parse_args`) |
-| Installer exit code 2 | `src/backendInstall.js` (`EXIT_UNSUITABLE_INTERPRETER`) | `install_venv.py` (`EXIT_UNSUITABLE_INTERPRETER`) |
-| `bin/python` inside a venv | `src/backendInstall.js` (`managedVenv`) | `install_venv.py` (`venv_python`) |
+| Installer exit codes 1 and 2 | `src/backendInstall.js` (`EXIT_FAILED`, `EXIT_UNSUITABLE_INTERPRETER`) | `install_venv.py` (same names) |
+| The interpreter inside a venv, per platform | `src/backendInstall.js` (`venvInterpreter`) | `install_venv.py` (`venv_python`) |
 | Python 3.10 as the floor | — | `install_venv.py` (`MIN_PYTHON`), `pyproject.toml` (`requires-python`) |
 
 The last four are asserted by tests rather than left to the comments:
@@ -986,4 +1016,5 @@ vendor, then shims, then app, then boot. Every step of it is justified in that f
 | Nothing is interactive but the diagram renders | Likely a missing DOM id throwing during setup. Open the webview devtools: *Developer: Open Webview Developer Tools*. |
 | Python traceback | The `PlantUML Interactive` output channel, which receives the sidecar's stderr. |
 | Frontend change not visible | Reopen the panel; the page is only fetched on open. |
+| Windows: a candidate reported as "not a Python" | What the Store alias looks like; the message lists every candidate tried. Install Python from python.org for the `py` launcher. |
 | Global storage growing | One `venv-<version>` per backend version installed, ~50 MB each. See [Where it goes, and updates](#where-it-goes-and-updates). |

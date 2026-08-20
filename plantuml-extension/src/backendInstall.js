@@ -53,6 +53,7 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { isFile } = require('./settings');
 
 /**
  * The directory inside the extension holding the bundled wheel.
@@ -154,10 +155,6 @@ function bundledWheel(extensionPath) {
  * yet, so the install runs again, and reinstalling an older vsix finds its own
  * venv still beside it.
  *
- * `bin/python`, and so Linux and macOS only; Windows puts it in
- * `Scripts/python.exe`. Matches venv_python() in install_venv.py, which builds
- * the venv this points into.
- *
  * @param {string} globalStoragePath `context.globalStorageUri.fsPath`
  * @param {string} version as returned by bundledWheel
  * @returns {{ dir: string, python: string }} the venv and its interpreter
@@ -165,24 +162,54 @@ function bundledWheel(extensionPath) {
 function managedVenv(globalStoragePath, version) {
 	const dir = path.join(globalStoragePath, `${VENV_PREFIX}${version}`);
 
-	return { dir, python: path.join(dir, 'bin', 'python') };
+	return { dir, python: venvInterpreter(dir) };
+}
+
+/**
+ * The interpreter inside a virtual environment at `dir`.
+ *
+ * Windows keeps it in `Scripts` and gives it an extension; everywhere else it is
+ * `bin/python`. Must agree with venv_python() in install_venv.py, which builds
+ * the environment this points into.
+ *
+ * @param {string} dir a virtual environment
+ * @returns {string}
+ */
+function venvInterpreter(dir) {
+	return process.platform === 'win32'
+		? path.join(dir, 'Scripts', 'python.exe')
+		: path.join(dir, 'bin', 'python');
 }
 
 /**
  * The interpreters tried, in order, to build the venv with.
  *
- * These are names, looked up on PATH by spawn(). `python3` first because it
- * is what the machine considers its Python. The versioned names follow,
- * newest first, for a machine whose `python3` is too old but which has a
- * newer one installed alongside.
+ * Argv prefixes rather than bare names, because the usual way to reach a chosen
+ * Python on Windows is through a launcher that takes the version as an argument.
+ * The first element is looked up on PATH by spawn().
+ *
+ * On Windows, `py -3` comes first: the launcher ships with every python.org
+ * install and already means "the newest Python 3 on this machine", so it needs
+ * no version list behind it. `python` follows, for a machine with an interpreter
+ * on PATH but no launcher. `python3` is deliberately absent -- Windows 10 and
+ * later ship an App Execution Alias by that name that opens the Microsoft
+ * Store, and putting a Store window on screen is a worse first run than trying
+ * the next candidate.
+ *
+ * Elsewhere `python3` is what the machine considers its Python, and the
+ * versioned names follow, newest first, for one whose `python3` is too old but
+ * which has a newer one installed alongside.
  */
-const PYTHON_CANDIDATES = [
-	'python3',
-	'python3.13',
-	'python3.12',
-	'python3.11',
-	'python3.10'
-];
+const PYTHON_CANDIDATES =
+	process.platform === 'win32'
+		? [['py', '-3'], ['python']]
+		: [
+			['python3'],
+			['python3.13'],
+			['python3.12'],
+			['python3.11'],
+			['python3.10']
+		];
 
 /**
  * The module inside the wheel that performs the install.
@@ -195,10 +222,21 @@ const INSTALLER_MODULE = 'plantuml_gui.install_venv';
  * "This interpreter cannot host the backend": try the next candidate.
  *
  * Must match EXIT_UNSUITABLE_INTERPRETER in src/plantuml_gui/install_venv.py.
- * Every other non-zero exit is a genuine failure, so this constant is the whole
- * of what separates "keep looking" from "stop and report".
  */
 const EXIT_UNSUITABLE_INTERPRETER = 2;
+
+/**
+ * "The install was attempted and failed": stop, and report it.
+ *
+ * Must match EXIT_FAILED in src/plantuml_gui/install_venv.py, which is also what
+ * Python exits with on an unhandled exception, so a traceback lands here too.
+ * Reaching this means the installer ran, which is what makes it safe to treat
+ * every other unexpected code as "the installer never ran": something that
+ * answers but is not a Python -- the Microsoft Store alias, a shell reporting
+ * 9009, a wrapper script -- is a candidate to move on from, not a failed
+ * install to report.
+ */
+const EXIT_FAILED = 1;
 
 /**
  * How long the install may take before it is abandoned.
@@ -218,7 +256,8 @@ const RETAINED_OUTPUT = 8000;
  * Reports the outcome of a failed run, letting the caller decide which
  * failures are worth continuing past.
  *
- * @param {string} python interpreter name or path, looked up on PATH
+ * @param {string[]} command an argv prefix that runs an interpreter; its first
+ *   element is looked up on PATH
  * @param {object} options
  * @param {string} options.wheel the wheel to install
  * @param {string} options.target the venv to create
@@ -226,11 +265,12 @@ const RETAINED_OUTPUT = 8000;
  *   installer's progress and pip's own output as it arrives
  * @returns {Promise<{ code: number | null, spawned: boolean, output: string }>}
  */
-function runInstaller(python, { wheel, target, output }) {
+function runInstaller(command, { wheel, target, output }) {
 	return new Promise((resolve) => {
+		const [executable, ...prefix] = command;
 		const child = spawn(
-			python,
-			['-m', INSTALLER_MODULE, '--wheel', wheel, '--target', target],
+			executable,
+			[...prefix, '-m', INSTALLER_MODULE, '--wheel', wheel, '--target', target],
 			{
 				env: {
 					...process.env,
@@ -302,35 +342,47 @@ async function installBackend({ extensionPath, globalStoragePath, output }) {
 	const rejected = [];
 
 	for (const candidate of PYTHON_CANDIDATES) {
+		const label = candidate.join(' ');
 		const attempt = await runInstaller(candidate, {
 			wheel: wheel.path,
 			target: venv.dir,
 			output
 		});
 
-		if (attempt.code === 0) {
+		if (attempt.code === 0 && isFile(venv.python)) {
 			return venv.python;
+		}
+
+		if (attempt.code === 0) {
+			// Reported success and left no interpreter behind, so it was not
+			// running the installer.
+			rejected.push(`${label}: produced no interpreter`);
+			continue;
 		}
 
 		if (!attempt.spawned) {
 			// Not on this machine. Only worth mentioning if nothing else works.
-			rejected.push(`${candidate}: not found`);
+			rejected.push(`${label}: not found`);
 			continue;
 		}
 
 		if (attempt.code === EXIT_UNSUITABLE_INTERPRETER) {
-			rejected.push(`${candidate}: too old`);
+			rejected.push(`${label}: too old`);
 			continue;
 		}
 
-		throw new BackendInstallError(
-			`Could not install the PlantUML backend into "${venv.dir}" using ` +
-				`${candidate}.` +
-				(attempt.code === null
-					? ` It did not finish within ${INSTALL_TIMEOUT_MS / 1000}s.`
-					: '') +
-				detail(attempt.output)
-		);
+		if (attempt.code === EXIT_FAILED || attempt.code === null) {
+			throw new BackendInstallError(
+				`Could not install the PlantUML backend into "${venv.dir}" using ` +
+					`${label}.` +
+					(attempt.code === null
+						? ` It did not finish within ${INSTALL_TIMEOUT_MS / 1000}s.`
+						: '') +
+					detail(attempt.output)
+			);
+		}
+
+		rejected.push(`${label}: not a Python (exit code ${attempt.code})`);
 	}
 
 	throw new NoInterpreterError(
@@ -353,6 +405,7 @@ function detail(output) {
 module.exports = {
 	bundledWheel,
 	managedVenv,
+	venvInterpreter,
 	installBackend,
 	runInstaller,
 	BundledWheelError,
@@ -364,5 +417,6 @@ module.exports = {
 	PYTHON_CANDIDATES,
 	INSTALLER_MODULE,
 	EXIT_UNSUITABLE_INTERPRETER,
+	EXIT_FAILED,
 	INSTALL_TIMEOUT_MS
 };

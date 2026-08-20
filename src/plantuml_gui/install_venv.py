@@ -40,11 +40,13 @@ Who is responsible for what
 The division with plantuml-extension/src/backendInstall.js:
 
 *JavaScript discovers, this module judges.* Enumerating candidate
-interpreters -- ``python3``, ``python3.13`` and so on -- is the extension's
-job. It spawns each one against this module and reads the exit code.
-``EXIT_UNSUITABLE_INTERPRETER`` means "not this one, try the next"; any other
-non-zero exit is a real failure and stops the search, reported distinctly
-from "no Python found".
+interpreters -- ``python3`` and the versioned names, or the ``py`` launcher on
+Windows -- is the extension's job. It spawns each one against this module and
+reads the exit code. ``EXIT_UNSUITABLE_INTERPRETER`` means "not this one, try
+the next"; ``EXIT_FAILED`` means the install was attempted and failed, and
+stops the search, reported distinctly from "no Python found". Any other code
+means the command was not running this module at all, which the extension reads
+as one more candidate to move past.
 
 That puts the version rule in one place, next to ``requires-python``, checked
 *by* the interpreter being judged.
@@ -104,10 +106,13 @@ def interpreter_is_supported() -> bool:
 def venv_python(venv_dir: str) -> str:
     """The interpreter inside a venv at `venv_dir`.
 
-    ``bin/python``, and so Linux and macOS only. Must agree with managedVenv()
-    in plantuml-extension/src/backendInstall.js, which computes the same path
-    to decide whether an install is needed and to spawn the backend with.
+    Windows keeps it in ``Scripts`` and gives it an extension; everywhere else it
+    is ``bin/python``. Must agree with venvInterpreter() in
+    plantuml-extension/src/backendInstall.js, which computes the same path to
+    decide whether an install is needed and to spawn the backend with.
     """
+    if os.name == "nt":
+        return os.path.join(venv_dir, "Scripts", "python.exe")
     return os.path.join(venv_dir, "bin", "python")
 
 

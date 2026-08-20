@@ -8,10 +8,13 @@ Internal extension, distributed as a `.vsix`.
 
 ## Requirements
 
-**Python 3.10 or newer** on your `PATH` (check with `python3 --version`) — the extension
-creates a virtual environment with it and runs the backend from there as a local child
-process. `python3.13` down to `python3.10` are tried by name too, for a machine whose
-`python3` is older. On Debian and Ubuntu the `python3-venv` package is needed as well.
+**Python 3.10 or newer**, which the extension uses to build a virtual environment of its
+own and then runs the backend from as a local child process. How it is found:
+
+| Platform | What is looked for |
+| --- | --- |
+| Linux, macOS | `python3` on your `PATH`, then `python3.13` down to `python3.10` by name. On Debian and Ubuntu the `python3-venv` package is needed too. |
+| Windows | The `py` launcher, then `python` on your `PATH`. The python.org installer provides both. |
 
 **Java and a `plantuml.jar`.** Rendering shells out to
 `java -jar plantuml.jar`. A shared internal install is used when the machine has

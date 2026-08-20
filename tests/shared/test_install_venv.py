@@ -122,23 +122,38 @@ class TestTheVersionGate:
 
     def test_the_exit_codes_match_the_extension(self):
         source = BACKEND_INSTALL_JS.read_text(encoding="utf-8")
-        declared = re.search(r"EXIT_UNSUITABLE_INTERPRETER = (\d+);", source)
 
-        assert declared, "backendInstall.js does not declare the exit code"
-        assert install_venv.EXIT_UNSUITABLE_INTERPRETER == int(declared.group(1))
+        for name, value in (
+            ("EXIT_UNSUITABLE_INTERPRETER", install_venv.EXIT_UNSUITABLE_INTERPRETER),
+            ("EXIT_FAILED", install_venv.EXIT_FAILED),
+        ):
+            declared = re.search(rf"{name} = (\d+);", source)
+
+            assert declared, f"backendInstall.js does not declare {name}"
+            assert value == int(declared.group(1))
 
 
 class TestWhereTheInterpreterIs:
     def test_is_inside_the_venv(self, tmp_path):
-        assert install_venv.venv_python(str(tmp_path)) == str(
-            tmp_path / "bin" / "python"
+        expected = (
+            tmp_path / "Scripts" / "python.exe"
+            if os.name == "nt"
+            else tmp_path / "bin" / "python"
         )
 
+        assert install_venv.venv_python(str(tmp_path)) == str(expected)
+
     def test_matches_the_path_the_extension_looks_for(self):
-        """managedVenv() in backendInstall.js computes the same path."""
+        """venvInterpreter() in backendInstall.js makes the same choice.
+
+        Both sides run on the machine being installed to, so they have to agree
+        about the platform as well as the layout.
+        """
         source = BACKEND_INSTALL_JS.read_text(encoding="utf-8")
 
         assert "'bin', 'python'" in source
+        assert "'Scripts', 'python.exe'" in source
+        assert "process.platform === 'win32'" in source
 
 
 class TestClaimingTheBuiltVenv:
