@@ -26,9 +26,8 @@
 // where the virtual environment that wheel gets installed into goes, and which
 // interpreter builds it.
 //
-// The vsix carries the wheel (see scripts/build_release.sh), so the extension
-// has everything it needs to produce a working backend without the user
-// creating a venv and running pip by hand.
+// The vsix carries the wheel (see scripts/build_release.sh), giving the
+// extension everything it needs to produce a working backend.
 //
 // The install is Python: src/plantuml_gui/install_venv.py, run straight out of
 // the bundled wheel, since a wheel is a zip and Python imports out of one
@@ -36,21 +35,20 @@
 //
 //   this file discovers, install_venv.py judges.
 //
-// We cannot run Python to find Python, so enumerating candidate interpreters is
-// this side's job. Each is spawned against that module, which is the authority
-// on its own suitability because it *is* the interpreter in question, and the
-// version rule then lives once, next to requires-python. EXIT_UNSUITABLE_INTERPRETER
-// means try the next candidate; any other non-zero exit is a real failure and
-// stops the search. See that module's docstring for the other half of this.
+// Enumerating candidate interpreters is this side's job. Each is spawned
+// against that module, which is the authority on its own suitability because
+// it *is* the interpreter in question, and the version rule lives once, next
+// to requires-python. EXIT_UNSUITABLE_INTERPRETER means try the next
+// candidate; any other non-zero exit is a real failure and stops the search.
+// See that module's docstring for the other half of this.
 //
 // Everything else here is paths and names, with no side effects, so that
-// resolving an already-installed backend costs a stat rather than an install,
-// and so the rules can be tested without building a venv.
+// resolving an already-installed backend costs a stat, and so the rules can
+// be tested without building a venv.
 //
-// Requires nothing from vscode: the caller passes the two directories it owns,
-// the extension's own path and its global storage path, and an optional sink for
-// the installer's output. That is what lets this be tested in plain Node, as
-// with settings.js.
+// The caller passes the two directories it owns, the extension's own path and
+// its global storage path, and an optional sink for the installer's output.
+// That is what lets this be tested in plain Node, as with settings.js.
 
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -101,11 +99,11 @@ class NoInterpreterError extends BackendInstallError {}
 /**
  * The wheel this build of the extension ships, and its version.
  *
- * Exactly one must be present. Zero means a development checkout that has never
- * run a build, since `backend/` is a build product and gitignored as one; the
- * build clears the directory before copying, so more than one means something
- * put it there by hand. The message names the directory, because the fix is to
- * run the build.
+ * Exactly one must be present. Zero means a development checkout that has
+ * never run a build, since `backend/` is a build product and gitignored as
+ * one; the build clears the directory before copying, so more than one means
+ * something put it there by hand. The message names the directory, because
+ * the fix is to run the build.
  *
  * @param {string} extensionPath the extension's own directory
  * @returns {{ path: string, version: string }} the wheel, and the version read
@@ -173,10 +171,10 @@ function managedVenv(globalStoragePath, version) {
 /**
  * The interpreters tried, in order, to build the venv with.
  *
- * Names rather than paths: these are looked up on PATH by spawn(). `python3`
- * first because it is what the machine considers its Python. The versioned
- * names follow, newest first, for a machine whose `python3` is too old but
- * which has a newer one installed alongside.
+ * These are names, looked up on PATH by spawn(). `python3` first because it
+ * is what the machine considers its Python. The versioned names follow,
+ * newest first, for a machine whose `python3` is too old but which has a
+ * newer one installed alongside.
  */
 const PYTHON_CANDIDATES = [
 	'python3',
@@ -217,8 +215,8 @@ const RETAINED_OUTPUT = 8000;
 /**
  * Run the installer under one candidate interpreter.
  *
- * Never rejects for a failed run: which failures are worth continuing past is
- * the caller's decision, so the outcome is reported rather than thrown.
+ * Reports the outcome of a failed run, letting the caller decide which
+ * failures are worth continuing past.
  *
  * @param {string} python interpreter name or path, looked up on PATH
  * @param {object} options
@@ -237,8 +235,8 @@ function runInstaller(python, { wheel, target, output }) {
 				env: {
 					...process.env,
 					// How the installer is found at all: it is inside the wheel,
-					// which is not installed yet. Replaced, not prepended: this
-					// wheel is the only place the module should come from.
+					// which is not installed yet. Set here so this wheel is the
+					// only place the module comes from.
 					PYTHONPATH: wheel,
 					// Unbuffered, so pip's progress reaches the output channel
 					// while it is happening (stdout here is a pipe, not a tty).
@@ -272,8 +270,8 @@ function runInstaller(python, { wheel, target, output }) {
 			});
 		}
 
-		// ENOENT for a candidate that is not installed, which is the ordinary
-		// case for most of the list and not a failure.
+		// ENOENT for a candidate that is not installed, the ordinary case for
+		// most of the list.
 		child.on('error', () => finish({ code: null, spawned: false, output: text }));
 
 		child.on('exit', (code) => finish({ code, spawned: true, output: text }));
@@ -284,9 +282,9 @@ function runInstaller(python, { wheel, target, output }) {
  * Install the bundled wheel into a venv of the extension's own, and return the
  * interpreter to run the backend with.
  *
- * Safe to call when the backend is already installed: the Python side leaves an
- * existing venv alone, and callers check first anyway, so this is what closes
- * the window between that check and this call.
+ * Safe to call when the backend is already installed: the Python side leaves
+ * an existing venv alone, and this closes the window between a caller's check
+ * and this call.
  *
  * @param {object} options
  * @param {string} options.extensionPath the extension's own directory

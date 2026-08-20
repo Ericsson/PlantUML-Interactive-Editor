@@ -26,9 +26,8 @@
 
 The extension ships this package as a wheel inside its .vsix and installs it
 itself, so that installing the extension is the whole install. This module is
-that install, and it runs *out of the wheel rather than from an installed copy*
--- a wheel is a zip and Python imports straight out of one, so the extension
-spawns::
+that install, and it runs *out of the wheel*: a wheel is a zip and Python
+imports straight out of one, so the extension spawns::
 
     PYTHONPATH=<the bundled wheel> python3 -m plantuml_gui.install_venv \\
         --wheel <the same wheel> --target <the venv to create>
@@ -40,16 +39,15 @@ Who is responsible for what
 ---------------------------
 The division with plantuml-extension/src/backendInstall.js:
 
-*JavaScript discovers, this module judges.* The extension cannot run Python to
-find Python, so enumerating candidate interpreters -- ``python3``,
-``python3.13`` and so on -- is its job. It spawns each one against this module
-and reads the exit code. ``EXIT_UNSUITABLE_INTERPRETER`` means "not this one,
-try the next"; anything else non-zero is a real failure and stops the search,
-because a broken install must not be reported as "no Python found".
+*JavaScript discovers, this module judges.* Enumerating candidate
+interpreters -- ``python3``, ``python3.13`` and so on -- is the extension's
+job. It spawns each one against this module and reads the exit code.
+``EXIT_UNSUITABLE_INTERPRETER`` means "not this one, try the next"; any other
+non-zero exit is a real failure and stops the search, reported distinctly
+from "no Python found".
 
-That puts the version rule in one place, next to ``requires-python``, and means
-the check is made *by* the interpreter being judged rather than by parsing its
-``--version`` output.
+That puts the version rule in one place, next to ``requires-python``, checked
+*by* the interpreter being judged.
 
 Progress reporting, notifications and the Settings escape hatch belong to the
 extension. This module's whole interface is its arguments, its exit code, and
@@ -59,11 +57,12 @@ same way it does the sidecar's.
 Syntax floor
 ------------
 This runs on whichever interpreter the user happens to have, which may be older
-than the one the rest of this package requires. A SyntaxError would defeat the
-gate below -- Python compiles the whole module before running any of it, so the
-message explaining that 3.10 is needed would never print. So: no ``match``, no
-PEP 604 ``X | Y`` annotations, nothing else newer than 3.8, whatever the rest of
-the codebase is free to use. The floor is 3.8 because f-strings are used.
+than the one the rest of this package requires. Python compiles the whole
+module before running any of it, so the message explaining that 3.10 is needed
+must itself be valid on an older interpreter to ever print. So: no ``match``,
+no PEP 604 ``X | Y`` annotations, nothing else newer than 3.8, whatever the
+rest of the codebase is free to use. The floor is 3.8 because f-strings are
+used.
 
 Run directly with ``python -m plantuml_gui.install_venv --wheel W --target T``.
 """
@@ -133,8 +132,8 @@ def require_ensurepip() -> None:
 
 def create_venv(directory: str) -> None:
     """Build an empty venv, with pip, at `directory`."""
-    # Imported here, not at module scope, so a stdlib missing its venv module
-    # reports through InstallError like every other failure.
+    # Imported here so a stdlib missing its venv module reports through
+    # InstallError like every other failure.
     try:
         import venv
     except ImportError:
@@ -201,37 +200,35 @@ def claim(built: str, target: str) -> bool:
     The rename is what makes the install atomic, and both reasons matter:
 
     *A half-built venv is never visible.* The extension decides the backend is
-    installed by looking for the interpreter inside `target`. If the venv were
-    built there directly, an install interrupted between ``venv.create`` and
-    pip -- a cancelled window, a killed process, a full disk -- would leave that
-    interpreter present and importable but without the package, which the
-    extension would happily spawn and then report as "No module named
-    plantuml_gui" forever after. Building elsewhere and renaming means `target`
+    installed by looking for the interpreter inside `target`. Building
+    directly at `target` and only renaming a finished result means an install
+    interrupted between ``venv.create`` and pip -- a cancelled window, a
+    killed process, a full disk -- never leaves a `target` with that
+    interpreter present and importable but without the package. `target`
     either does not exist or is complete.
 
-    *Two windows racing cannot corrupt each other.* Each VS Code window is its
-    own extension host, so a shared in-process guard cannot help; both may find
-    the venv missing and both start building. They build in separate
-    pid-suffixed directories and then race to rename, which the filesystem
-    settles: the loser finds `target` already a directory, discards its own
-    work, and uses the winner's. That is safe precisely because of the previous
-    paragraph -- a `target` that exists is a finished venv, whoever made it.
+    *Two windows racing settle through the filesystem.* Each VS Code window is
+    its own extension host, so both may find the venv missing and both start
+    building. They build in separate pid-suffixed directories and then race to
+    rename: the loser finds `target` already a directory, discards its own
+    work, and uses the winner's. That is safe precisely because of the
+    previous paragraph -- a `target` that exists is a finished venv, whoever
+    made it.
 
-    Renaming a venv is sound for the two ways this one is ever used, which is
-    worth stating because the instinct is that it cannot be: ``pyvenv.cfg``
-    records the *base* interpreter's location, not the venv's own, and
-    ``sys.prefix`` is derived at run time from the path the interpreter was
-    invoked by. What a move does break is the absolute shebang written into
-    ``bin/pip`` and any other console script -- and neither this module nor the
-    extension ever runs one. Both go through the interpreter: ``python -m pip``
-    here, ``python -m plantuml_gui.serve`` there. This package installs no
-    console scripts of its own for anyone else to trip over either.
+    Renaming a venv works for the two ways this one is ever used:
+    ``pyvenv.cfg`` records the *base* interpreter's location, not the venv's
+    own, and ``sys.prefix`` is derived at run time from the path the
+    interpreter was invoked by. A move does break the absolute shebang written
+    into ``bin/pip`` and any other console script, so both this module and the
+    extension go through the interpreter instead: ``python -m pip`` here,
+    ``python -m plantuml_gui.serve`` there. This package installs no console
+    scripts of its own.
     """
     try:
         os.rename(built, target)
         return True
     except OSError:
-        # Not an error if somebody got there first; anything else is.
+        # Somebody else claimed target first; keep their result and drop ours.
         if os.path.isdir(target):
             shutil.rmtree(built, ignore_errors=True)
             return False
@@ -241,11 +238,11 @@ def claim(built: str, target: str) -> bool:
 def install(wheel: str, target: str) -> None:
     """Create the venv at `target` and install `wheel` into it.
 
-    Idempotent, and cheap when there is nothing to do: an existing `target` is
-    a finished install by the invariant claim() maintains, so it is left alone.
-    The extension checks the same thing before spawning this; repeating it here
-    closes the window between that check and this call, which belongs to
-    whatever the user's other editor windows are doing.
+    Idempotent: an existing `target` is a finished install by the invariant
+    claim() maintains, so it is left alone. Checking here, on top of the
+    extension's own check before spawning this, closes the window between
+    that check and this call, which belongs to whatever the user's other
+    editor windows are doing.
     """
     if os.path.isdir(target):
         print(f"already installed at {target}", file=sys.stderr, flush=True)
@@ -296,8 +293,9 @@ def parse_args(
 
 
 def main(argv: typing.Optional[typing.Sequence[str]] = None) -> int:
-    # Before the arguments are looked at: an unsuitable interpreter is the one
-    # failure the caller acts on rather than reports.
+    # Before the arguments are looked at: an unsuitable interpreter is a
+    # failure the caller acts on -- trying the next candidate -- not one that
+    # is reported to the user.
     if not interpreter_is_supported():
         running = f"{sys.version_info[0]}.{sys.version_info[1]}"
         wanted = f"{MIN_PYTHON[0]}.{MIN_PYTHON[1]}"
