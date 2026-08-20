@@ -419,7 +419,7 @@ suite('sidecar: startup failure messages', () => {
 	});
 
 	test('a missing package blames the interpreter that was named', () => {
-		// Only reachable through a configured interpreter now, the managed venv
+		// Only reachable through a configured interpreter, the managed venv
 		// having the package installed into it by construction. So the fix is
 		// that setting: point it somewhere else, or stop pointing it anywhere.
 		const message = describeStartFailure(

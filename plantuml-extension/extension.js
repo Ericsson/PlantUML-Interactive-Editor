@@ -425,7 +425,8 @@ async function showInstallError(err) {
  * The build-time pairing (scripts/check_app_versions.py) holds for the wheel
  * inside this vsix, so the backend the extension installs for itself always
  * matches. This catches one that came from somewhere else: an interpreter named
- * by the setting, or the venv the older instructions had the user build.
+ * by the setting or by PLANTUML_GUI_PYTHON, carrying whichever version of the
+ * package happens to be installed in it.
  *
  * A mismatch still runs -- the routes this extension calls have generally not
  * gone away across a minor version -- so this warns rather than blocking.
