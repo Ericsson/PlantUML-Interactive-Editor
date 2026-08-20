@@ -33,18 +33,6 @@ network access once.
 Check the internal setup guide for where to get the `.vsix`, or build it yourself (see
 "Development" below).
 
-To run the backend from a Python environment you manage instead, install the wheel into it
-and point `plantumlInteractive.pythonPath` at that interpreter; the setting takes precedence,
-so nothing is installed. Any interpreter will do so long as `import plantuml_gui` succeeds
-from it. The wheel is inside the `.vsix`, which is a zip:
-
-```
-unzip -j plantuml-editor-*.vsix 'extension/backend/*.whl' -d .
-```
-
-**PlantUML: Reinstall Backend** deletes the managed environment and builds it again, if one
-ends up in a state that no longer starts.
-
 ## Settings
 
 | Setting | Environment variable | What it is |

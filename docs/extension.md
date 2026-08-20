@@ -434,12 +434,11 @@ place. The version comes from the wheel's filename, so there is no second record
 installed, and an extension-only patch release — `0.31.1` against backend `0.31` — reuses
 the venv it already has.
 
-One consequence worth knowing:
+Each backend version therefore keeps its own environment, at roughly 50 MB apiece, mostly
+lxml. They stay where they are for the life of the extension, which is what lets a window
+still running an older sidecar carry on with it; removing the extension's global storage
+directory clears the lot.
 
-- **Old environments are not pruned.** They accumulate one per backend version at roughly
-  50 MB each, mostly lxml. Deleting `venv-0.30` while another window's sidecar is still
-  running out of it would break that window, and that hazard was judged worse than the
-  disk. Removing the extension's global storage directory clears them all.
 ### Atomicity
 
 `install_venv.py` builds into `<target>.tmp-<pid>` and renames the finished result into
@@ -987,4 +986,4 @@ vendor, then shims, then app, then boot. Every step of it is justified in that f
 | Nothing is interactive but the diagram renders | Likely a missing DOM id throwing during setup. Open the webview devtools: *Developer: Open Webview Developer Tools*. |
 | Python traceback | The `PlantUML Interactive` output channel, which receives the sidecar's stderr. |
 | Frontend change not visible | Reopen the panel; the page is only fetched on open. |
-| Global storage filling up | One `venv-<version>` per backend version installed, ~50 MB each, not pruned. See [Where it goes, and updates](#where-it-goes-and-updates). |
+| Global storage growing | One `venv-<version>` per backend version installed, ~50 MB each. See [Where it goes, and updates](#where-it-goes-and-updates). |
