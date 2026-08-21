@@ -554,3 +554,55 @@ suite('sidecar: telling a stop we asked for from a death', () => {
 		assert.strictEqual(sidecar.disposing, false);
 	});
 });
+
+suite('sidecar: waiting for the child to actually go', () => {
+	// What the reinstall needs on top of dispose(): kill() returns as soon as
+	// the signal is sent, and the venv about to be deleted is the directory the
+	// child's own interpreter is running out of. Windows refuses to unlink a
+	// running executable's image, so deleting straight after the kill fails
+	// there -- and the reinstall then installs over a venv that never went.
+	const liveChild = () => Object.assign(fakeChild(), { exitCode: null, signalCode: null });
+
+	test('resolves once the child has exited', async () => {
+		const child = liveChild();
+		const sidecar = new Sidecar(child, 1234, 'token');
+
+		const stopped = sidecar.stop(1000);
+		child.emit('exit', 0);
+
+		assert.strictEqual(await stopped, true);
+		assert.strictEqual(child.killed, true, 'the child was never killed');
+		assert.strictEqual(sidecar.disposing, true, 'the stop was not marked as ours');
+	});
+
+	test('does not report a child gone while it is still running', async () => {
+		const child = liveChild();
+		const sidecar = new Sidecar(child, 1234, 'token');
+		let settled = false;
+
+		sidecar.stop(1000).then(() => {
+			settled = true;
+		});
+		await new Promise((resolve) => setImmediate(resolve));
+
+		assert.strictEqual(settled, false, 'resolved before the child had exited');
+	});
+
+	test('gives up rather than waiting forever on a child that will not go', async () => {
+		// A child that ignores the signal must not hang the command in silence;
+		// the caller is told, and decides what to do about it.
+		const child = liveChild();
+		const sidecar = new Sidecar(child, 1234, 'token');
+
+		assert.strictEqual(await sidecar.stop(10), false);
+	});
+
+	test('an already-dead child needs no wait, and no second kill', async () => {
+		const child = Object.assign(fakeChild(), { exitCode: 0, signalCode: null });
+		const sidecar = new Sidecar(child, 1234, 'token');
+
+		assert.strictEqual(await sidecar.stop(10), true);
+		assert.strictEqual(child.killed, undefined, 'killed a child that had already exited');
+		assert.strictEqual(sidecar.disposing, true);
+	});
+});

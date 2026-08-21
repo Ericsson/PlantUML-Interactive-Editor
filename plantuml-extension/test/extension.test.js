@@ -258,6 +258,169 @@ suite('extension: which document the panel shows', () => {
 	});
 });
 
+suite('extension: reinstalling the backend', () => {
+	// The repair command for a venv that exists and does not work. Its two
+	// hazards are the same one seen twice: install_venv.py treats an existing
+	// target as a finished install, so anything that leaves the old directory
+	// standing turns "reinstalled" into a claim that is simply untrue.
+	const fs = require('fs');
+	const os = require('os');
+	const path = require('path');
+
+	/** @type {string} */
+	let temp;
+
+	setup(() => {
+		temp = fs.mkdtempSync(path.join(os.tmpdir(), 'plantuml-reinstall-'));
+	});
+
+	teardown(() => {
+		fs.rmSync(temp, { recursive: true, force: true });
+	});
+
+	/** @returns {string} a venv directory, with something in it */
+	const venvWithContents = () => {
+		const dir = path.join(temp, 'venv-0.31');
+		fs.mkdirSync(path.join(dir, 'bin'), { recursive: true });
+		fs.writeFileSync(path.join(dir, 'bin', 'python'), '');
+		return dir;
+	};
+
+	test('removes the venv, contents and all', async () => {
+		const venv = venvWithContents();
+
+		await extension.removeManagedVenv(venv);
+
+		assert.ok(!fs.existsSync(venv), 'the venv is still there');
+	});
+
+	test('a venv that was never there is not a failure', async () => {
+		// The first-run case, and the state the caller wanted anyway.
+		await extension.removeManagedVenv(path.join(temp, 'venv-0.31'));
+	});
+
+	test('retries a delete that fails while the interpreter is still going', async () => {
+		// Why the retry: Windows will not unlink a running executable's image,
+		// and the child's exit event is not a promise that its handles have
+		// been released. Locking a directory is not something a test can do on
+		// every platform this runs on, hence the injected delete.
+		const venv = venvWithContents();
+		let attempts = 0;
+
+		await extension.removeManagedVenv(venv, {
+			remove: async (uri) => {
+				attempts += 1;
+				if (attempts < 3) {
+					throw Object.assign(new Error('EBUSY: resource busy'), { code: 'EBUSY' });
+				}
+				fs.rmSync(uri.fsPath, { recursive: true });
+			}
+		});
+
+		assert.strictEqual(attempts, 3, 'gave up on the first failure');
+		assert.ok(!fs.existsSync(venv));
+	});
+
+	test('reports a venv it could not remove, rather than installing over it', async () => {
+		// The regression that matters: swallowing this failure meant an install
+		// that did nothing -- install_venv.py leaves an existing target alone --
+		// followed by "The PlantUML backend was reinstalled".
+		const venv = venvWithContents();
+
+		await assert.rejects(
+			() =>
+				extension.removeManagedVenv(venv, {
+					timeoutMs: 50,
+					remove: async () => {
+						throw new Error('EBUSY: resource busy');
+					}
+				}),
+			(err) => {
+				assert.ok(err.message.includes(venv), err.message);
+				assert.ok(err.message.includes('EBUSY'), err.message);
+				return true;
+			}
+		);
+
+		assert.ok(fs.existsSync(venv), 'the venv should have been left alone');
+	});
+
+	test('a delete that reports success but leaves the venv is not believed', async () => {
+		// Existence is what the removal waits on, not the delete's own answer:
+		// a partial removal that resolves would otherwise pass for a clean one.
+		const venv = venvWithContents();
+
+		await assert.rejects(
+			() => extension.removeManagedVenv(venv, { timeoutMs: 50, remove: async () => {} }),
+			(err) => {
+				assert.ok(err.message.includes(venv), err.message);
+				return true;
+			}
+		);
+	});
+
+	test('refuses to run while an install is already in flight', () => {
+		// installBackendOnce latches the install behind a promise, so awaiting
+		// it after the delete would join the install that started *before* it
+		// -- one that may already have decided the venv was fine and returned.
+		// The reinstall would then report success having deleted the backend
+		// and installed nothing.
+		//
+		// Source-checked, as with the other host-only paths in this file:
+		// reinstallBackend needs a bundled wheel, a global storage directory
+		// and a user answering notifications to exercise for real.
+		const body = reinstallSource();
+
+		assert.ok(/if \(backendInstalling\)/.test(body), 'an install in flight is not checked');
+		assert.ok(
+			body.indexOf('backendInstalling') < body.indexOf('removeManagedVenv'),
+			'the check comes after the venv has already been deleted'
+		);
+	});
+
+	test('waits for the backend to stop before deleting its directory', () => {
+		// Not disposeSidecar(): that returns as soon as the signal is sent, and
+		// reaches nothing at all while a start is in flight, since `sidecar` is
+		// assigned only once startSidecar resolves. The child would then arrive
+		// running out of a directory that had since been deleted, with no
+		// handle left anywhere to stop it.
+		const body = reinstallSource();
+
+		assert.ok(
+			body.includes('await stopSidecarForReinstall()'),
+			'the reinstall no longer waits for the backend to stop'
+		);
+		assert.ok(
+			body.indexOf('stopSidecarForReinstall') < body.indexOf('removeManagedVenv'),
+			'the venv is deleted before the backend has been stopped'
+		);
+
+		const [, source] = readSources().find(([relative]) => relative === 'extension.js');
+		const stop = source.slice(source.indexOf('async function stopSidecarForReinstall'));
+
+		assert.ok(
+			/await sidecarStarting/.test(stop),
+			'a start in flight is neither awaited nor refused'
+		);
+		assert.ok(
+			/\.stop\(SIDECAR_STOP_TIMEOUT_MS\)/.test(stop),
+			'the wait for the child to exit is unbounded'
+		);
+	});
+
+	/** @returns {string} the body of reinstallBackend, up to its closing brace */
+	function reinstallSource() {
+		const [, source] = readSources().find(([relative]) => relative === 'extension.js');
+		const start = source.indexOf('async function reinstallBackend(');
+		assert.notStrictEqual(start, -1, 'reinstallBackend is gone');
+
+		const end = source.indexOf('\n}\n', start);
+		assert.notStrictEqual(end, -1, 'could not find the end of reinstallBackend');
+
+		return source.slice(start, end);
+	}
+});
+
 /**
  * @returns {string[]} the contents of the webview-side shims, which live in
  *   the Python package rather than here; see the header of fetchShim.js.

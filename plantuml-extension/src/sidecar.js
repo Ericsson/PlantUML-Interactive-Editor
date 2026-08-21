@@ -136,6 +136,52 @@ class Sidecar {
 			this.process.kill();
 		}
 	}
+
+	/**
+	 * Stop the child and wait for it to actually be gone.
+	 *
+	 * dispose() only asks: kill() returns as soon as the signal is sent, and
+	 * the process is still there for a moment after that. A caller that needs
+	 * the child *finished* has to wait for its exit, which is what this adds.
+	 * The one that does is the reinstall, which deletes the venv the child's
+	 * interpreter is running out of -- and Windows will not unlink a running
+	 * executable's image.
+	 *
+	 * Bounded, because a child that never answers the signal must not hang the
+	 * caller in silence. The return value says which of the two happened,
+	 * leaving what an unstoppable backend means to the caller.
+	 *
+	 * @param {number} timeoutMs how long to wait for the exit
+	 * @returns {Promise<boolean>} whether the child had exited by then
+	 */
+	async stop(timeoutMs) {
+		if (!this.isRunning) {
+			// Already gone. Still marked, so an exit event still in flight is
+			// read as the stop it is, the same as for a child killed here.
+			this.disposing = true;
+			return true;
+		}
+
+		// Registered before the kill, so a child that goes away at once is not
+		// missed.
+		const exited = new Promise((resolve) => {
+			this.process.once('exit', () => resolve(true));
+		});
+
+		/** @type {ReturnType<typeof setTimeout> | undefined} */
+		let timer;
+		const timedOut = new Promise((resolve) => {
+			timer = setTimeout(() => resolve(false), timeoutMs);
+		});
+
+		this.dispose();
+
+		try {
+			return await Promise.race([exited, timedOut]);
+		} finally {
+			clearTimeout(timer);
+		}
+	}
 }
 
 /**

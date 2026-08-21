@@ -35,6 +35,7 @@
 // That backend is installed on first use, out of a wheel inside the vsix, into
 // a virtual environment under this extension's global storage; see
 // src/backendInstall.js.
+const fs = require('fs');
 const path = require('path');
 const vscode = require('vscode');
 const settings = require('./src/settings');
@@ -61,6 +62,18 @@ const LIVE_UPDATE_DEBOUNCE_MS = 300;
 
 /** Generous because rendering shells out to java, once per request. */
 const RENDER_PNG_TIMEOUT_MS = 60000;
+
+/**
+ * How long to wait for the backend to actually exit when its directory is
+ * about to be taken away from underneath it. See stopSidecarForReinstall.
+ */
+const SIDECAR_STOP_TIMEOUT_MS = 5000;
+
+/** How long to keep trying to remove the managed venv before giving up. */
+const VENV_DELETE_TIMEOUT_MS = 5000;
+
+/** How long to wait between those attempts. */
+const VENV_DELETE_RETRY_MS = 200;
 
 /** Label of the action offered on errors the user fixes in Settings. */
 const OPEN_SETTINGS = 'Open Settings';
@@ -226,9 +239,28 @@ function installBackendOnce(context) {
  * half-removed package. The running backend is stopped first, because it is the
  * process living in the directory about to be deleted.
  *
+ * Everything unusual here comes from install_venv.py leaving an existing target
+ * alone: any directory that survives means an install that does nothing, so a
+ * step this cannot carry out must stop it rather than be worked around.
+ *
  * @param {vscode.ExtensionContext} context
  */
 async function reinstallBackend(context) {
+	// Refused rather than queued behind an install already in flight, because
+	// joining that one would be worse than doing nothing: installBackendOnce
+	// hands back the promise of an install that started *before* the delete
+	// below, and install_venv.py treats an existing target as a finished
+	// install and returns success. So the await could resolve on a decision
+	// made about the directory this is about to remove, and this would report a
+	// reinstall while leaving no backend installed at all.
+	if (backendInstalling) {
+		vscode.window.showInformationMessage(
+			`${REINSTALL_TITLE} cannot run while the backend is being installed. ` +
+				'Wait for that to finish, then run it again.'
+		);
+		return;
+	}
+
 	let wheel;
 
 	try {
@@ -244,18 +276,22 @@ async function reinstallBackend(context) {
 
 	const venv = managedVenv(context.globalStorageUri.fsPath, wheel.version);
 
-	disposeSidecar();
+	await stopSidecarForReinstall();
 
 	try {
-		await vscode.workspace.fs.delete(vscode.Uri.file(venv.dir), {
-			recursive: true,
-			useTrash: false
-		});
-	} catch {
-		// Nothing there to delete is the normal case for a first run, and any
-		// other reason it cannot go is reported by the install that follows.
+		await removeManagedVenv(venv.dir);
+	} catch (err) {
+		outputChannel?.appendLine(`[backend] ${err.message}`);
+		vscode.window.showErrorMessage(
+			`${REINSTALL_TITLE} could not remove ${err.message}. Close any other ` +
+				'window using the backend, or restart VS Code, and try again.'
+		);
+		return;
 	}
 
+	// An install started elsewhere in the meantime is a different install from
+	// the one refused above: the venv is gone, so it is building the same fresh
+	// directory this wants, and joining it is the right answer.
 	try {
 		await installBackendOnce(context);
 	} catch (err) {
@@ -266,6 +302,106 @@ async function reinstallBackend(context) {
 	vscode.window.showInformationMessage(
 		`The PlantUML backend was reinstalled. Run "${OPEN_DIAGRAM_TITLE}" to use it.`
 	);
+}
+
+/**
+ * Stop the backend, and wait for it to be gone, before its directory goes.
+ *
+ * A start in flight is awaited rather than refused: `sidecar` is assigned only
+ * once startSidecar resolves, so disposing during a start reaches nothing and
+ * the child arrives moments later -- running out of a directory that has since
+ * been deleted, serving open panels, with nothing holding a handle on it to
+ * stop it. That wait is bounded on the other side by STARTUP_TIMEOUT_MS.
+ *
+ * @returns {Promise<boolean>} whether no backend is running any more
+ */
+async function stopSidecarForReinstall() {
+	if (sidecarStarting) {
+		try {
+			await sidecarStarting;
+		} catch {
+			// startSidecar reports its own failures, and a start that failed
+			// handed out no child that would need stopping.
+		}
+	}
+
+	const running = sidecar;
+	// Dropped here rather than left to stop(), so that a child which outlives
+	// the wait below is at least no longer a backend anything can be given.
+	sidecar = undefined;
+
+	if (!running) {
+		return true;
+	}
+
+	const stopped = await running.stop(SIDECAR_STOP_TIMEOUT_MS);
+
+	if (!stopped) {
+		outputChannel?.appendLine(
+			`[backend] did not stop within ${SIDECAR_STOP_TIMEOUT_MS}ms; ` +
+				'trying to remove its virtual environment anyway'
+		);
+	}
+
+	return stopped;
+}
+
+/**
+ * Remove the managed venv, or say why it is still there.
+ *
+ * Retried, because the interpreter just killed can hold the directory for a
+ * moment longer: Windows will not unlink a running executable's image, and the
+ * child's exit event is not a promise that its handles have been released.
+ *
+ * Reported rather than swallowed, because install_venv.py leaves an existing
+ * target alone. A delete that quietly failed would be followed by an install
+ * that does nothing, and by a notification saying the backend was reinstalled
+ * -- the one lie a repair command cannot afford, since the user would have no
+ * reason to look any further.
+ *
+ * @param {string} dir the venv directory
+ * @param {object} [options] seams for the tests, which have no way to lock a
+ *   directory on every platform this runs on
+ * @param {(uri: vscode.Uri) => Thenable<void>} [options.remove] the delete to call
+ * @param {number} [options.timeoutMs] how long to keep trying it
+ * @throws {Error} when the directory is still there once the time is up; the
+ *   message names the directory and is written for a notification
+ */
+async function removeManagedVenv(dir, options = {}) {
+	const { remove = deleteRecursively, timeoutMs = VENV_DELETE_TIMEOUT_MS } = options;
+	const deadline = Date.now() + timeoutMs;
+	let lastError;
+
+	// Nothing there is the normal case for a first run, and is also the goal,
+	// so existence -- not the delete's own answer -- is what this waits on.
+	while (fs.existsSync(dir)) {
+		try {
+			await remove(vscode.Uri.file(dir));
+		} catch (err) {
+			lastError = err;
+		}
+
+		if (!fs.existsSync(dir)) {
+			return;
+		}
+
+		if (Date.now() >= deadline) {
+			throw new Error(
+				`the virtual environment at "${dir}": ` +
+					`${lastError ? lastError.message : 'it is still there'}`
+			);
+		}
+
+		await new Promise((resolve) => setTimeout(resolve, VENV_DELETE_RETRY_MS));
+	}
+}
+
+/**
+ * @param {vscode.Uri} uri
+ * @returns {Thenable<void>}
+ */
+function deleteRecursively(uri) {
+	return vscode.workspace.fs.delete(uri, { recursive: true, useTrash: false });
 }
 
 /**
@@ -878,5 +1014,8 @@ module.exports = {
 	panelTitle,
 	// Exported for the tests: which interpreter a window ends up using, and
 	// whether it had to install one to get there.
-	ensureBackendPython
+	ensureBackendPython,
+	// Exported for the tests: the reinstall's one step whose failure must not
+	// pass for success, since an install over a surviving venv does nothing.
+	removeManagedVenv
 };

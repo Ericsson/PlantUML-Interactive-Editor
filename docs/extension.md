@@ -500,7 +500,10 @@ progress notification rather than two.
 **PlantUML: Reinstall Backend** deletes the virtual environment and builds it again, for the
 state nothing else recovers from: a venv that exists — and is therefore used — but does not
 work. It stops the sidecar first, that being the process living in the directory about to be
-deleted.
+deleted. Because `install_venv.py` leaves an existing target alone, a surviving directory
+means an install that does nothing, so the command refuses to run while an install is in
+flight, waits for the sidecar to actually exit (awaiting a start still in flight, which owns
+no handle to stop yet), and reports a venv it could not remove instead of installing over it.
 
 ## Version compatibility
 
