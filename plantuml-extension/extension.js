@@ -31,16 +31,30 @@
 // webview calls directly; this file owns the document and is its only writer.
 // The webview's page is rendered by that same backend and fetched by
 // src/webviewPage.js.
+//
+// That backend is installed on first use, out of a wheel inside the vsix, into
+// a virtual environment under this extension's global storage; see
+// src/backendInstall.js.
+const fs = require('fs');
 const path = require('path');
 const vscode = require('vscode');
 const settings = require('./src/settings');
 const {
 	startSidecar,
+	resolvePythonPath,
 	SidecarStartError,
 	PythonConfigError,
+	BackendMissingError,
 	EXPECTED_BACKEND_VERSION,
 	TOKEN_HEADER
 } = require('./src/sidecar');
+const {
+	bundledWheel,
+	managedVenv,
+	installBackend,
+	BundledWheelError,
+	BackendInstallError
+} = require('./src/backendInstall');
 const { resolvePlantUmlJarPath, PlantUmlConfigError } = require('./src/plantumlJar');
 const { fetchWebviewPage, vendorRoot, WebviewPageError } = require('./src/webviewPage');
 
@@ -48,6 +62,18 @@ const LIVE_UPDATE_DEBOUNCE_MS = 300;
 
 /** Generous because rendering shells out to java, once per request. */
 const RENDER_PNG_TIMEOUT_MS = 60000;
+
+/**
+ * How long to wait for the backend to actually exit when its directory is
+ * about to be taken away from underneath it. See stopSidecarForReinstall.
+ */
+const SIDECAR_STOP_TIMEOUT_MS = 5000;
+
+/** How long to keep trying to remove the managed venv before giving up. */
+const VENV_DELETE_TIMEOUT_MS = 5000;
+
+/** How long to wait between those attempts. */
+const VENV_DELETE_RETRY_MS = 200;
 
 /** Label of the action offered on errors the user fixes in Settings. */
 const OPEN_SETTINGS = 'Open Settings';
@@ -57,6 +83,9 @@ const SHOW_OUTPUT = 'Show Output';
 
 /** This command's title in the palette, as contributed in package.json. */
 const OPEN_DIAGRAM_TITLE = 'PlantUML: Open Interactive Diagram';
+
+/** The reinstall command's title, as contributed in package.json. */
+const REINSTALL_TITLE = 'PlantUML: Reinstall Backend';
 
 /** The file extensions the diagram panel follows; see isPlantUmlDocument. */
 const PLANTUML_EXTENSIONS = new Set(['.puml', '.plantuml', '.pu', '.iuml', '.wsd', '.uml']);
@@ -78,6 +107,8 @@ const hoverDecoration = vscode.window.createTextEditorDecorationType({
 let sidecar;
 /** @type {Promise<import('./src/sidecar').Sidecar> | undefined} */
 let sidecarStarting;
+/** @type {Promise<string> | undefined} */
+let backendInstalling;
 /** @type {vscode.OutputChannel | undefined} */
 let outputChannel;
 /**
@@ -111,6 +142,266 @@ function activate(context) {
 	);
 
 	context.subscriptions.push(disposable);
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand(
+			'plantuml-interactive-editor.reinstallBackend',
+			() => reinstallBackend(context)
+		)
+	);
+}
+
+/**
+ * The interpreter the backend will be run with, installed if it is not there.
+ *
+ * @param {vscode.ExtensionContext} context
+ * @returns {Promise<string | undefined>} the managed venv's interpreter, for
+ *   startSidecar to resolve against, or undefined when this build ships no
+ *   wheel to install
+ */
+async function ensureBackendPython(context) {
+	const managedPython = managedPythonPath(context);
+
+	try {
+		await resolvePythonPath({ managedPython });
+	} catch (err) {
+		if (!(err instanceof BackendMissingError) || !managedPython) {
+			throw err;
+		}
+		await installBackendOnce(context);
+	}
+
+	return managedPython;
+}
+
+/**
+ * Where this build's backend would live, if it ships one.
+ *
+ * Undefined in a development checkout, where `backend/` has never been built:
+ * resolution then falls back to the setting or PLANTUML_GUI_PYTHON, which is
+ * what .vscode/launch.json sets for the Extension Development Host.
+ *
+ * @param {vscode.ExtensionContext} context
+ * @returns {string | undefined}
+ */
+function managedPythonPath(context) {
+	try {
+		const wheel = bundledWheel(context.extensionPath);
+		return managedVenv(context.globalStorageUri.fsPath, wheel.version).python;
+	} catch (err) {
+		if (err instanceof BundledWheelError) {
+			outputChannel?.appendLine(`[backend] no bundled wheel: ${err.message}`);
+			return undefined;
+		}
+		throw err;
+	}
+}
+
+/**
+ * Install the managed backend, showing progress, once per window.
+ *
+ * Concurrent callers await the same install, as with ensureSidecar: two
+ * commands run in quick succession would otherwise put two progress
+ * notifications on screen for the one directory. Windows racing each other is
+ * settled by the rename in claim(), which is the only place that can settle it.
+ *
+ * @param {vscode.ExtensionContext} context
+ * @returns {Promise<string>} the installed interpreter
+ */
+function installBackendOnce(context) {
+	if (!backendInstalling) {
+		backendInstalling = vscode.window
+			.withProgress(
+				{
+					location: vscode.ProgressLocation.Notification,
+					title: 'Setting up the PlantUML backend…'
+				},
+				() =>
+					installBackend({
+						extensionPath: context.extensionPath,
+						globalStoragePath: context.globalStorageUri.fsPath,
+						output: outputChannel
+					})
+			)
+			.finally(() => {
+				backendInstalling = undefined;
+			});
+	}
+
+	return backendInstalling;
+}
+
+/**
+ * Delete the managed backend and install it again.
+ *
+ * The recovery for a venv that is present but broken -- a disk that filled
+ * during the first install, an interpreter upgraded out from under it, a
+ * half-removed package. The running backend is stopped first, because it is the
+ * process living in the directory about to be deleted.
+ *
+ * Everything unusual here comes from install() leaving an existing target
+ * alone: any directory that survives means an install that does nothing, so a
+ * step this cannot carry out must stop it rather than be worked around.
+ *
+ * @param {vscode.ExtensionContext} context
+ */
+async function reinstallBackend(context) {
+	// Refused rather than queued behind an install already in flight, because
+	// joining that one would be worse than doing nothing: installBackendOnce
+	// hands back the promise of an install that started *before* the delete
+	// below, and install() treats an existing target as a finished
+	// install and returns success. So the await could resolve on a decision
+	// made about the directory this is about to remove, and this would report a
+	// reinstall while leaving no backend installed at all.
+	if (backendInstalling) {
+		vscode.window.showInformationMessage(
+			`${REINSTALL_TITLE} cannot run while the backend is being installed. ` +
+				'Wait for that to finish, then run it again.'
+		);
+		return;
+	}
+
+	let wheel;
+
+	try {
+		wheel = bundledWheel(context.extensionPath);
+	} catch (err) {
+		vscode.window.showErrorMessage(
+			err instanceof BundledWheelError
+				? `${REINSTALL_TITLE} is not available: ${err.message}`
+				: `Unexpected error finding the bundled backend: ${err.message}`
+		);
+		return;
+	}
+
+	const venv = managedVenv(context.globalStorageUri.fsPath, wheel.version);
+
+	await stopSidecarForReinstall();
+
+	try {
+		await removeManagedVenv(venv.dir);
+	} catch (err) {
+		outputChannel?.appendLine(`[backend] ${err.message}`);
+		vscode.window.showErrorMessage(
+			`${REINSTALL_TITLE} could not remove ${err.message}. Close any other ` +
+				'window using the backend, or restart VS Code, and try again.'
+		);
+		return;
+	}
+
+	// An install started elsewhere in the meantime is a different install from
+	// the one refused above: the venv is gone, so it is building the same fresh
+	// directory this wants, and joining it is the right answer.
+	try {
+		await installBackendOnce(context);
+	} catch (err) {
+		await showInstallError(err);
+		return;
+	}
+
+	vscode.window.showInformationMessage(
+		`The PlantUML backend was reinstalled. Run "${OPEN_DIAGRAM_TITLE}" to use it.`
+	);
+}
+
+/**
+ * Stop the backend, and wait for it to be gone, before its directory goes.
+ *
+ * A start in flight is awaited rather than refused: `sidecar` is assigned only
+ * once startSidecar resolves, so disposing during a start reaches nothing and
+ * the child arrives moments later -- running out of a directory that has since
+ * been deleted, serving open panels, with nothing holding a handle on it to
+ * stop it. That wait is bounded on the other side by STARTUP_TIMEOUT_MS.
+ *
+ * @returns {Promise<boolean>} whether no backend is running any more
+ */
+async function stopSidecarForReinstall() {
+	if (sidecarStarting) {
+		try {
+			await sidecarStarting;
+		} catch {
+			// startSidecar reports its own failures, and a start that failed
+			// handed out no child that would need stopping.
+		}
+	}
+
+	const running = sidecar;
+	// Dropped here rather than left to stop(), so that a child which outlives
+	// the wait below is at least no longer a backend anything can be given.
+	sidecar = undefined;
+
+	if (!running) {
+		return true;
+	}
+
+	const stopped = await running.stop(SIDECAR_STOP_TIMEOUT_MS);
+
+	if (!stopped) {
+		outputChannel?.appendLine(
+			`[backend] did not stop within ${SIDECAR_STOP_TIMEOUT_MS}ms; ` +
+				'trying to remove its virtual environment anyway'
+		);
+	}
+
+	return stopped;
+}
+
+/**
+ * Remove the managed venv, or say why it is still there.
+ *
+ * Retried, because the interpreter just killed can hold the directory for a
+ * moment longer: Windows will not unlink a running executable's image, and the
+ * child's exit event is not a promise that its handles have been released.
+ *
+ * Reported rather than swallowed, because install() leaves an existing
+ * target alone. A delete that quietly failed would be followed by an install
+ * that does nothing, and by a notification saying the backend was reinstalled
+ * -- the one lie a repair command cannot afford, since the user would have no
+ * reason to look any further.
+ *
+ * @param {string} dir the venv directory
+ * @param {object} [options] seams for the tests, which have no way to lock a
+ *   directory on every platform this runs on
+ * @param {(uri: vscode.Uri) => Thenable<void>} [options.remove] the delete to call
+ * @param {number} [options.timeoutMs] how long to keep trying it
+ * @throws {Error} when the directory is still there once the time is up; the
+ *   message names the directory and is written for a notification
+ */
+async function removeManagedVenv(dir, options = {}) {
+	const { remove = deleteRecursively, timeoutMs = VENV_DELETE_TIMEOUT_MS } = options;
+	const deadline = Date.now() + timeoutMs;
+	let lastError;
+
+	// Nothing there is the normal case for a first run, and is also the goal,
+	// so existence -- not the delete's own answer -- is what this waits on.
+	while (fs.existsSync(dir)) {
+		try {
+			await remove(vscode.Uri.file(dir));
+		} catch (err) {
+			lastError = err;
+		}
+
+		if (!fs.existsSync(dir)) {
+			return;
+		}
+
+		if (Date.now() >= deadline) {
+			throw new Error(
+				`the virtual environment at "${dir}": ` +
+					`${lastError ? lastError.message : 'it is still there'}`
+			);
+		}
+
+		await new Promise((resolve) => setTimeout(resolve, VENV_DELETE_RETRY_MS));
+	}
+}
+
+/**
+ * @param {vscode.Uri} uri
+ * @returns {Thenable<void>}
+ */
+function deleteRecursively(uri) {
+	return vscode.workspace.fs.delete(uri, { recursive: true, useTrash: false });
 }
 
 /**
@@ -119,15 +410,17 @@ function activate(context) {
  * two servers.
  *
  * @param {string} jarPath validated by the caller, passed to the child's env
+ * @param {string | undefined} managedPython the interpreter ensureBackendPython
+ *   made sure of, offered to resolvePythonPath as one of its sources
  * @returns {Promise<import('./src/sidecar').Sidecar>}
  */
-function ensureSidecar(jarPath) {
+function ensureSidecar(jarPath, managedPython) {
 	if (sidecar && sidecar.isRunning) {
 		return Promise.resolve(sidecar);
 	}
 
 	if (!sidecarStarting) {
-		sidecarStarting = startSidecar({ jarPath, output: outputChannel })
+		sidecarStarting = startSidecar({ jarPath, managedPython, output: outputChannel })
 			.then((started) => {
 				warnOnBackendVersionMismatch(started);
 				sidecar = started;
@@ -244,18 +537,35 @@ async function showConfigError(message) {
 }
 
 /**
+ * Report a failed install, with the log that says what pip made of it.
+ *
+ * @param {Error} err
+ */
+async function showInstallError(err) {
+	const choice = await vscode.window.showErrorMessage(
+		err instanceof BackendInstallError || err instanceof BundledWheelError
+			? err.message
+			: `Unexpected error installing the PlantUML backend: ${err.message}`,
+		SHOW_OUTPUT
+	);
+
+	if (choice === SHOW_OUTPUT) {
+		outputChannel?.show();
+	}
+}
+
+/**
  * Warn, once per sidecar start, when the running backend is not the version
  * this extension was built against.
  *
- * The build-time pairing (scripts/check_app_versions.py) only holds for an
- * install built from one commit; it says nothing about a venv left on an older
- * release than the .vsix now talking to it. A mismatch still runs -- the routes
- * this extension calls have generally not gone away across a minor version --
- * so this warns rather than blocking.
+ * The build-time pairing (scripts/check_app_versions.py) holds for the wheel
+ * inside this vsix, so the backend the extension installs for itself always
+ * matches. This catches one that came from somewhere else: an interpreter named
+ * by the setting or by PLANTUML_GUI_PYTHON, carrying whichever version of the
+ * package happens to be installed in it.
  *
- * The message names both versions but no fix: either side can be the stale one,
- * and the wheel the user would reinstall from may no longer be on the machine.
- * Reinstalling both from one release is the whole remedy, in either direction.
+ * A mismatch still runs -- the routes this extension calls have generally not
+ * gone away across a minor version -- so this warns rather than blocking.
  *
  * @param {import('./src/sidecar').Sidecar} activeSidecar
  */
@@ -268,8 +578,9 @@ function warnOnBackendVersionMismatch(activeSidecar) {
 
 	vscode.window.showWarningMessage(
 		`PlantUML backend ${backendVersion ?? 'of unknown version'} does not match ` +
-			`this extension (expects ${EXPECTED_BACKEND_VERSION}). Install the wheel ` +
-			'and the .vsix from the same release.'
+			`this extension (expects ${EXPECTED_BACKEND_VERSION}). It is not the one ` +
+			'this extension installs: update the interpreter it came from, or clear ' +
+			`"${settings.SECTION}.pythonPath" to use the bundled backend.`
 	);
 }
 
@@ -315,13 +626,16 @@ async function openDiagramPanel(context) {
 
 	let active;
 	try {
-		active = await ensureSidecar(jarPath);
+		const managedPython = await ensureBackendPython(context);
+		active = await ensureSidecar(jarPath, managedPython);
 	} catch (err) {
 		// A generic SidecarStartError is a backend that failed to boot -- a
 		// missing package, a traceback, a port that never answered -- and
 		// describeStartFailure has already said what to do about it, which is
 		// not to visit Settings.
-		if (err instanceof PythonConfigError) {
+		if (err instanceof BackendInstallError || err instanceof BundledWheelError) {
+			await showInstallError(err);
+		} else if (err instanceof PythonConfigError) {
 			await showConfigError(err.message);
 		} else {
 			vscode.window.showErrorMessage(
@@ -697,5 +1011,11 @@ module.exports = {
 	// The panel's targeting rules, exported for the tests: which files it
 	// follows and what it calls itself once it has.
 	isPlantUmlDocument,
-	panelTitle
+	panelTitle,
+	// Exported for the tests: which interpreter a window ends up using, and
+	// whether it had to install one to get there.
+	ensureBackendPython,
+	// Exported for the tests: the reinstall's one step whose failure must not
+	// pass for success, since an install over a surviving venv does nothing.
+	removeManagedVenv
 };
