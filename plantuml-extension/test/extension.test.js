@@ -125,6 +125,137 @@ suite('extension: message protocol', () => {
 			'posted by the webview, not handled by the host'
 		);
 	});
+
+	test('reports a backend that stops on its own', () => {
+		// Regression: the exit handler only dropped the sidecar handle, so
+		// killing the Python process left no trace anywhere -- the open panel
+		// kept accepting gestures, the output channel simply stopped growing,
+		// and the user had nothing to go on.
+		//
+		// Source-checked because the host end needs a running sidecar, a panel
+		// and a real webview to exercise. What reportBackendExit then does with
+		// the exit is covered for real in sidecar.test.js, through dispose() and
+		// an emitted exit event.
+		const [, source] = readSources().find(([relative]) => relative === 'extension.js');
+
+		const exitIndex = source.indexOf("process.on('exit'");
+		assert.notStrictEqual(exitIndex, -1, 'nothing listens for the backend exiting');
+		assert.notStrictEqual(
+			source.indexOf('reportBackendExit', exitIndex),
+			-1,
+			'the backend can exit without anything being reported'
+		);
+
+		assert.ok(
+			readWebviewShims().some((shim) => shim.includes('backendUnreachable')),
+			'the webview no longer reports requests that did not reach the backend'
+		);
+	});
+
+	test('sends the first document only once the webview says it is ready', () => {
+		// Regression: the initial documentChanged was posted immediately after
+		// panel.webview.html was set, before the page had registered its
+		// `message` listener. A message posted then is dropped in silence, so
+		// the panel opened with a toolbar and no diagram, and stayed that way
+		// until the next document change happened to post again.
+		//
+		// Checked in the source because the host end of this is unreachable
+		// from a test: it needs a running sidecar, a panel and a real webview.
+		const [, source] = readSources().find(([relative]) => relative === 'extension.js');
+
+		const listenerIndex = source.indexOf('panel.webview.onDidReceiveMessage');
+		assert.notStrictEqual(listenerIndex, -1, 'the webview message listener is gone');
+
+		assert.strictEqual(
+			source.slice(0, listenerIndex).indexOf('postDocument()'),
+			-1,
+			'the document is posted before the webview can listen for it'
+		);
+
+		const readyIndex = source.indexOf("message.type === 'ready'");
+		assert.notStrictEqual(readyIndex, -1, 'the host no longer handles ready');
+		assert.notStrictEqual(
+			source.indexOf('postDocument()', readyIndex),
+			-1,
+			'nothing sends the first document once the webview is ready'
+		);
+	});
+});
+
+suite('extension: which document the panel shows', () => {
+	// The panel follows the active editor, so these decide what it switches to
+	// and what it leaves it on. A document is stood in for by the fields the
+	// rules read; getText ignores the range it is given, the real one clamping
+	// it to the document.
+	const doc = (filePath, { languageId = 'plaintext', text = '' } = {}) => ({
+		languageId,
+		uri: vscode.Uri.file(filePath),
+		fileName: filePath,
+		getText: () => text
+	});
+
+	const DIAGRAM = '@startuml\nBob -> Alice: hi\n@enduml\n';
+
+	test('follows the PlantUML file extensions', () => {
+		// Taken at their word: an empty one is a diagram being started.
+		for (const name of ['a.puml', 'a.plantuml', 'a.pu', 'a.iuml', 'a.wsd', 'a.uml']) {
+			assert.ok(
+				extension.isPlantUmlDocument(doc(`/w/${name}`)),
+				`${name} is not followed`
+			);
+		}
+	});
+
+	test('follows an extension whatever its case', () => {
+		// The extensions come from the filesystem, which on Windows and macOS
+		// preserves whatever the author typed.
+		assert.ok(extension.isPlantUmlDocument(doc('/w/A.PUML')));
+	});
+
+	test('follows a document the editor calls plantuml', () => {
+		// VS Code registers no language for PlantUML, so the id depends on
+		// which other extension the user has; when one does set it, honour it
+		// even for a name this would not otherwise recognise.
+		assert.ok(extension.isPlantUmlDocument(doc('/w/diagram.dat', 'plantuml')));
+	});
+
+	test('follows a plain-text file that opens a diagram', () => {
+		// Diagrams kept in .txt, and any other extension VS Code hands to
+		// plaintext, are recognised by their content.
+		assert.ok(extension.isPlantUmlDocument(doc('/w/notes.txt', { text: DIAGRAM })));
+		assert.ok(
+			extension.isPlantUmlDocument(doc('/w/mind.txt', { text: '@startmindmap\n* a\n' })),
+			'only @startuml is recognised'
+		);
+		assert.ok(
+			extension.isPlantUmlDocument(doc('/w/indented.txt', { text: `  ${DIAGRAM}` })),
+			'a leading blank is not tolerated'
+		);
+	});
+
+	test('leaves the panel alone for plain text that is not a diagram', () => {
+		// The reason .txt is decided on content: a notes or log file is not a
+		// request to render it.
+		assert.ok(!extension.isPlantUmlDocument(doc('/w/todo.txt', { text: 'buy milk\n' })));
+		assert.ok(!extension.isPlantUmlDocument(doc('/w/empty.txt')));
+	});
+
+	test('leaves the panel alone for another language quoting a diagram', () => {
+		// The whole document is the source, so rendering a .py that documents
+		// a diagram would render the Python around it too.
+		const python = doc('/w/model.py', {
+			languageId: 'python',
+			text: `"""\n${DIAGRAM}"""\n`
+		});
+
+		assert.ok(!extension.isPlantUmlDocument(python));
+	});
+
+	test('names the file it is showing', () => {
+		// The one place a user can see which of several open diagrams the panel
+		// is pointed at.
+		assert.strictEqual(extension.panelTitle(doc('/w/test2.puml')), 'PlantUML: test2.puml');
+	});
 });
 
 /**

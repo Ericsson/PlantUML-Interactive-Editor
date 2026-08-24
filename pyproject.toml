@@ -51,6 +51,14 @@ path = "src/plantuml_gui/__about__.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/plantuml_gui"]
 
+# A whitelist, because the repository root holds things far larger than the
+# package: the extension's node_modules, a downloaded VS Code under
+# plantuml-extension/.vscode-test, and dist itself. Hatchling's default sweep
+# picks those up, so the sdist is told exactly what a source release needs.
+# pyproject.toml, the readme and the licence are added by hatchling.
+[tool.hatch.build.targets.sdist]
+only-include = ["src/plantuml_gui"]
+
 [tool.coverage.run]
 branch = false
 omit = ["src/plantuml_gui/__about__.py"]

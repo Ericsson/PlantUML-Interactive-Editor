@@ -2,7 +2,13 @@
   "name": "plantuml-editor",
   "displayName": "PlantUML Editor",
   "description": "PlantUML Interactive Editor",
-  "version": "0.0.1",
+  "version": "0.31.0",
+  "publisher": "Ericsson",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ericsson/PlantUML-Interactive-Editor.git"
+  },
   "engines": {
     "vscode": "^1.113.0"
   },
@@ -26,7 +32,7 @@
           "default": "",
           "scope": "machine-overridable",
           "order": 1,
-          "markdownDescription": "Absolute path to a Python interpreter that has the `plantuml-gui` package installed. Required: that package is the rendering backend. When empty, the `PLANTUML_GUI_PYTHON` environment variable is used."
+          "markdownDescription": "Absolute path to a Python interpreter that has the `plantuml-gui` package installed. When empty, the `PLANTUML_GUI_PYTHON` environment variable is used, then the venv at `~/.local/share/plantuml-gui/venv` that the setup instructions create."
         },
         "plantumlInteractive.plantumlJar": {
           "type": "string",
@@ -41,7 +47,8 @@
   "scripts": {
     "lint": "eslint .",
     "pretest": "npm run lint",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "package": "vsce package"
   },
   "dependencies": {
     "bootstrap": "4.6.2",
@@ -52,9 +59,10 @@
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "24.x",
-    "@types/vscode": "^1.125.0",
+    "@types/vscode": "1.110.0",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.0.0",
+    "@vscode/vsce": "3.9.2",
     "eslint": "^10.5.0",
     "globals": "^16.5.0"
   },

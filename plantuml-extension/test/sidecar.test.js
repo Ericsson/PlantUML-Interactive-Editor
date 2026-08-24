@@ -33,7 +33,10 @@ const {
 	describeStartFailure,
 	readPortLine,
 	resolvePythonPath,
+	standardVenv,
+	EXPECTED_BACKEND_VERSION,
 	PythonConfigError,
+	Sidecar,
 	SidecarStartError,
 	PYTHON_KEY,
 	PYTHON_SETTING,
@@ -104,6 +107,88 @@ suite('sidecar: environment', () => {
 		// Without this the port line can sit in a block buffer, since stdout
 		// is a pipe rather than a tty, and startup appears to hang.
 		assert.strictEqual(buildEnv('tok').PYTHONUNBUFFERED, '1');
+	});
+});
+
+suite('sidecar: version compatibility', () => {
+	// Kept in step by hand with _major_minor in scripts/check_app_versions.py
+	// -- the pre-commit hook's build-time half of this same rule. A test
+	// reads that file's source rather than importing it, the same reasoning
+	// as the PORT_LINE_PREFIX/TOKEN_HEADER contract tests above: a Python
+	// script and a Node module cannot share a definition, only agree by hand.
+	const checkAppVersionsPy = require('fs').readFileSync(
+		require('path').join(__dirname, '..', '..', 'scripts', 'check_app_versions.py'),
+		'utf-8'
+	);
+
+	test('expects the backend at this extension\'s major.minor', () => {
+		// The patch component is free -- an extension-only fix can ship as
+		// 0.31.1 against the same 0.31 backend -- so it is dropped here rather
+		// than compared.
+		const [major, minor] = require('../package.json').version.split('.');
+
+		assert.strictEqual(EXPECTED_BACKEND_VERSION, `${major}.${minor}`);
+	});
+
+	test('applies the same major.minor rule as check_app_versions.py', () => {
+		// Read _major_minor's own behaviour off the source: patch components
+		// split off and ignored, same as the expected version here.
+		assert.ok(
+			/version\.split\(["']\.["']\)/.test(checkAppVersionsPy),
+			'check_app_versions.py no longer splits on "." the way this test assumes'
+		);
+		assert.ok(
+			checkAppVersionsPy.includes('components[0]') &&
+				checkAppVersionsPy.includes('components[1]'),
+			'check_app_versions.py no longer takes the first two components'
+		);
+	});
+});
+
+suite('sidecar: the standard venv location', () => {
+	const originalXdg = process.env.XDG_DATA_HOME;
+
+	teardown(() => {
+		if (originalXdg === undefined) {
+			delete process.env.XDG_DATA_HOME;
+		} else {
+			process.env.XDG_DATA_HOME = originalXdg;
+		}
+	});
+
+	test('sits under the XDG data home when one is set', () => {
+		process.env.XDG_DATA_HOME = '/data/home';
+
+		assert.deepStrictEqual(standardVenv(), {
+			dir: '/data/home/plantuml-gui/venv',
+			python: '/data/home/plantuml-gui/venv/bin/python'
+		});
+	});
+
+	test('falls back to ~/.local/share', () => {
+		delete process.env.XDG_DATA_HOME;
+		const home = require('os').homedir();
+
+		assert.deepStrictEqual(standardVenv(), {
+			dir: `${home}/.local/share/plantuml-gui/venv`,
+			python: `${home}/.local/share/plantuml-gui/venv/bin/python`
+		});
+	});
+
+	test('is read when used, not frozen at import', () => {
+		// The setup instructions name this path, so it has to reflect the
+		// environment the interpreter is resolved in.
+		process.env.XDG_DATA_HOME = '/first';
+		const first = standardVenv().python;
+		process.env.XDG_DATA_HOME = '/second';
+
+		assert.notStrictEqual(standardVenv().python, first);
+	});
+
+	test('tolerates a quoted XDG_DATA_HOME', () => {
+		process.env.XDG_DATA_HOME = '"/data/home"';
+
+		assert.strictEqual(standardVenv().dir, '/data/home/plantuml-gui/venv');
 	});
 });
 
@@ -182,28 +267,87 @@ suite('sidecar: interpreter resolution', () => {
 	});
 
 	test('throws instead of guessing when nothing is configured', async () => {
+		// Nothing on disk, including the standard venv: PATH is deliberately
+		// not searched, because the backend is a Python package no machine has
+		// by default. An interpreter found that way almost certainly cannot
+		// import plantuml_gui, and spawning it would blame the wrong thing.
+		stubFilesystem([]);
 		delete process.env[PYTHON_ENV];
 
-		// The backend is a Python package no machine has by default, so an
-		// interpreter found by searching almost certainly cannot import
-		// plantuml_gui. Spawning one would blame the wrong thing.
 		await assert.rejects(() => resolvePythonPath(), PythonConfigError);
 	});
 
 	test('the unconfigured error is still a SidecarStartError', async () => {
 		// PythonConfigError is a subclass so that callers which only know about
 		// the base class keep working.
+		stubFilesystem([]);
 		delete process.env[PYTHON_ENV];
 
 		await assert.rejects(() => resolvePythonPath(), SidecarStartError);
 	});
 
 	test('the unconfigured error names both knobs', async () => {
+		stubFilesystem([]);
 		delete process.env[PYTHON_ENV];
 
 		await assert.rejects(() => resolvePythonPath(), (err) => {
 			assert.ok(err.message.includes(PYTHON_SETTING), err.message);
 			assert.ok(err.message.includes(PYTHON_ENV), err.message);
+			return true;
+		});
+	});
+
+	test('the standard venv is used when nothing is configured', async () => {
+		// What makes a stock machine need no configuration at all: install the
+		// backend where the instructions say, and this is how it is found.
+		const standard = standardVenv();
+		stubFilesystem([standard.python]);
+		delete process.env[PYTHON_ENV];
+
+		assert.strictEqual(await resolvePythonPath(), standard.python);
+	});
+
+	test('the setting wins over the standard venv', async () => {
+		const standard = standardVenv();
+		stubFilesystem(['/configured/python', standard.python]);
+		delete process.env[PYTHON_ENV];
+
+		const restore = await setPythonSetting('/configured/python');
+		try {
+			assert.strictEqual(await resolvePythonPath(), '/configured/python');
+		} finally {
+			await restore();
+		}
+	});
+
+	test('the environment variable wins over the standard venv', async () => {
+		const standard = standardVenv();
+		stubFilesystem(['/env/python', standard.python]);
+		process.env[PYTHON_ENV] = '/env/python';
+
+		assert.strictEqual(await resolvePythonPath(), '/env/python');
+	});
+
+	test('a bad environment variable does not fall through to the standard venv', async () => {
+		// Same rule as every other source: set but unusable stops resolution,
+		// so a typo cannot be masked by a working fallback.
+		const standard = standardVenv();
+		stubFilesystem([standard.python]);
+		process.env[PYTHON_ENV] = '/typo/python';
+
+		await assert.rejects(() => resolvePythonPath(), PythonConfigError);
+	});
+
+	test('the not-found message is a command the user can paste', async () => {
+		// The likeliest first run is an empty machine, so the message carries
+		// the fix rather than a decision.
+		const standard = standardVenv();
+		stubFilesystem([]);
+		delete process.env[PYTHON_ENV];
+
+		await assert.rejects(() => resolvePythonPath(), (err) => {
+			assert.ok(err.message.includes(`python3 -m venv ${standard.dir}`), err.message);
+			assert.ok(err.message.includes(`${standard.dir}/bin/pip install`), err.message);
 			return true;
 		});
 	});
@@ -291,7 +435,9 @@ suite('sidecar: startup failure messages', () => {
 		);
 
 		assert.ok(message.includes('plantuml-gui'));
-		assert.ok(message.includes('pip install'));
+		// Into the interpreter that is actually configured, since that is the
+		// mismatch causing this: the wheel went somewhere else.
+		assert.ok(message.includes('"python" -m pip install'), message);
 	});
 
 	test('any other failure surfaces the sidecar stderr', () => {
@@ -375,5 +521,43 @@ suite('sidecar: port handshake', () => {
 		child.emit('exit', 1);
 
 		await assert.rejects(port, /pip install/);
+	});
+});
+
+suite('sidecar: telling a stop we asked for from a death', () => {
+	// The child's `exit` event is the same event either way, so whoever listens
+	// needs this flag to know whether to report it: killing the backend in
+	// deactivate() must not raise an error notification on the way out, and a
+	// backend that died on its own must not pass for an orderly stop.
+	const liveChild = () => Object.assign(fakeChild(), { exitCode: null, signalCode: null });
+
+	test('is not marked while running', () => {
+		assert.strictEqual(new Sidecar(liveChild(), 1234, 'token').disposing, false);
+	});
+
+	test('marks a stop before killing, so the exit handler cannot miss it', () => {
+		const child = liveChild();
+		let markedAtKill;
+		const sidecar = new Sidecar(child, 1234, 'token');
+		child.kill = () => {
+			markedAtKill = sidecar.disposing;
+		};
+
+		sidecar.dispose();
+
+		assert.strictEqual(markedAtKill, true, 'killed before the stop was marked');
+		assert.strictEqual(sidecar.disposing, true);
+	});
+
+	test('leaves a child killed from outside unmarked', () => {
+		// The reproducer for the bug this flag exists to keep fixed: `kill
+		// <pid>` from a terminal. Nothing called dispose, so the exit is a
+		// failure to report.
+		const child = liveChild();
+		const sidecar = new Sidecar(child, 1234, 'token');
+
+		child.emit('exit', null, 'SIGTERM');
+
+		assert.strictEqual(sidecar.disposing, false);
 	});
 });

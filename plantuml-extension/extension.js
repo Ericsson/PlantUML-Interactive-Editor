@@ -38,6 +38,7 @@ const {
 	startSidecar,
 	SidecarStartError,
 	PythonConfigError,
+	EXPECTED_BACKEND_VERSION,
 	TOKEN_HEADER
 } = require('./src/sidecar');
 const { resolvePlantUmlJarPath, PlantUmlConfigError } = require('./src/plantumlJar');
@@ -50,6 +51,18 @@ const RENDER_PNG_TIMEOUT_MS = 60000;
 
 /** Label of the action offered on errors the user fixes in Settings. */
 const OPEN_SETTINGS = 'Open Settings';
+
+/** Label of the action offered when the answer is in the output channel. */
+const SHOW_OUTPUT = 'Show Output';
+
+/** This command's title in the palette, as contributed in package.json. */
+const OPEN_DIAGRAM_TITLE = 'PlantUML: Open Interactive Diagram';
+
+/** The file extensions the diagram panel follows; see isPlantUmlDocument. */
+const PLANTUML_EXTENSIONS = new Set(['.puml', '.plantuml', '.pu', '.iuml', '.wsd', '.uml']);
+
+/** How far into a plain-text file to look for a `@start…` block. */
+const DIAGRAM_SNIFF_LINES = 200;
 
 /**
  * Line highlight for the diagram -> editor direction: hovering an element in
@@ -67,6 +80,16 @@ let sidecar;
 let sidecarStarting;
 /** @type {vscode.OutputChannel | undefined} */
 let outputChannel;
+/**
+ * The diagram panels currently open.
+ *
+ * The sidecar outlives them -- it is disposed with the extension, not with the
+ * last panel -- so this is what tells a backend death the user is waiting on
+ * from one they will never see. See reportBackendExit.
+ *
+ * @type {Set<vscode.WebviewPanel>}
+ */
+const livePanels = new Set();
 
 /**
  * Entry point, run the first time the command is invoked.
@@ -106,13 +129,15 @@ function ensureSidecar(jarPath) {
 	if (!sidecarStarting) {
 		sidecarStarting = startSidecar({ jarPath, output: outputChannel })
 			.then((started) => {
+				warnOnBackendVersionMismatch(started);
 				sidecar = started;
 				// Drop the handle when the child dies, so the next open starts a
 				// fresh one instead of rendering against a dead process forever.
-				started.process.on('exit', () => {
+				started.process.on('exit', (code, signal) => {
 					if (sidecar === started) {
 						sidecar = undefined;
 					}
+					reportBackendExit(started, code, signal);
 				});
 				return started;
 			})
@@ -122,6 +147,75 @@ function ensureSidecar(jarPath) {
 	}
 
 	return sidecarStarting;
+}
+
+/**
+ * Announce a backend that went away on its own.
+ *
+ * Always logged; only raised as a notification when a panel is open. The
+ * sidecar outlives panels, so without that gate, closing the diagram and
+ * carrying on with the day would still be interrupted by an error about a
+ * diagram that is not there -- and the recovery this offers, reopening the
+ * panel, is not something the user asked to be told about.
+ *
+ * The notification says only what to do. Reopening the panel is the whole
+ * remedy: ensureSidecar spawns a fresh child, since the handle was dropped when
+ * this one died. The old panel cannot be salvaged either way -- its page holds
+ * the dead child's address and token -- so there is nothing to choose between.
+ *
+ * Silent either way when we asked for the stop (dispose on deactivate), and
+ * when the child never got as far as being handed out -- startSidecar reports
+ * its own failures, with a message that says what to install.
+ *
+ * @param {import('./src/sidecar').Sidecar} stopped
+ * @param {number | null} code
+ * @param {string | null} signal
+ */
+async function reportBackendExit(stopped, code, signal) {
+	if (stopped.disposing) {
+		return;
+	}
+
+	const cause = signal ? `signal ${signal}` : `exit code ${code}`;
+	outputChannel?.appendLine(`[backend] the PlantUML backend stopped (${cause})`);
+
+	if (livePanels.size === 0) {
+		return;
+	}
+
+	// The cause stays out of the notification: a signal number tells the user
+	// nothing they can act on, and the only action is the same either way. It is
+	// on the line just logged, which Show Output goes to.
+	const choice = await vscode.window.showErrorMessage(
+		`The PlantUML backend stopped. Run "${OPEN_DIAGRAM_TITLE}" again to restart it.`,
+		SHOW_OUTPUT
+	);
+
+	if (choice === SHOW_OUTPUT) {
+		outputChannel?.show();
+	}
+}
+
+/**
+ * Log a request from the webview that never reached the sidecar.
+ *
+ * The webview talks to the sidecar directly, so this process sees none of that
+ * traffic and werkzeug's request log -- the output channel's record of the
+ * requests that did arrive -- stops dead when the backend does. The frontend's
+ * fetch shim posts the failures so that the channel shows those too, instead of
+ * simply going quiet while the panel stops responding.
+ *
+ * Output only, no notification: one diagram gesture fires several requests, and
+ * the diagnosis worth interrupting the user for is the child's exit, which
+ * reportBackendExit announces once.
+ *
+ * @param {{ route?: string, detail?: string }} message
+ */
+function reportBackendUnreachable({ route, detail }) {
+	outputChannel?.appendLine(
+		`[webview] request to ${route ?? '<unknown>'} did not reach the backend: ` +
+			`${detail ?? 'no detail given'}`
+	);
 }
 
 function disposeSidecar() {
@@ -150,6 +244,36 @@ async function showConfigError(message) {
 }
 
 /**
+ * Warn, once per sidecar start, when the running backend is not the version
+ * this extension was built against.
+ *
+ * The build-time pairing (scripts/check_app_versions.py) only holds for an
+ * install built from one commit; it says nothing about a venv left on an older
+ * release than the .vsix now talking to it. A mismatch still runs -- the routes
+ * this extension calls have generally not gone away across a minor version --
+ * so this warns rather than blocking.
+ *
+ * The message names both versions but no fix: either side can be the stale one,
+ * and the wheel the user would reinstall from may no longer be on the machine.
+ * Reinstalling both from one release is the whole remedy, in either direction.
+ *
+ * @param {import('./src/sidecar').Sidecar} activeSidecar
+ */
+function warnOnBackendVersionMismatch(activeSidecar) {
+	const backendVersion = activeSidecar.backendVersion;
+
+	if (backendVersion === EXPECTED_BACKEND_VERSION) {
+		return;
+	}
+
+	vscode.window.showWarningMessage(
+		`PlantUML backend ${backendVersion ?? 'of unknown version'} does not match ` +
+			`this extension (expects ${EXPECTED_BACKEND_VERSION}). Install the wheel ` +
+			'and the .vsix from the same release.'
+	);
+}
+
+/**
  * Open a diagram webview panel for the active editor's document, render its
  * current content, and keep the diagram in sync as the document changes.
  *
@@ -163,7 +287,11 @@ async function openDiagramPanel(context) {
 		return;
 	}
 
-	const document = editor.document;
+	// The document this panel shows, and the one every listener below reads:
+	// the writer in applyPuml, the PNG source, the highlight target. It moves
+	// when the user switches to another PlantUML file (see the active-editor
+	// listener), so it is read at use rather than captured.
+	let document = editor.document;
 
 	// Checked before anything is spawned: serve.py only warns about a bad jar
 	// on stderr, so catching it here makes it a notification naming the setting,
@@ -207,7 +335,7 @@ async function openDiagramPanel(context) {
 
 	const panel = vscode.window.createWebviewPanel(
 		'plantumlInteractiveDiagram',
-		'PlantUML Interactive Diagram',
+		panelTitle(document),
 		vscode.ViewColumn.Beside,
 		{
 			enableScripts: true,
@@ -238,19 +366,50 @@ async function openDiagramPanel(context) {
 		return;
 	}
 
+	// Counted from here, not from createWebviewPanel: the early return above
+	// disposes the panel before onDidDispose is registered, which would leave it
+	// in the set for good.
+	livePanels.add(panel);
+
 	let debounceTimer;
 
 	// Reentrancy guard for applyEdit only. The text comparisons on both sides
 	// are what actually terminate the write-back loop.
 	let applyingEdit = false;
 
+	// Hands the whole source over; the frontend renders itself from it through
+	// the app's own renderPlantUml(). The text is read at call time, so
+	// whatever the document holds when this runs is what the diagram shows.
+	// Called from the `ready` handler for the first render, from the change
+	// listener for every edit, and on a switch to another file.
 	const postDocument = () => {
 		panel.webview.postMessage({ type: 'documentChanged', text: document.getText() });
 	};
 
-	// The frontend renders itself from this, through the app's own
-	// renderPlantUml(); the first message also primes its cached text.
-	postDocument();
+	// One panel serves every diagram in the window: opening another PlantUML
+	// file points it at that file, the way the Markdown preview follows the
+	// editor. The command is invoked once and the panel keeps up from there.
+	//
+	// Only PlantUML files take it over, by isPlantUmlDocument's reading; the
+	// panel stays on its current file while the user is in a .py or a settings
+	// tab, and while the panel itself has focus, which leaves no active text
+	// editor at all.
+	const activeEditorListener = vscode.window.onDidChangeActiveTextEditor((next) => {
+		if (!next || next.document === document || !isPlantUmlDocument(next.document)) {
+			return;
+		}
+
+		// Painted for the file the panel is leaving, and about to mean nothing.
+		clearHighlight(document);
+		// A post left pending by the previous file would fire just after this
+		// one and resend what it is about to send.
+		clearTimeout(debounceTimer);
+
+		document = next.document;
+		panel.title = panelTitle(document);
+		outputChannel?.appendLine(`[panel] now showing ${document.fileName}`);
+		postDocument();
+	});
 
 	const changeListener = vscode.workspace.onDidChangeTextDocument((event) => {
 		if (event.document !== document) {
@@ -276,8 +435,16 @@ async function openDiagramPanel(context) {
 			applyHighlight(document, message.rows);
 		} else if (message.type === 'savePng') {
 			await savePng(document, active);
+		} else if (message.type === 'backendUnreachable') {
+			reportBackendUnreachable(message);
 		} else if (message.type === 'ready') {
 			outputChannel?.appendLine('[webview] frontend loaded');
+			// `ready` is the frontend's word that its `message` listener is
+			// live, which makes this the first moment a post reaches it: the
+			// channel delivers only to a listening page, and drops the rest in
+			// silence. So the first document goes out from here, priming the
+			// page's cached text and triggering its initial render.
+			postDocument();
 		}
 	});
 
@@ -297,7 +464,9 @@ async function openDiagramPanel(context) {
 	});
 
 	panel.onDidDispose(() => {
+		livePanels.delete(panel);
 		clearTimeout(debounceTimer);
+		activeEditorListener.dispose();
 		changeListener.dispose();
 		messageListener.dispose();
 		selectionListener.dispose();
@@ -417,6 +586,72 @@ function defaultPngUri(document) {
 }
 
 /**
+ * Which file the panel is showing, in its tab.
+ *
+ * The panel follows the active editor, so its title names the file it is
+ * currently pointed at.
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {string}
+ */
+function panelTitle(document) {
+	return `PlantUML: ${path.basename(document.fileName)}`;
+}
+
+/**
+ * Whether the panel should follow `document` when it becomes active.
+ *
+ * No single signal identifies a PlantUML source: VS Code registers no language
+ * for one, the id a `.puml` file ends up with depends on which other PlantUML
+ * extension is installed, and plenty of diagrams live in `.txt`. So:
+ *
+ *   - a PlantUML file extension, or a `plantuml` language id, is followed
+ *     whatever the file holds. An empty `.puml` is a diagram being started.
+ *   - a plain-text file is followed once it opens a `@start…` block. The name
+ *     says nothing, so the content decides, which is what lets `.txt` work and
+ *     what leaves a notes file alone.
+ *   - any other language is left alone. The whole document is the source, so a
+ *     diagram quoted in a docstring would be rendered with the code around it.
+ *
+ * This gates the automatic following only; the command opens whatever the user
+ * ran it on.
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {boolean}
+ */
+function isPlantUmlDocument(document) {
+	if (document.languageId === 'plantuml') {
+		return true;
+	}
+
+	if (PLANTUML_EXTENSIONS.has(path.extname(document.uri.path).toLowerCase())) {
+		return true;
+	}
+
+	return document.languageId === 'plaintext' && opensDiagramBlock(document);
+}
+
+/**
+ * Whether the document's opening lines start a PlantUML block.
+ *
+ * Any `@start…` counts, not just `@startuml`: which flavour a file holds is not
+ * this function's business.
+ *
+ * Only the head is read. A file that begins with something other than its
+ * diagram is prose that mentions one, and a plain-text file can be a log of any
+ * size.
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {boolean}
+ */
+function opensDiagramBlock(document) {
+	// The range is clamped to the document, so a short file reads whole.
+	const head = document.getText(new vscode.Range(0, 0, DIAGRAM_SNIFF_LINES, 0));
+
+	return /^[ \t]*@start\w+/m.test(head);
+}
+
+/**
  * Paint the given puml lines in every editor showing `document`.
  *
  * The diagram -> editor direction: the editor shim turns the app's Ace
@@ -458,5 +693,9 @@ function deactivate() {
 
 module.exports = {
 	activate,
-	deactivate
+	deactivate,
+	// The panel's targeting rules, exported for the tests: which files it
+	// follows and what it calls itself once it has.
+	isPlantUmlDocument,
+	panelTitle
 };

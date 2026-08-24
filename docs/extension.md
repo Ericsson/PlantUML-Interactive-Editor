@@ -117,7 +117,7 @@ Python side, `src/plantuml_gui/`:
 | `templates/partials/app_scripts.html` | The frontend's script list, shared by `index.html` and `webview.html`. |
 | `templates/partials/diagram_toolbar.html` | The toolbar markup, shared by the same two pages; takes the attributes they differ on. |
 | `static/diagram-toolbar.js` | Panzoom and the zoom buttons, for both pages. Loads at the end of `<body>`, not with `app_scripts`. |
-| `static/vscode/fetchShim.js` | Rewrites the app's relative `fetch()` URLs and attaches the token. |
+| `static/vscode/fetchShim.js` | Rewrites the app's relative `fetch()` URLs, attaches the token, and reports requests that never reached the sidecar. |
 | `static/vscode/editorShim.js` | An Ace-shaped object backed by the VS Code document. |
 | `static/vscode/webviewInit.js` | Boots the reused app code inside the webview. |
 | `static/vscode/webview.css` | Lays out the toolbar and the diagram, repaints them in the editor's theme, and hides the DOM elements that exist only to satisfy the app's code. |
@@ -162,7 +162,8 @@ channel and kept in a rolling 8 KB buffer (see [Failure reporting](#failure-repo
 
 One sidecar per window, shared by every panel, killed in `deactivate()`. Spawn `ENOENT`, an
 import error, and no port line within 30 s all end the same way: panel disposed, notification
-naming the setting to fix.
+naming the setting to fix. A child that dies later is reported too, but differently — see
+[Failure reporting](#failure-reporting).
 
 ### 2. Host → sidecar: HTTP
 
@@ -172,7 +173,7 @@ instead. All three carry `X-PlantUML-Token`.
 
 | Request | When | Response | On failure |
 | --- | --- | --- | --- |
-| `GET /health` | Every 100 ms after the port line until it answers or 30 s passes; 2 s per attempt. | `{"status": "ok"}` — the body is never read, only the fact that something answered. | Not-ready-yet; the deadline is what gives up. |
+| `GET /health` | Every 100 ms after the port line until it answers or 30 s passes; 2 s per attempt. | `{"status": "ok", "version": "<backend __about__.py version>"}` — `status` is never read, only the fact that something answered; `version` lands in `Sidecar.backendVersion`, see [Version compatibility](#version-compatibility). | Not-ready-yet; the deadline is what gives up. |
 | `GET /webview?…` | Once per panel, 5 s timeout. | `text/html`, assigned verbatim to `panel.webview.html`. | `400` + `{"error": …}` on a bad parameter, `WebviewPageError` otherwise. |
 | `POST /renderPNG` | On `savePng`, 60 s timeout — the render shells out to java. | `image/png` bytes, written to the file the save dialog returns. | Notification; nothing is written. |
 
@@ -207,11 +208,12 @@ instances do not. Every message carries a `type` discriminator.
 
 | Direction | Message | Payload | Sent when |
 | --- | --- | --- | --- |
-| host → webview | `documentChanged` | `{ text }` | Once after the panel opens, then on every document change, debounced 300 ms. |
+| host → webview | `documentChanged` | `{ text }` | Once the webview has posted `ready`, on every document change, debounced 300 ms, and on a switch to another diagram file. |
 | host → webview | `cursorMoved` | `{ row, column }` | On `onDidChangeTextEditorSelection`, undebounced, zero-based. |
 | webview → host | `applyPuml` | `{ text }` | A diagram operation produced new source. |
 | webview → host | `setHighlight` | `{ rows }`, zero-based line numbers | The shim's marker table changed. |
 | webview → host | `savePng` | `{}` | The toolbar's PNG button was clicked. Carries no source: the host renders from the document. |
+| webview → host | `backendUnreachable` | `{ route, detail }` | A `fetch()` to the sidecar was rejected rather than answered. See [Failure reporting](#failure-reporting). |
 | webview → host | `ready` | `{}` | The page finished booting. |
 
 Four properties of the channel shape the code on both sides. There is **no
@@ -295,6 +297,20 @@ Not cross-process, but the link that closes the loop. The host reads with
 so one undo step, so Ctrl+Z undoes a diagram click. It is the **only** write path to the
 file; neither the webview nor the sidecar can reach it.
 
+Which document that is follows the active editor: clicking into another diagram file points
+the panel at it, resends its text and retitles the tab, so one panel serves every diagram in
+the window.
+
+`isPlantUmlDocument()` decides which files may take it over. A PlantUML extension —
+`.puml`, `.plantuml`, `.pu`, `.iuml`, `.wsd`, `.uml` — qualifies whatever the file holds, and
+so does a `plantuml` language id. A `plaintext` document qualifies once it opens a `@start…`
+block within its first `DIAGRAM_SNIFF_LINES` lines, which is what makes diagrams kept in
+`.txt` work. Any other language never qualifies: the whole document is the source, so a
+diagram quoted in a docstring would be rendered with the code around it.
+
+A document that is not followed leaves the panel on the file it was showing. So does a
+settings tab, and so does focus in the panel itself — there is no active text editor then.
+
 ## Startup sequence
 
 1. VS Code loads `extension.js` and calls `activate()`, which creates the
@@ -311,8 +327,8 @@ file; neither the webview nor the sidecar can reach it.
    by every panel in the window; concurrent callers await the same start rather than racing
    to spawn two servers.
 5. `startSidecar()` resolves the interpreter the same way (setting, else
-   `PLANTUML_GUI_PYTHON`, checked to be a file), generates a per-launch token, and spawns
-   `python -m plantuml_gui.serve`.
+   `PLANTUML_GUI_PYTHON`, else the standard venv, checked to be a file), generates a
+   per-launch token, and spawns `python -m plantuml_gui.serve`.
 6. The sidecar applies the jar override, warns if the jar is unusable, installs its routes,
    binds an ephemeral port, and prints `PLANTUML_GUI_PORT=<port>` to stdout.
 7. Node reads that line off stdout, then polls `GET /health` until it answers.
@@ -330,6 +346,17 @@ the panel is disposed rather than left blank. The two failures whose answer real
 setting — an unusable jar and an unusable interpreter — carry an **Open Settings** button
 that opens the Settings UI filtered to `plantumlInteractive`. A backend that failed to boot
 does not: `describeStartFailure()` has already said what to install.
+
+## Version compatibility
+
+Once a fresh sidecar has answered `/health` (between steps 4 and 5 above),
+`warnOnBackendVersionMismatch()` in `extension.js` compares `Sidecar.backendVersion` against
+`EXPECTED_BACKEND_VERSION` in `src/sidecar.js` — this extension's own `major.minor`, the same
+rule as the `scripts/check_app_versions.py` pre-commit hook applies at build time. On a
+mismatch it warns, naming both versions and saying to reinstall both from one release; it names
+no command, since either side can be the stale one. It is non-blocking (the panel still opens),
+and runs once per sidecar start rather than once per panel, since every panel in the window
+shares one sidecar.
 
 ## The sidecar
 
@@ -409,6 +436,29 @@ The child's stderr is streamed to the output channel and kept in a rolling 8 KB 
 `describeStartFailure()` turns it into actionable text: `ENOENT` names the `pythonPath`
 setting, `No module named plantuml_gui` says to install the package into that interpreter,
 and anything else is reported with the traceback.
+
+That covers startup. A backend that dies later is reported by both runtimes, because neither
+can see what the other sees: only the host holds the `ChildProcess`, and only the page knows a
+request went nowhere — the webview's traffic does not pass through the host, so werkzeug's
+request log just stops, and the frontend's `fetch()` call sites do not handle a rejection.
+
+| Signal | Seen by | Reported as |
+| --- | --- | --- |
+| The child's `exit` event | `reportBackendExit()` | Output line with the exit code or signal, plus, while a panel is open, one notification: *The PlantUML backend stopped. Run "PlantUML: Open Interactive Diagram" again to restart it.* |
+| A rejected `fetch()` | `fetchShim.js` posts `backendUnreachable`, the host logs it | Output line naming the route and the error. No notification — one gesture fires several requests. |
+
+Three details decide the shape of that:
+
+- **`Sidecar.disposing`**, set by `dispose()` *before* `process.kill()`. The `exit` event is
+  identical whoever caused it, and `deactivate()` must not report its own shutdown.
+- **The panel gate.** The sidecar outlives panels, so a death with none open is logged and
+  nothing more.
+- **`reportFailuresTo(post)`.** `fetchShim.js` cannot call `acquireVsCodeApi()` — once per
+  page, and `webviewInit.js` has it — so the host's `post` is handed in at boot. The rejection
+  is rethrown regardless: the shim changes where requests go, not what callers observe.
+
+Recovery is a new panel: the handle is dropped on `exit`, so the next command spawns a fresh
+child, and the old page holds the dead child's port and token.
 
 ## The webview page
 
@@ -673,7 +723,7 @@ render from `/getActivityPositions` and `/getSequencePositions`.
 
 | Setting | Meaning |
 | --- | --- |
-| `plantumlInteractive.pythonPath` | Absolute path to a Python interpreter that has `plantuml-gui` installed. Required. |
+| `plantumlInteractive.pythonPath` | Absolute path to a Python interpreter that has `plantuml-gui` installed. Optional where the standard venv exists. |
 | `plantumlInteractive.plantumlJar` | Absolute path to `plantuml.jar`. Optional where the shared internal install exists. |
 
 Both are declared `machine-overridable`: they are absolute paths to things installed on one
@@ -681,9 +731,14 @@ machine, so they should neither ride Settings Sync to another nor be committed t
 repository's `.vscode/settings.json`.
 
 Each has an environment-variable equivalent — `PLANTUML_GUI_PYTHON` and `PLANTUML_JAR`, the
-latter being the same variable the web app reads, so a repo `.env` configures both. The jar
-has a third source, the shared internal install path, which is tried only when neither of
-the other two is set.
+latter being the same variable the web app reads, so a repo `.env` configures both. Each also
+has a third source, tried only when neither of the other two is set: the shared internal
+install for the jar, and for the interpreter a virtual environment created at install time.
+The backend is a Python package and needs one to live in, so `plantuml-extension/README.md`
+has the user create it at `~/.local/share/plantuml-gui/venv` — or under `$XDG_DATA_HOME` when
+that is set — and install the wheel into it. `standardVenv()` in `sidecar.js` computes that
+path per call rather than at import, so `HOME` and `XDG_DATA_HOME` are read when the
+interpreter is resolved. On a machine set up as documented, both settings can stay empty.
 
 `src/settings.js` holds only what more than one file needs: the section name, `normalizePath()`
 and `isFile()`. It requires nothing from `vscode`, which is what makes it testable in plain
@@ -718,11 +773,6 @@ Both paths are validated with `statSync().isFile()` — a file, not merely somet
 exists, matching `check_jar()` in `serve.py` — before the backend is spawned. For the jar
 that avoids a 500 on the first render; for the interpreter it avoids launching a process
 just to learn its path was wrong.
-
-Nothing is guessed. `resolvePythonPath()` will not fall back to a `python` on `PATH`,
-because the backend is a package no machine has by default: an interpreter found by
-searching almost certainly cannot import `plantuml_gui`, and spawning it would report the
-failure against the wrong thing. Failing early names the knob to turn.
 
 ## Development
 
@@ -759,6 +809,7 @@ Each site carries a comment naming the other.
 | `/renderPNG` | `extension.js` (`savePng`) | `shared/routes.py` (`renderpng`) |
 | `PLANTUML_GUI_TOKEN`, `PLANTUML_GUI_JAR_OVERRIDE` | `src/sidecar.js` (`buildEnv`) | `serve.py` (`TOKEN_ENV`, `JAR_ENV`) |
 | The six message types | `extension.js` | `static/vscode/` shims |
+| `major.minor` version compatibility rule | `src/sidecar.js` (`EXPECTED_BACKEND_VERSION`) | `scripts/check_app_versions.py` (`_major_minor`) |
 
 One more invariant lives entirely in the page: the script load order in `webview.html` —
 vendor, then shims, then app, then boot. Every step of it is justified in that file.
@@ -768,6 +819,7 @@ vendor, then shims, then app, then boot. Every step of it is justified in that f
 | Symptom | Where to look |
 | --- | --- |
 | Notification on opening the panel | The message names the setting to change. |
+| "PlantUML backend X does not match this extension" | Non-blocking warning; the venv and the `.vsix` are from different releases. Reinstall both from one release. See [Version compatibility](#version-compatibility). |
 | Diagram never renders, menus work | Jar problem. Check the `PlantUML Interactive` output channel for `check_jar`'s warning. |
 | Nothing is interactive but the diagram renders | Likely a missing DOM id throwing during setup. Open the webview devtools: *Developer: Open Webview Developer Tools*. |
 | Python traceback | The `PlantUML Interactive` output channel, which receives the sidecar's stderr. |

@@ -45,6 +45,12 @@
 // Where the address, the token and the header's name come from: webview.html
 // puts all three on <body>, so this file stays a static file that Flask can
 // serve as-is rather than a template, and the page needs no inline script.
+//
+// This is also the only place that can notice the sidecar going away. The
+// webview's traffic does not pass through the extension host, so a backend that
+// died mid-session is invisible there, and the app's ~150 call sites do not
+// handle a rejected fetch -- the panel would just stop responding with nothing
+// said anywhere. Hence reportFailuresTo below.
 
 (function () {
 	const nativeFetch = window.fetch.bind(window);
@@ -53,6 +59,25 @@
 		plantumlToken: token,
 		plantumlTokenHeader: tokenHeader
 	} = document.body.dataset;
+
+	/**
+	 * Posts to the extension host, installed by webviewInit.js.
+	 *
+	 * Not acquired here: acquireVsCodeApi() may be called only once per page,
+	 * and webviewInit.js is where that happens. Null until it runs, which is
+	 * safe because it is also what starts the first render, so nothing has
+	 * fetched yet.
+	 *
+	 * @type {((message: object) => void) | null}
+	 */
+	let post = null;
+
+	window.PlantumlFetchShim = {
+		/** @param {(message: object) => void} postMessage */
+		reportFailuresTo(postMessage) {
+			post = postMessage;
+		}
+	};
 
 	window.fetch = function (url, options = {}) {
 		const target = String(url);
@@ -63,6 +88,21 @@
 		return nativeFetch(absolute, {
 			...options,
 			headers: { ...(options.headers || {}), [tokenHeader]: token }
+		}).catch((error) => {
+			// A rejection is the request never arriving -- a dead sidecar, a
+			// refused connection -- as opposed to the backend answering with an
+			// error status, which the app's own code sees and handles. Report
+			// it, then rethrow: this shim changes where requests go, not what
+			// callers observe.
+			if (post) {
+				post({
+					type: 'backendUnreachable',
+					route: target,
+					detail: error.message
+				});
+			}
+
+			throw error;
 		});
 	};
 })();

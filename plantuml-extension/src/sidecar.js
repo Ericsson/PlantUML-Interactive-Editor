@@ -34,8 +34,11 @@
 
 const { spawn } = require('child_process');
 const crypto = require('crypto');
+const os = require('os');
+const path = require('path');
 const vscode = require('vscode');
 const { SECTION, normalizePath, isFile } = require('./settings');
+const extensionPackage = require('../package.json');
 
 /** Key within SECTION, and the id the user sees in Settings. */
 const PYTHON_KEY = 'pythonPath';
@@ -50,6 +53,26 @@ const PYTHON_SETTING = `${SECTION}.${PYTHON_KEY}`;
  */
 const PYTHON_ENV = 'PLANTUML_GUI_PYTHON';
 
+/** Directory name for this extension's own data, under the XDG data home. */
+const DATA_DIR_NAME = 'plantuml-gui';
+
+/**
+ * The venv the setup instructions create, tried when nothing is configured.
+ *
+ * Under the XDG data home because a venv is application data. Computed per call
+ * so HOME and XDG_DATA_HOME are read when used, not at import.
+ *
+ * @returns {{ dir: string, python: string }} the venv and its interpreter
+ */
+function standardVenv() {
+	const dataHome =
+		normalizePath(process.env.XDG_DATA_HOME) ||
+		path.join(os.homedir(), '.local', 'share');
+	const dir = path.join(dataHome, DATA_DIR_NAME, 'venv');
+
+	return { dir, python: path.join(dir, 'bin', 'python') };
+}
+
 // Must match PORT_LINE_PREFIX in src/plantuml_gui/serve.py.
 const PORT_LINE_PREFIX = 'PLANTUML_GUI_PORT=';
 
@@ -62,6 +85,20 @@ const TOKEN_HEADER = 'X-PlantUML-Token';
 const STARTUP_TIMEOUT_MS = 30000;
 
 const HEALTH_TIMEOUT_MS = 2000;
+
+/**
+ * The backend version this extension expects: its own, trimmed to major.minor.
+ * Extension `0.31.0` gives `"0.31"`, which is what a matching backend's
+ * __about__.py reports -- a VS Code manifest must carry three components and
+ * the backend has two, so untrimmed, a correct pair would look mismatched.
+ * Trimming also leaves the patch free, so an extension-only fix can ship as
+ * `0.31.1` against an unchanged backend. Same rule as `_major_minor` in
+ * scripts/check_app_versions.py, which enforces it at commit time.
+ */
+const EXPECTED_BACKEND_VERSION = extensionPackage.version
+	.split('.')
+	.slice(0, 2)
+	.join('.');
 
 /** Thrown when the sidecar cannot be started or does not become ready. */
 class SidecarStartError extends Error {}
@@ -90,6 +127,12 @@ class Sidecar {
 		this.port = port;
 		this.token = token;
 		this.baseUrl = `http://127.0.0.1:${port}/`;
+		// Filled in by waitForHealthy once /health has answered.
+		/** @type {string | undefined} */
+		this.backendVersion = undefined;
+		// Set by dispose(), read by whoever listens for the child's exit: a
+		// stop we asked for is not a failure to report.
+		this.disposing = false;
 	}
 
 	/** @returns {boolean} whether the child is still running. */
@@ -98,6 +141,9 @@ class Sidecar {
 	}
 
 	dispose() {
+		// Before the kill, so the exit handler sees it however fast the child goes away.
+		this.disposing = true;
+
 		if (this.isRunning) {
 			this.process.kill();
 		}
@@ -107,11 +153,12 @@ class Sidecar {
 /**
  * Resolve the Python interpreter to run the sidecar with.
  *
- * Two explicit sources only, most explicit first. Nothing is guessed: the
- * backend is a Python package that no machine has by default, so an
- * interpreter found by searching is one that almost certainly cannot import
+ * Three sources, most explicit first: the setting, the environment variable,
+ * then the venv the setup instructions create. Nothing is searched for on PATH:
+ * the backend is a Python package that no machine has by default, so an
+ * interpreter found that way is one that almost certainly cannot import
  * plantuml_gui, and spawning it would report the failure against the wrong
- * thing. Failing here names the knob to turn instead.
+ * thing.
  *
  * The path is checked here so that a mistake is reported against the knob that
  * caused it, rather than as an ENOENT off the child's error event once a
@@ -120,8 +167,8 @@ class Sidecar {
  * See plantuml-extension/README.md for which knob to use when.
  *
  * @returns {Promise<string>} an interpreter path.
- * @throws {PythonConfigError} when no interpreter is configured, or the
- *   configured one is not a file
+ * @throws {PythonConfigError} when no interpreter is configured and the
+ *   standard venv is absent, or when a configured one is not a file
  */
 async function resolvePythonPath() {
 	const configured = normalizePath(
@@ -140,10 +187,18 @@ async function resolvePythonPath() {
 		return requireInterpreter(fromEnv, `the ${PYTHON_ENV} environment variable`);
 	}
 
+	const standard = standardVenv();
+
+	if (isFile(standard.python)) {
+		return standard.python;
+	}
+
 	throw new PythonConfigError(
-		'No Python interpreter is configured for the PlantUML backend. Set ' +
-			`"${PYTHON_SETTING}" to an interpreter that has the ` +
-			`plantuml-gui package installed, or set ${PYTHON_ENV}.`
+		'The PlantUML backend is not installed. Create it with:\n\n' +
+			`  python3 -m venv ${standard.dir}\n` +
+			`  ${standard.dir}/bin/pip install <path to plantuml_gui-*.whl>\n\n` +
+			`Or set "${PYTHON_SETTING}" to an interpreter that already has the ` +
+			`plantuml-gui package installed (or ${PYTHON_ENV}).`
 	);
 }
 
@@ -214,8 +269,7 @@ function describeStartFailure(pythonPath, stderr, spawnError) {
 	if (/No module named ['"]?plantuml_gui/.test(stderr)) {
 		return (
 			`Python at "${pythonPath}" does not have the plantuml-gui package. ` +
-			'Install it into that interpreter, e.g. "pip install -e ." from the ' +
-			'repository root.'
+			`Install it with:\n\n  "${pythonPath}" -m pip install <path to plantuml_gui-*.whl>`
 		);
 	}
 
@@ -246,6 +300,12 @@ async function waitForHealthy(sidecar, deadline) {
 				signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS)
 			});
 			if (response.ok) {
+				// Best-effort: a body that is not JSON, or has no version
+				// field, leaves backendVersion undefined rather than failing
+				// startup -- the backend answered, which is what this
+				// function promises.
+				const body = await response.json().catch(() => undefined);
+				sidecar.backendVersion = body?.version;
 				return;
 			}
 			lastError = new Error(`/health returned ${response.status}`);
@@ -385,12 +445,14 @@ function readPortLine(child, pythonPath, getStderr) {
 module.exports = {
 	startSidecar,
 	resolvePythonPath,
+	standardVenv,
 	buildEnv,
 	describeStartFailure,
 	readPortLine,
 	Sidecar,
 	SidecarStartError,
 	PythonConfigError,
+	EXPECTED_BACKEND_VERSION,
 	PYTHON_KEY,
 	PYTHON_SETTING,
 	PYTHON_ENV,

@@ -51,6 +51,11 @@
 
 	const post = (message) => vscodeApi.postMessage(message);
 
+	// fetchShim.js reports requests that never reached the sidecar, and cannot
+	// acquire the API itself: that may be done only once per page, and it is
+	// done just above.
+	window.PlantumlFetchShim.reportFailuresTo(post);
+
 	// Assigns script.js's `let editor` binding, not a new global.
 	editor = window.PlantumlEditorShim.create(post);
 

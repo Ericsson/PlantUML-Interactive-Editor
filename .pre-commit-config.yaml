@@ -37,3 +37,14 @@ repos:
         language: system
         pass_filenames: false
         files: ^(plantuml-extension/package\.json|src/plantuml_gui/templates/index\.html)$
+    -   id: check-app-versions
+        name: check extension/web-app versions match
+        description: >-
+            the extension and the plantuml-gui backend are installed as a pair
+            and built from one commit, so the extension's version tracks the
+            backend's (major.minor); nothing at runtime notices if only one is
+            bumped.
+        entry: uv run python scripts/check_app_versions.py
+        language: system
+        pass_filenames: false
+        files: ^(plantuml-extension/package\.json|src/plantuml_gui/__about__\.py)$
