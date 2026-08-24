@@ -115,8 +115,7 @@ Python side, `src/plantuml_gui/`:
 | File | Responsibility |
 | --- | --- |
 | `serve.py` | The sidecar entry point. Same Flask `app`, different startup: ephemeral port, `/health`, `/webview`, token auth, CORS, jar override. |
-| `install_venv.py` | Creates the virtual environment the extension runs the backend in, and judges whether the interpreter running it can host the backend. Runs out of the wheel, before the wheel is installed. |
-| `__init__.py` | Empty, and load-bearing: it makes the package importable from inside the wheel, which `install_venv.py` depends on. |
+| `__init__.py` | Empty, and load-bearing: it makes `plantuml_gui` a regular package rather than an implicit namespace one. |
 | `templates/webview.html` | The page the panel loads. Standalone, not a child of `index.html`. |
 | `templates/partials/app_scripts.html` | The frontend's script list, shared by `index.html` and `webview.html`. |
 | `templates/partials/diagram_toolbar.html` | The toolbar markup, shared by the same two pages; takes the attributes they differ on. |
@@ -370,32 +369,41 @@ directory would suggest — would ship an extension that cannot install its own 
 
 ### Who does what
 
-The install spans both languages, and the division is worth stating because the obvious
-split is the wrong one:
+The install is JavaScript, with one exception, and the exception is the interesting part:
 
-> `src/backendInstall.js` discovers, `install_venv.py` judges.
+> `src/backendInstall.js` performs the install; each interpreter judges itself.
 
-Nothing can run Python to find Python, so enumerating candidate interpreters is necessarily
-the extension's job. It then spawns each candidate against the installer module and reads
-the exit code, making no assessment of its own:
+Creating a virtual environment and running pip are two spawns and a rename, all of which Node
+does directly. Three questions belong to the interpreter itself — is it new enough, does it
+have `venv`, does it have `ensurepip` — so they are put to each candidate as a one-line Python
+program on the command line, `PROBE_SOURCE`, which prints the facts and leaves the judgement to
+`selectInterpreter()`.
 
-| Exit code | Meaning | What the extension does |
+Probing is cheap, so every candidate is asked before anything is built:
+
+| The candidate | What it means | What the extension does |
 | --- | --- | --- |
-| `0`, and an interpreter appeared | Installed, or already there | Use the venv's interpreter |
-| `2` (`EXIT_UNSUITABLE_INTERPRETER`) | This interpreter cannot host the backend | Try the next candidate |
-| `1` (`EXIT_FAILED`) | The install ran and failed | Stop, and report it with the installer's output |
-| anything else | The command was never running the installer | Try the next candidate |
+| answers, new enough, has both modules | usable | choose it, and stop looking |
+| answers, older than `requires-python` | too old | try the next candidate |
+| answers without the marker line | not a Python | try the next candidate |
+| cannot be spawned | not installed here | try the next candidate |
+| answers, new enough, missing `venv` or `ensurepip` | a good Python, unusable for this | stop, and name what to install |
 
-That keeps the version rule in one place, next to `requires-python`, and has it applied
-*by* the interpreter under judgement rather than by parsing its `--version`. Distinguishing
-the third row from the fourth is what lets a broken install be reported as one, and
-`NoInterpreterError` is a subclass of `BackendInstallError` for the same reason.
+**"Answers without the marker line"** is what makes the search robust on Windows, where a
+`python3` on PATH is usually an App Execution Alias that opens the Microsoft Store. The marker
+word is the whole test: anything that answers without it — that alias, a shell reporting 9009,
+a wrapper script — sends the search on to the next candidate.
 
-The fourth row is what makes the search robust on Windows, where a `python3` on PATH is
-usually an App Execution Alias that opens the Microsoft Store. Anything that answers while
-not running the installer — that alias, a shell reporting 9009, a wrapper script — sends the
-search on to the next candidate. Row one applies the same scepticism from the other side: an
-exit code of 0 is believed once the interpreter it claims to have built is there.
+**"Missing `venv` or `ensurepip`"** is the Debian and Ubuntu case, where `ensurepip` ships
+separately and a venv would come out with no pip in it. It stops the search, because the
+message is the useful outcome: it names the package to install, `python3.12-venv` or whichever
+version applies, which it can do because the probe reported the version.
+
+The install then runs once, against an interpreter already known to be suitable, so a failure
+of it is a failed install, reported as one. `NoInterpreterError` is a subclass of
+`BackendInstallError` so a caller that only wants to say "the install failed" can catch the
+base class, while the one message a user can act on differently — install a Python, or point
+the setting at one you already have — can be told apart.
 
 ### Which interpreters are tried
 
@@ -407,35 +415,64 @@ reach a chosen Python on Windows takes the version as an argument:
 | Linux, macOS | `python3`, then `python3.13` … `python3.10` | `python3` is what the machine calls its Python; the versioned names reach a newer one on a machine whose `python3` is older than 3.10 |
 | Windows | `py -3`, then `python` | The launcher ships with every python.org install and already means "the newest Python 3 here", so it needs no version list. `python` reaches an interpreter that is on PATH without one |
 
-### Running out of the wheel
-
-The extension spawns the installer like this:
+### The probe
 
 ```
-PYTHONPATH=<the bundled wheel> python3 -m plantuml_gui.install_venv \
-    --wheel <the same wheel> --target <the venv to create>
+python3 -I -c "import sys, importlib.util as u; print('probe', sys.version_info[0], sys.version_info[1], u.find_spec('venv') is not None, u.find_spec('ensurepip') is not None)"
 ```
 
-A wheel is a zip, and Python imports out of a zip on `sys.path`, so the installer runs
-before it is installed. The wheel is named twice on purpose: `PYTHONPATH` is how the module
-is found, `--wheel` is what pip installs.
+It prints four facts, and `selectInterpreter()` judges them. The version is among them because
+the messages quote it: "`python3`: Python 3.9, too old", and the name of the `python3.12-venv`
+package to install. `-I` isolates the run from the user site directory, `PYTHONPATH` and
+`sitecustomize`, so the answer describes the interpreter itself. The `probe` marker identifies
+the line as this program's own output.
 
-Two constraints follow, both easy to undo by accident:
+Two constraints on editing it, both easy to undo by accident:
 
-- **`src/plantuml_gui/__init__.py` must exist.** `zipimport` finds regular packages inside
-  a zip but not namespace packages. Without it the import fails on every machine — except
-  one with an editable install of this repository, whose import hook answers from the
-  checkout before `PYTHONPATH` is consulted, which is exactly how this went unnoticed
-  once. `TestRunningOutOfTheWheel` in `tests/shared/test_install_venv.py` guards it, using
-  `python -S` so that hook cannot answer.
-- **`install_venv.py` is held to Python 3.8 syntax.** Python compiles a whole file before
-  running any of it, and the "too old" message is inside `main()`, so one unparseable line
-  anywhere in this file means an old interpreter never reaches it. What it does instead is
-  exit 1 with a traceback — and 1 is `EXIT_FAILED`, so the extension stops the search and
-  reports a broken install, never trying the newer Python further down the candidate list.
+- **Single quotes and spaces only.** It crosses `CreateProcess` argv quoting on Windows as one
+  argument, and staying inside that character set keeps it there intact. Hence `print(a, b)`
+  for the formatting.
+- **Python 3.6 syntax.** Python compiles the whole program before running any of it, so the
+  syntax has to be old enough for every interpreter the probe is put to. A Python 2 reaching
+  it stops at `importlib.util`, which is the answer wanted from a Python 2.
 
-Importing the package must also stay dependency-free, which is why `__init__.py` is empty:
-`install_venv` is imported before Flask and the rest exist.
+`test/backendInstall.test.js` runs the probe under a real `python3` when the machine has one.
+That is the only test that would catch a syntax error in it; everything else uses shell
+stand-ins that answer with whatever version a test needs.
+
+### The install itself
+
+Three steps, against the chosen interpreter:
+
+```
+<chosen> -m venv --clear <target>.tmp-<pid>
+<target>.tmp-<pid>/bin/python -m pip install --no-input --disable-pip-version-check <wheel>
+rename <target>.tmp-<pid> -> <target>
+```
+
+pip runs through the venv's interpreter, whose path the rename leaves working. The absolute
+shebang in `bin/pip` would not survive it, and this package installs no console scripts of its
+own, so that shebang is the only one at stake.
+
+The rename is what makes the install atomic, and both reasons matter:
+
+- **Only a finished venv is ever visible.** The extension decides the backend is installed by
+  looking for the interpreter inside `<target>`. Building elsewhere and renaming a finished
+  result means `<target>` appears complete, with its package installed, the moment it appears
+  at all — through a cancelled window, a killed process or a full disk between the two spawns.
+- **Two windows racing settle through the filesystem.** Each window is its own extension
+  host, so both may find the venv missing and both start building. The pid in the build
+  directory's name keeps them apart, and then they race to rename: the loser finds `<target>`
+  already a directory, discards its own work, and uses the winner's. Safe precisely because
+  of the previous point.
+
+Renaming a venv works because `pyvenv.cfg` records the *base* interpreter's location, and
+`sys.prefix` is derived at run time from the path the interpreter was invoked by. Both survive
+a move.
+
+A build directory is removed when a step fails. A process killed outright leaves one behind,
+where it sits inert, since `<target>` is the only path anything looks for. Stale ones are left
+alone, because a live sibling window's build looks exactly the same from outside.
 
 ### Where it goes, and updates
 
@@ -459,8 +496,8 @@ directory clears the lot.
 
 Only two things here depend on the platform: the candidate list above, and the path to the
 interpreter inside a venv — `Scripts\python.exe` on Windows, `bin/python` elsewhere.
-`venvInterpreter()` in `backendInstall.js` and `venv_python()` in `install_venv.py` both
-compute that path and must agree; both run on the machine being installed to, so they do.
+`venvInterpreter()` in `backendInstall.js` is the only copy of that rule; the install goes
+through it for pip, and the sidecar is spawned with it afterwards.
 
 Linux and macOS share every path here, and pip finds a wheel for each of the compiled
 dependencies on both. Windows reaches its interpreter through the `py` launcher, keeps the
@@ -472,12 +509,12 @@ plus a venv plus `site-packages` runs close to 260 characters.
 
 ### Atomicity
 
-`install_venv.py` builds into `<target>.tmp-<pid>` and renames the finished result into
+`install()` builds into `<target>.tmp-<pid>` and renames the finished result into
 place. Two properties come out of that:
 
 - **A half-built venv is never visible.** The extension decides the backend is installed by
   looking for the interpreter inside the target. Building there directly would mean an
-  install interrupted between `venv.create` and pip leaves that interpreter present but
+  install interrupted between `-m venv` and pip leaves that interpreter present but
   unable to import `plantuml_gui` — forever, since the directory exists.
 - **Two windows racing cannot corrupt each other.** Each extension host is its own process,
   so no in-process guard can help. Both build, both rename, and the filesystem settles it:
@@ -500,7 +537,7 @@ progress notification rather than two.
 **PlantUML: Reinstall Backend** deletes the virtual environment and builds it again, for the
 state nothing else recovers from: a venv that exists — and is therefore used — but does not
 work. It stops the sidecar first, that being the process living in the directory about to be
-deleted. Because `install_venv.py` leaves an existing target alone, a surviving directory
+deleted. Because `install()` leaves an existing target alone, a surviving directory
 means an install that does nothing, so the command refuses to run while an install is in
 flight, waits for the sidecar to actually exit (awaiting a start still in flight, which owns
 no handle to stop yet), and reports a venv it could not remove instead of installing over it.
@@ -993,15 +1030,12 @@ Each site carries a comment naming the other.
 | `PLANTUML_GUI_TOKEN`, `PLANTUML_GUI_JAR_OVERRIDE` | `src/sidecar.js` (`buildEnv`) | `serve.py` (`TOKEN_ENV`, `JAR_ENV`) |
 | The six message types | `extension.js` | `static/vscode/` shims |
 | `major.minor` version compatibility rule | `src/sidecar.js` (`EXPECTED_BACKEND_VERSION`) | `scripts/check_app_versions.py` (`_major_minor`) |
-| `plantuml_gui.install_venv`, and its `--wheel` / `--target` arguments | `src/backendInstall.js` (`INSTALLER_MODULE`) | `install_venv.py` (`parse_args`) |
-| Installer exit codes 1 and 2 | `src/backendInstall.js` (`EXIT_FAILED`, `EXIT_UNSUITABLE_INTERPRETER`) | `install_venv.py` (same names) |
-| The interpreter inside a venv, per platform | `src/backendInstall.js` (`venvInterpreter`) | `install_venv.py` (`venv_python`) |
-| Python 3.10 as the floor | — | `install_venv.py` (`MIN_PYTHON`), `pyproject.toml` (`requires-python`) |
+| Python 3.10 as the floor | `src/backendInstall.js` (`MIN_PYTHON`) | `pyproject.toml` (`requires-python`) |
 
-The last four are asserted by tests rather than left to the comments:
-`tests/shared/test_install_venv.py` reads the exit code out of `backendInstall.js` and the
-floor out of `pyproject.toml`, and `test/backendInstall.test.js` reads the module name and
-arguments out of `install_venv.py`.
+The floor is asserted by a test: `test/backendInstall.test.js` reads `requires-python` out of
+`pyproject.toml` and compares. pip enforces it a second time, refusing the wheel on an
+interpreter below `requires-python`; the check in `MIN_PYTHON` is what turns that into "try the
+next candidate".
 
 One more invariant lives entirely in the page: the script load order in `webview.html` —
 vendor, then shims, then app, then boot. Every step of it is justified in that file.

@@ -4,11 +4,10 @@
 
 ```
 ├── src/plantuml_gui/       # Main application package
-│   ├── __init__.py         # Empty, and load-bearing: makes the package importable from inside a wheel (zipimport)
+│   ├── __init__.py         # Empty, and load-bearing: makes plantuml_gui a regular package, not a namespace one
 │   ├── __main__.py         # Entry point (python -m plantuml_gui)
 │   ├── __about__.py        # Version info
 │   ├── serve.py            # Sidecar entry point for the VS Code extension (ephemeral port, /health, /webview)
-│   ├── install_venv.py     # Creates the venv the extension runs the backend in; run out of the bundled wheel
 │   ├── app.py              # Flask app factory, blueprint registration only
 │   ├── shared/             # Shared infrastructure (used by all diagram types)
 │   │   ├── routes.py       # Shared routes (/, /render, /renderPNG, /encode, /decode, /addTitle, /getTextTitle, /editTitle, /deleteTitle)
@@ -85,8 +84,7 @@
 │   ├── shared/             # Shared route tests (render, encode/decode, title) and the extension-facing entry points
 │   │   ├── test_render.py
 │   │   ├── test_title.py
-│   │   ├── test_serve.py       # Sidecar entry point (token auth, CORS, /health, /webview)
-│   │   └── test_install_venv.py # The venv the extension installs the backend into
+│   │   └── test_serve.py       # Sidecar entry point (token auth, CORS, /health, /webview)
 │   ├── sequence/           # Sequence diagram tests
 │   │   ├── test_participant.py
 │   │   ├── test_message.py

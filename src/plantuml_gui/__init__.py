@@ -24,13 +24,7 @@
 
 """The PlantUML Interactive Editor backend.
 
-Deliberately empty of code: importing this package must stay free, because
-``plantuml_gui.install_venv`` is imported by the VS Code extension before any
-dependency of this package has been installed.
-
-This file is what makes ``plantuml_gui`` a regular package rather than an
-implicit namespace one, and it is load-bearing for that same install:
-``zipimport`` finds regular packages inside a zip but not namespace packages, and
-the extension runs the installer straight out of the wheel, which is a zip. See
-install_venv.py, and test_install_venv.py's TestRunningOutOfTheWheel.
+Deliberately empty of code: this file exists to make ``plantuml_gui`` a regular
+package rather than an implicit namespace one, so that what the build produces is
+a package at the root of the wheel and importing it costs nothing.
 """

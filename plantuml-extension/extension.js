@@ -203,7 +203,7 @@ function managedPythonPath(context) {
  * Concurrent callers await the same install, as with ensureSidecar: two
  * commands run in quick succession would otherwise put two progress
  * notifications on screen for the one directory. Windows racing each other is
- * settled in install_venv.py, which is the only place that can settle it.
+ * settled by the rename in claim(), which is the only place that can settle it.
  *
  * @param {vscode.ExtensionContext} context
  * @returns {Promise<string>} the installed interpreter
@@ -239,7 +239,7 @@ function installBackendOnce(context) {
  * half-removed package. The running backend is stopped first, because it is the
  * process living in the directory about to be deleted.
  *
- * Everything unusual here comes from install_venv.py leaving an existing target
+ * Everything unusual here comes from install() leaving an existing target
  * alone: any directory that survives means an install that does nothing, so a
  * step this cannot carry out must stop it rather than be worked around.
  *
@@ -249,7 +249,7 @@ async function reinstallBackend(context) {
 	// Refused rather than queued behind an install already in flight, because
 	// joining that one would be worse than doing nothing: installBackendOnce
 	// hands back the promise of an install that started *before* the delete
-	// below, and install_venv.py treats an existing target as a finished
+	// below, and install() treats an existing target as a finished
 	// install and returns success. So the await could resolve on a decision
 	// made about the directory this is about to remove, and this would report a
 	// reinstall while leaving no backend installed at all.
@@ -353,7 +353,7 @@ async function stopSidecarForReinstall() {
  * moment longer: Windows will not unlink a running executable's image, and the
  * child's exit event is not a promise that its handles have been released.
  *
- * Reported rather than swallowed, because install_venv.py leaves an existing
+ * Reported rather than swallowed, because install() leaves an existing
  * target alone. A delete that quietly failed would be followed by an install
  * that does nothing, and by a notification saying the backend was reinstalled
  * -- the one lie a repair command cannot afford, since the user would have no

@@ -260,7 +260,7 @@ suite('extension: which document the panel shows', () => {
 
 suite('extension: reinstalling the backend', () => {
 	// The repair command for a venv that exists and does not work. Its two
-	// hazards are the same one seen twice: install_venv.py treats an existing
+	// hazards are the same one seen twice: install() treats an existing
 	// target as a finished install, so anything that leaves the old directory
 	// standing turns "reinstalled" into a claim that is simply untrue.
 	const fs = require('fs');
@@ -323,7 +323,7 @@ suite('extension: reinstalling the backend', () => {
 
 	test('reports a venv it could not remove, rather than installing over it', async () => {
 		// The regression that matters: swallowing this failure meant an install
-		// that did nothing -- install_venv.py leaves an existing target alone --
+		// that did nothing -- install() leaves an existing target alone --
 		// followed by "The PlantUML backend was reinstalled".
 		const venv = venvWithContents();
 
