@@ -112,15 +112,41 @@ let backendInstalling;
 /** @type {vscode.OutputChannel | undefined} */
 let outputChannel;
 /**
- * The diagram panels currently open.
+ * The diagram panel this window has open, while it has one.
  *
- * The sidecar outlives them -- it is disposed with the extension, not with the
- * last panel -- so this is what tells a backend death the user is waiting on
- * from one they will never see. See reportBackendExit.
+ * One per window: the panel follows the active editor, so it serves every
+ * diagram the window opens, and the command reveals it rather than opening
+ * another.
  *
- * @type {Set<vscode.WebviewPanel>}
+ * It also tells a backend death the user is waiting on from one they will never
+ * see -- the sidecar outlives the panel, being disposed with the extension --
+ * which is what reportBackendExit reads it for.
+ *
+ * @type {DiagramPanel | undefined}
  */
-const livePanels = new Set();
+let diagramPanel;
+
+/**
+ * The panel being opened, while one is being opened.
+ *
+ * diagramPanel is only set once the page has loaded, several awaits in, so this
+ * is what a second invocation made in the meantime sees. It awaits the open
+ * already in flight, as in ensureSidecar and installBackendOnce.
+ *
+ * @type {Promise<void> | undefined}
+ */
+let diagramPanelOpening;
+
+/**
+ * The open diagram panel, and what the command needs of it.
+ *
+ * @typedef {object} DiagramPanel
+ * @property {vscode.WebviewPanel} panel the panel itself, to reveal or dispose
+ * @property {import('./src/sidecar').Sidecar} sidecar the backend its page was
+ *   built against; a dead one leaves the panel unusable, see panelAction
+ * @property {(document: vscode.TextDocument) => void} show point it at a file,
+ *   resending the text and retitling the tab
+ */
 
 /**
  * Entry point, run the first time the command is invoked.
@@ -445,8 +471,8 @@ function ensureSidecar(jarPath, managedPython) {
 /**
  * Announce a backend that went away on its own.
  *
- * Always logged; only raised as a notification when a panel is open. The
- * sidecar outlives panels, so without that gate, closing the diagram and
+ * Always logged; only raised as a notification when the panel is open. The
+ * sidecar outlives the panel, so without that gate, closing the diagram and
  * carrying on with the day would still be interrupted by an error about a
  * diagram that is not there -- and the recovery this offers, reopening the
  * panel, is not something the user asked to be told about.
@@ -472,7 +498,7 @@ async function reportBackendExit(stopped, code, signal) {
 	const cause = signal ? `signal ${signal}` : `exit code ${code}`;
 	outputChannel?.appendLine(`[backend] the PlantUML backend stopped (${cause})`);
 
-	if (livePanels.size === 0) {
+	if (!diagramPanel) {
 		return;
 	}
 
@@ -585,12 +611,72 @@ function warnOnBackendVersionMismatch(activeSidecar) {
 }
 
 /**
+ * Show the diagram for the active editor's document: reveal the open panel, or
+ * open one.
+ *
+ * @param {vscode.ExtensionContext} context
+ * @returns {Promise<void>}
+ */
+function openDiagramPanel(context) {
+	const open = diagramPanel;
+	const action = panelAction(open);
+
+	if (open && action === 'reveal') {
+		// The panel follows the active editor on its own, but only for the
+		// files isPlantUmlDocument accepts. Run on any other file, the command
+		// means *that* file -- it "opens whatever the user ran it on" -- so it
+		// is pointed at it here.
+		const editor = vscode.window.activeTextEditor;
+
+		if (editor) {
+			open.show(editor.document);
+		}
+
+		open.panel.reveal();
+		return Promise.resolve();
+	}
+
+	if (open && action === 'replace') {
+		// Disposal clears diagramPanel, leaving the open below to build a fresh
+		// panel against a live backend.
+		open.panel.dispose();
+	}
+
+	if (!diagramPanelOpening) {
+		diagramPanelOpening = createDiagramPanel(context).finally(() => {
+			diagramPanelOpening = undefined;
+		});
+	}
+
+	return diagramPanelOpening;
+}
+
+/**
+ * What the command should do about the panel that is already open.
+ *
+ * A panel is revealed unless the backend its page was built against has since
+ * died: the page holds that child's address and token, so nothing it posts can
+ * render, and it is replaced instead. That is the recovery reportBackendExit
+ * points the user at -- run the command again.
+ *
+ * @param {DiagramPanel | undefined} open
+ * @returns {'open' | 'reveal' | 'replace'}
+ */
+function panelAction(open) {
+	if (!open) {
+		return 'open';
+	}
+
+	return open.sidecar.isRunning ? 'reveal' : 'replace';
+}
+
+/**
  * Open a diagram webview panel for the active editor's document, render its
  * current content, and keep the diagram in sync as the document changes.
  *
  * @param {vscode.ExtensionContext} context
  */
-async function openDiagramPanel(context) {
+async function createDiagramPanel(context) {
 	const editor = vscode.window.activeTextEditor;
 
 	if (!editor) {
@@ -680,11 +766,6 @@ async function openDiagramPanel(context) {
 		return;
 	}
 
-	// Counted from here, not from createWebviewPanel: the early return above
-	// disposes the panel before onDidDispose is registered, which would leave it
-	// in the set for good.
-	livePanels.add(panel);
-
 	let debounceTimer;
 
 	// Reentrancy guard for applyEdit only. The text comparisons on both sides
@@ -700,16 +781,12 @@ async function openDiagramPanel(context) {
 		panel.webview.postMessage({ type: 'documentChanged', text: document.getText() });
 	};
 
-	// One panel serves every diagram in the window: opening another PlantUML
-	// file points it at that file, the way the Markdown preview follows the
-	// editor. The command is invoked once and the panel keeps up from there.
-	//
-	// Only PlantUML files take it over, by isPlantUmlDocument's reading; the
-	// panel stays on its current file while the user is in a .py or a settings
-	// tab, and while the panel itself has focus, which leaves no active text
-	// editor at all.
-	const activeEditorListener = vscode.window.onDidChangeActiveTextEditor((next) => {
-		if (!next || next.document === document || !isPlantUmlDocument(next.document)) {
+	// The one way onto another file: retitle, resend, and drop what belonged to
+	// the file being left. Called by the active-editor listener below, and by
+	// the command when it reveals this panel.
+	/** @param {vscode.TextDocument} next */
+	const showDocument = (next) => {
+		if (next === document) {
 			return;
 		}
 
@@ -719,10 +796,31 @@ async function openDiagramPanel(context) {
 		// one and resend what it is about to send.
 		clearTimeout(debounceTimer);
 
-		document = next.document;
+		document = next;
 		panel.title = panelTitle(document);
 		outputChannel?.appendLine(`[panel] now showing ${document.fileName}`);
 		postDocument();
+	};
+
+	// Handed to the window from here, not from createWebviewPanel: the early
+	// returns above dispose the panel before onDidDispose is registered, so a
+	// handle taken there would outlive the panel it names.
+	diagramPanel = { panel, sidecar: active, show: showDocument };
+
+	// One panel serves every diagram in the window: opening another PlantUML
+	// file points it at that file, the way the Markdown preview follows the
+	// editor. The command is invoked once and the panel keeps up from there.
+	//
+	// Only PlantUML files take it over, by isPlantUmlDocument's reading; the
+	// panel stays on its current file while the user is in a .py or a settings
+	// tab, and while the panel itself has focus, which leaves no active text
+	// editor at all.
+	const activeEditorListener = vscode.window.onDidChangeActiveTextEditor((next) => {
+		if (!next || !isPlantUmlDocument(next.document)) {
+			return;
+		}
+
+		showDocument(next.document);
 	});
 
 	const changeListener = vscode.workspace.onDidChangeTextDocument((event) => {
@@ -778,7 +876,11 @@ async function openDiagramPanel(context) {
 	});
 
 	panel.onDidDispose(() => {
-		livePanels.delete(panel);
+		// Only while this is still the window's panel: a replaced one is
+		// disposed alongside its successor, and must not clear its handle.
+		if (diagramPanel?.panel === panel) {
+			diagramPanel = undefined;
+		}
 		clearTimeout(debounceTimer);
 		activeEditorListener.dispose();
 		changeListener.dispose();
@@ -1012,6 +1114,9 @@ module.exports = {
 	// follows and what it calls itself once it has.
 	isPlantUmlDocument,
 	panelTitle,
+	// Exported for the tests: what a second run of the command does with the
+	// panel the first one opened.
+	panelAction,
 	// Exported for the tests: which interpreter a window ends up using, and
 	// whether it had to install one to get there.
 	ensureBackendPython,
