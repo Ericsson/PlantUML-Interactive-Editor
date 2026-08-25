@@ -22,6 +22,10 @@
       {
         "command": "plantuml-interactive-editor.openDiagram",
         "title": "PlantUML: Open Interactive Diagram"
+      },
+      {
+        "command": "plantuml-interactive-editor.reinstallBackend",
+        "title": "PlantUML: Reinstall Backend"
       }
     ],
     "configuration": {
@@ -32,7 +36,7 @@
           "default": "",
           "scope": "machine-overridable",
           "order": 1,
-          "markdownDescription": "Absolute path to a Python interpreter that has the `plantuml-gui` package installed. When empty, the `PLANTUML_GUI_PYTHON` environment variable is used, then the venv at `~/.local/share/plantuml-gui/venv` that the setup instructions create."
+          "markdownDescription": "Absolute path to a Python interpreter that has the `plantuml-gui` package installed. When empty, the `PLANTUML_GUI_PYTHON` environment variable is used, then the virtual environment the extension installs for itself the first time a diagram is opened."
         },
         "plantumlInteractive.plantumlJar": {
           "type": "string",

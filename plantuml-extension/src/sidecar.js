@@ -34,8 +34,6 @@
 
 const { spawn } = require('child_process');
 const crypto = require('crypto');
-const os = require('os');
-const path = require('path');
 const vscode = require('vscode');
 const { SECTION, normalizePath, isFile } = require('./settings');
 const extensionPackage = require('../package.json');
@@ -52,26 +50,6 @@ const PYTHON_SETTING = `${SECTION}.${PYTHON_KEY}`;
  * plantuml-extension/README.md.
  */
 const PYTHON_ENV = 'PLANTUML_GUI_PYTHON';
-
-/** Directory name for this extension's own data, under the XDG data home. */
-const DATA_DIR_NAME = 'plantuml-gui';
-
-/**
- * The venv the setup instructions create, tried when nothing is configured.
- *
- * Under the XDG data home because a venv is application data. Computed per call
- * so HOME and XDG_DATA_HOME are read when used, not at import.
- *
- * @returns {{ dir: string, python: string }} the venv and its interpreter
- */
-function standardVenv() {
-	const dataHome =
-		normalizePath(process.env.XDG_DATA_HOME) ||
-		path.join(os.homedir(), '.local', 'share');
-	const dir = path.join(dataHome, DATA_DIR_NAME, 'venv');
-
-	return { dir, python: path.join(dir, 'bin', 'python') };
-}
 
 // Must match PORT_LINE_PREFIX in src/plantuml_gui/serve.py.
 const PORT_LINE_PREFIX = 'PLANTUML_GUI_PORT=';
@@ -113,6 +91,16 @@ class SidecarStartError extends Error {}
 class PythonConfigError extends SidecarStartError {}
 
 /**
+ * Thrown when no interpreter is configured and none has been installed yet.
+ *
+ * The one resolution failure with an automatic answer: the extension carries a
+ * wheel, so a caller can install the managed backend and try again. See
+ * installBackend() in backendInstall.js. A subclass of PythonConfigError so the
+ * message still reaches a caller that treats every resolution failure alike.
+ */
+class BackendMissingError extends PythonConfigError {}
+
+/**
  * A running sidecar: the child process plus the address and token needed to
  * talk to it.
  */
@@ -148,14 +136,60 @@ class Sidecar {
 			this.process.kill();
 		}
 	}
+
+	/**
+	 * Stop the child and wait for it to actually be gone.
+	 *
+	 * dispose() only asks: kill() returns as soon as the signal is sent, and
+	 * the process is still there for a moment after that. A caller that needs
+	 * the child *finished* has to wait for its exit, which is what this adds.
+	 * The one that does is the reinstall, which deletes the venv the child's
+	 * interpreter is running out of -- and Windows will not unlink a running
+	 * executable's image.
+	 *
+	 * Bounded, because a child that never answers the signal must not hang the
+	 * caller in silence. The return value says which of the two happened,
+	 * leaving what an unstoppable backend means to the caller.
+	 *
+	 * @param {number} timeoutMs how long to wait for the exit
+	 * @returns {Promise<boolean>} whether the child had exited by then
+	 */
+	async stop(timeoutMs) {
+		if (!this.isRunning) {
+			// Already gone. Still marked, so an exit event still in flight is
+			// read as the stop it is, the same as for a child killed here.
+			this.disposing = true;
+			return true;
+		}
+
+		// Registered before the kill, so a child that goes away at once is not
+		// missed.
+		const exited = new Promise((resolve) => {
+			this.process.once('exit', () => resolve(true));
+		});
+
+		/** @type {ReturnType<typeof setTimeout> | undefined} */
+		let timer;
+		const timedOut = new Promise((resolve) => {
+			timer = setTimeout(() => resolve(false), timeoutMs);
+		});
+
+		this.dispose();
+
+		try {
+			return await Promise.race([exited, timedOut]);
+		} finally {
+			clearTimeout(timer);
+		}
+	}
 }
 
 /**
  * Resolve the Python interpreter to run the sidecar with.
  *
  * Three sources, most explicit first: the setting, the environment variable,
- * then the venv the setup instructions create. Nothing is searched for on PATH:
- * the backend is a Python package that no machine has by default, so an
+ * then the venv the extension installed for itself. Nothing is searched for on
+ * PATH: the backend is a Python package that no machine has by default, so an
  * interpreter found that way is one that almost certainly cannot import
  * plantuml_gui, and spawning it would report the failure against the wrong
  * thing.
@@ -166,11 +200,16 @@ class Sidecar {
  *
  * See plantuml-extension/README.md for which knob to use when.
  *
+ * @param {object} [options]
+ * @param {string} [options.managedPython] the interpreter inside the venv the
+ *   extension installs; see managedVenv() in backendInstall.js
  * @returns {Promise<string>} an interpreter path.
- * @throws {PythonConfigError} when no interpreter is configured and the
- *   standard venv is absent, or when a configured one is not a file
+ * @throws {BackendMissingError} when nothing is configured and no venv exists
+ * @throws {PythonConfigError} when a configured interpreter is not a file
  */
-async function resolvePythonPath() {
+async function resolvePythonPath(options = {}) {
+	const { managedPython } = options;
+
 	const configured = normalizePath(
 		vscode.workspace.getConfiguration(SECTION).get(PYTHON_KEY)
 	);
@@ -187,18 +226,17 @@ async function resolvePythonPath() {
 		return requireInterpreter(fromEnv, `the ${PYTHON_ENV} environment variable`);
 	}
 
-	const standard = standardVenv();
-
-	if (isFile(standard.python)) {
-		return standard.python;
+	if (managedPython && isFile(managedPython)) {
+		return managedPython;
 	}
 
-	throw new PythonConfigError(
-		'The PlantUML backend is not installed. Create it with:\n\n' +
-			`  python3 -m venv ${standard.dir}\n` +
-			`  ${standard.dir}/bin/pip install <path to plantuml_gui-*.whl>\n\n` +
-			`Or set "${PYTHON_SETTING}" to an interpreter that already has the ` +
-			`plantuml-gui package installed (or ${PYTHON_ENV}).`
+	// Reached on a first run, and in a checkout with no wheel built. The caller
+	// answers the first case by installing; see ensureBackendPython().
+	throw new BackendMissingError(
+		'The PlantUML backend is not installed, and this build of the extension ' +
+			'is not carrying a wheel to install it from. Build one with ' +
+			`scripts/build_release.sh, or set "${PYTHON_SETTING}" to an interpreter ` +
+			`that already has the plantuml-gui package installed (or ${PYTHON_ENV}).`
 	);
 }
 
@@ -269,7 +307,8 @@ function describeStartFailure(pythonPath, stderr, spawnError) {
 	if (/No module named ['"]?plantuml_gui/.test(stderr)) {
 		return (
 			`Python at "${pythonPath}" does not have the plantuml-gui package. ` +
-			`Install it with:\n\n  "${pythonPath}" -m pip install <path to plantuml_gui-*.whl>`
+			`Point "${PYTHON_SETTING}" at an interpreter that does, or clear it to ` +
+			'use the backend this extension installs for itself.'
 		);
 	}
 
@@ -327,14 +366,16 @@ async function waitForHealthy(sidecar, deadline) {
  *
  * @param {object} [options]
  * @param {string} [options.jarPath] absolute path to plantuml.jar
+ * @param {string} [options.managedPython] the interpreter inside the venv the
+ *   extension installs, passed on to resolvePythonPath
  * @param {import('vscode').OutputChannel} [options.output] receives sidecar stderr, so
  *   Python tracebacks are visible instead of being swallowed
  * @returns {Promise<Sidecar>}
  * @throws {SidecarStartError}
  */
 async function startSidecar(options = {}) {
-	const { jarPath, output } = options;
-	const pythonPath = await resolvePythonPath();
+	const { jarPath, managedPython, output } = options;
+	const pythonPath = await resolvePythonPath({ managedPython });
 	output?.appendLine(`Starting PlantUML backend with interpreter: ${pythonPath}`);
 	// Per-launch secret: this is an HTTP server on loopback, which any local
 	// process can reach, and every route rewrites the user's source.
@@ -445,13 +486,13 @@ function readPortLine(child, pythonPath, getStderr) {
 module.exports = {
 	startSidecar,
 	resolvePythonPath,
-	standardVenv,
 	buildEnv,
 	describeStartFailure,
 	readPortLine,
 	Sidecar,
 	SidecarStartError,
 	PythonConfigError,
+	BackendMissingError,
 	EXPECTED_BACKEND_VERSION,
 	PYTHON_KEY,
 	PYTHON_SETTING,
