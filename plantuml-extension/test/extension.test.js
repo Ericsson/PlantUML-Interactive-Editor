@@ -166,9 +166,12 @@ suite('extension: message protocol', () => {
 		const listenerIndex = source.indexOf('panel.webview.onDidReceiveMessage');
 		assert.notStrictEqual(listenerIndex, -1, 'the webview message listener is gone');
 
-		assert.strictEqual(
-			source.slice(0, listenerIndex).indexOf('postDocument()'),
-			-1,
+		// Only a post at the top level of the open could beat `ready`: the
+		// calls inside the listener callbacks -- the active-editor switch, the
+		// document change -- cannot run until the page is up and gesturing.
+		assert.doesNotMatch(
+			source,
+			/\n\tpostDocument\(\)/,
 			'the document is posted before the webview can listen for it'
 		);
 
@@ -255,6 +258,51 @@ suite('extension: which document the panel shows', () => {
 		// The one place a user can see which of several open diagrams the panel
 		// is pointed at.
 		assert.strictEqual(extension.panelTitle(doc('/w/test2.puml')), 'PlantUML: test2.puml');
+	});
+});
+
+suite('extension: running the command a second time', () => {
+	// Regression: every invocation called createWebviewPanel, so running the
+	// command again -- the natural thing to do when the diagram is not in front
+	// of you -- stacked up a second panel on the same file, each with its own
+	// listeners writing to the same document.
+	const panelFor = (sidecar) => ({
+		panel: { reveal() {}, dispose() {} },
+		sidecar,
+		show() {}
+	});
+
+	test('opens a panel when the window has none', () => {
+		assert.strictEqual(extension.panelAction(undefined), 'open');
+	});
+
+	test('reveals the open panel instead of opening another', () => {
+		assert.strictEqual(extension.panelAction(panelFor({ isRunning: true })), 'reveal');
+	});
+
+	test('replaces a panel whose backend has died', () => {
+		// The recovery reportBackendExit tells the user about: the page holds
+		// the dead child's address and token, so revealing it would bring
+		// forward a diagram that cannot render anything.
+		assert.strictEqual(extension.panelAction(panelFor({ isRunning: false })), 'replace');
+	});
+
+	test('opens through the guard that keeps two invocations to one panel', () => {
+		// The window's handle is only set once the page has loaded, several
+		// awaits into the open, so without this two runs in quick succession
+		// both get past the reuse check. Source-checked because the open it
+		// guards needs a backend, a panel and a real webview.
+		const [, source] = readSources().find(([relative]) => relative === 'extension.js');
+
+		const guardIndex = source.indexOf('if (!diagramPanelOpening)');
+		const callIndex = source.indexOf('createDiagramPanel(context)');
+
+		assert.notStrictEqual(callIndex, -1, 'nothing opens the panel');
+		assert.notStrictEqual(guardIndex, -1, 'the open in flight is not tracked');
+		assert.ok(
+			guardIndex < callIndex,
+			'a second invocation can open a second panel while the first is opening'
+		);
 	});
 });
 
