@@ -49,9 +49,11 @@ L 235 934 L 239 932 L 382 931 L 388 933 Z
 M 515 744 L 523 737 L 725 737 L 731 741 L 734 747
 L 734 837 L 728 845 L 723 847 L 522 846
 L 516 841 L 514 836 Z"
-fill="#262F37"
+fill="#8A94A0"
 fill-rule="evenodd"
 clip-rule="evenodd"
+stroke="#4A5158"
+stroke-width="2"
 />
 
 </svg>
