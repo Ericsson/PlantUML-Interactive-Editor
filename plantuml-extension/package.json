@@ -53,7 +53,7 @@
     "lint": "eslint .",
     "pretest": "npm run lint",
     "test": "vscode-test",
-    "package": "vsce package"
+    "package": "vsce package --baseImagesUrl https://github.com/Ericsson/PlantUML-Interactive-Editor/raw/HEAD/plantuml-extension"
   },
   "dependencies": {
     "bootstrap": "4.6.2",
