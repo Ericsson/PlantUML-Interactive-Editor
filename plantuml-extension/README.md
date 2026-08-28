@@ -1,10 +1,23 @@
 # PlantUML Interactive Editor (VS Code)
 
+<table>
+<tr>
+<td>
+
 Edit PlantUML diagrams by clicking them. Opens a diagram panel beside a `.puml`
 file: right-click elements for context menus, double-click to edit text, and
 every change is written back into the document as a single undoable edit.
 
 Internal extension, distributed as a `.vsix`.
+
+</td>
+<td width="96">
+
+<img src="icon.png" alt="PlantUML Interactive Editor icon" width="96" height="96">
+
+</td>
+</tr>
+</table>
 
 ## Requirements
 

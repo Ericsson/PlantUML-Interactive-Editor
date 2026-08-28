@@ -5,6 +5,7 @@
   "version": "0.31.0",
   "publisher": "Ericsson",
   "license": "MIT",
+  "icon": "icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/Ericsson/PlantUML-Interactive-Editor.git"
@@ -52,7 +53,7 @@
     "lint": "eslint .",
     "pretest": "npm run lint",
     "test": "vscode-test",
-    "package": "vsce package"
+    "package": "vsce package --baseImagesUrl https://github.com/Ericsson/PlantUML-Interactive-Editor/raw/HEAD/plantuml-extension"
   },
   "dependencies": {
     "bootstrap": "4.6.2",

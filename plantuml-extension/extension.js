@@ -747,6 +747,7 @@ async function createDiagramPanel(context) {
 			retainContextWhenHidden: true
 		}
 	);
+	panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'icon.png');
 
 	// Fetched fresh on every panel open, which is what makes editing the
 	// frontend a matter of reopening the panel.
