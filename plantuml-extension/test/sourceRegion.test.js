@@ -31,7 +31,9 @@ const {
 	indentSource,
 	toDocumentRow,
 	toRegionRow,
-	containsLine
+	containsLine,
+	trackLine,
+	LINE_GONE
 } = require('../src/sourceRegion');
 
 /** @param {string[]} lines */
@@ -205,5 +207,86 @@ suite('sourceRegion: row translation', () => {
 		assert.ok(containsLine(region, 14), 'the last line, endLine being inclusive');
 		assert.ok(!containsLine(region, 9), 'the line above');
 		assert.ok(!containsLine(region, 15), 'the line below');
+	});
+});
+
+suite('sourceRegion: following a line through an edit', () => {
+	/**
+	 * One content change, in the shape vscode reports.
+	 *
+	 * @param {number} startLine
+	 * @param {number} startCharacter
+	 * @param {number} endLine
+	 * @param {number} endCharacter
+	 * @param {string} text what replaced the range
+	 */
+	const change = (startLine, startCharacter, endLine, endCharacter, text) => ({
+		range: {
+			start: { line: startLine, character: startCharacter },
+			end: { line: endLine, character: endCharacter }
+		},
+		text
+	});
+
+	test('moves the line down when lines are added above it', () => {
+		// Writing a paragraph above a diagram: the panel has to follow it there
+		// or it loses the diagram on the next thing the author types.
+		assert.strictEqual(trackLine(10, [change(0, 0, 0, 0, 'A new line.\n')]), 11);
+		assert.strictEqual(trackLine(10, [change(3, 0, 3, 0, 'one\ntwo\nthree\n')]), 13);
+	});
+
+	test('moves the line up when lines are removed above it', () => {
+		// A whole line deleted above.
+		assert.strictEqual(trackLine(10, [change(2, 0, 3, 0, '')]), 9);
+		// Two lines joined into one.
+		assert.strictEqual(trackLine(10, [change(2, 4, 3, 2, '')]), 9);
+	});
+
+	test('leaves the line alone for an edit above that adds no lines', () => {
+		assert.strictEqual(trackLine(10, [change(4, 2, 4, 7, 'reworded')]), 10);
+	});
+
+	test('leaves the line alone for edits below it', () => {
+		// The ordinary case: every rewrite the diagram makes is inside its own
+		// block, which is below the fence.
+		assert.strictEqual(trackLine(10, [change(12, 0, 12, 5, ':a;\n:b;')]), 10);
+		assert.strictEqual(trackLine(10, [change(20, 0, 24, 0, '')]), 10);
+	});
+
+	test('follows a newline inserted immediately before the line', () => {
+		// Enter pressed with the caret at the start of the fence: the change
+		// ends where the line begins, so the text of the line is untouched and
+		// only its number moves.
+		assert.strictEqual(trackLine(10, [change(10, 0, 10, 0, '\n')]), 11);
+	});
+
+	test('reports a line whose own text was replaced as gone', () => {
+		// Typing in the fence itself, or deleting a span that covers it. The
+		// fence this line was is not there any more, and a guess could land on
+		// a different diagram -- which the panel would then show and write into.
+		assert.strictEqual(trackLine(10, [change(10, 3, 10, 8, 'x')]), LINE_GONE, 'edited');
+		assert.strictEqual(trackLine(10, [change(9, 0, 11, 0, '')]), LINE_GONE, 'deleted with');
+		assert.strictEqual(trackLine(10, [change(10, 0, 12, 0, '')]), LINE_GONE, 'deleted from');
+	});
+
+	test('sums every change of one event, in any order', () => {
+		// Multi-cursor edits and reformatting arrive as several changes. Each is
+		// measured against the line's position before the event, so the order
+		// they arrive in cannot matter.
+		const above = change(1, 0, 1, 0, 'x\n');
+		const alsoAbove = change(5, 0, 6, 0, '');
+		const below = change(30, 0, 30, 0, 'y\n');
+
+		assert.strictEqual(trackLine(10, [above, alsoAbove, below]), 10);
+		assert.strictEqual(trackLine(10, [below, alsoAbove, above]), 10);
+		assert.strictEqual(trackLine(10, [above, above]), 12);
+	});
+
+	test('leaves the line alone when nothing changed', () => {
+		assert.strictEqual(trackLine(10, []), 10);
+	});
+
+	test('can follow a line to the top of the document', () => {
+		assert.strictEqual(trackLine(3, [change(0, 0, 3, 0, '')]), 0);
 	});
 });

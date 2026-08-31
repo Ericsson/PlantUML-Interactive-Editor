@@ -70,7 +70,8 @@ const {
 	indentSource,
 	toDocumentRow,
 	toRegionRow,
-	containsLine
+	containsLine,
+	trackLine
 } = require('./src/sourceRegion');
 const { findPlantUmlBlocks, blockToShow, blockToFollow } = require('./src/markdownBlocks');
 
@@ -722,6 +723,11 @@ async function createDiagramPanel(context) {
 	// Which diagram in it, when the document holds diagrams rather than being
 	// one. Undefined for a PlantUML file, whose diagram is the whole of it.
 	//
+	// What is remembered of the block is its opening fence, kept current by
+	// trackBlockThroughChanges as the document is edited. The lines themselves
+	// are re-read on every use, so no other field here is relied on to be
+	// fresh -- currentRegion() is what everything downstream actually reads.
+	//
 	// Resolved here, before anything is spawned: a Markdown file with no block
 	// is nothing to open a panel for, and starting a backend first would be a
 	// slow way to say so.
@@ -830,10 +836,10 @@ async function createDiagramPanel(context) {
 	 * every time it is needed. Nothing downstream can then write into a span
 	 * that has stopped being the block.
 	 *
-	 * The block is recognised by its opening fence, which stays put under any
-	 * edit inside it. An edit *above* it moves the fence too, and this stops
-	 * finding it; see the undefined case at each call site, which is why they
-	 * all have one.
+	 * The block is recognised by its opening fence, which the change listener
+	 * keeps current as the document is edited -- see trackBlockThroughChanges.
+	 * It still comes to nothing when an edit rewrote the fence line itself or
+	 * took the block away, so every call site has an answer for that.
 	 *
 	 * @returns {import('./src/sourceRegion').SourceRegion | undefined} undefined
 	 *   when the block the panel is on is no longer in the document
@@ -923,6 +929,30 @@ async function createDiagramPanel(context) {
 		}
 	};
 
+	/**
+	 * Keep the shown block's fence current as the document is edited.
+	 *
+	 * The block is remembered by the line its opening fence is on, so writing a
+	 * paragraph above a diagram moves it. Following it there is what keeps the
+	 * panel live while the document around the diagram is written: the fence
+	 * line is the only thing the panel remembers, and everything else about the
+	 * block is read from the document at use.
+	 *
+	 * An edit that rewrote the fence line itself leaves nothing to follow, and
+	 * trackLine says so rather than guessing -- a guessed line could land on a
+	 * different diagram, and the panel would show, and write into, the wrong
+	 * one. The fence then matches nothing until the caret picks a block again.
+	 *
+	 * @param {readonly vscode.TextDocumentContentChangeEvent[]} changes
+	 */
+	const trackBlockThroughChanges = (changes) => {
+		if (!activeBlock) {
+			return;
+		}
+
+		activeBlock = { ...activeBlock, fenceLine: trackLine(activeBlock.fenceLine, changes) };
+	};
+
 	// The one way onto another file: retitle, resend, and drop what belonged to
 	// the file being left. Called by the active-editor listener below, and by
 	// the command when it reveals this panel.
@@ -984,6 +1014,11 @@ async function createDiagramPanel(context) {
 		if (event.document !== document) {
 			return;
 		}
+
+		// Before the debounce, and on every event rather than the last one: the
+		// shifts of two quick edits have to both be counted, and the ranges an
+		// event carries describe the document as it was when that event fired.
+		trackBlockThroughChanges(event.contentChanges);
 
 		clearTimeout(debounceTimer);
 		// Called with no options: an edit of the diagram on screen, which the

@@ -48,6 +48,10 @@
 // into the prose -- so each direction is named rather than open-coded at the
 // call sites, and each is unit-tested.
 //
+// One more piece of line arithmetic lives here for the same reason: trackLine,
+// which says where a line has moved to after an edit. That is what keeps a
+// diagram findable while the prose around it is being written.
+//
 // Requires nothing from vscode, which is what makes it testable in plain Node,
 // and takes text rather than a TextDocument for the same reason. Line numbers
 // are zero-based throughout, matching both vscode and Ace.
@@ -211,6 +215,63 @@ function containsLine(region, line) {
 	return line >= region.startLine && line <= region.endLine;
 }
 
+/** What trackLine reports for a line an edit did away with. */
+const LINE_GONE = -1;
+
+/**
+ * Where `line` is after a document change, or LINE_GONE if it was rewritten.
+ *
+ * What keeps a diagram in a Markdown file findable while the prose around it is
+ * written. The panel remembers a diagram by the line its fence is on, and
+ * typing anywhere above moves that line; without this, the panel would lose
+ * the diagram on the next paragraph the author adds.
+ *
+ * Three kinds of change, and only one of them moves the line:
+ *
+ *   - entirely above it: the line moves by whatever the change added or
+ *     removed. An insertion that *ends* at the start of the line counts as
+ *     above, since it pushes the line down without touching its text -- that is
+ *     the newline you get from pressing Enter with the caret before a fence.
+ *   - below it: no effect. This is the ordinary case, every rewrite the diagram
+ *     itself makes being inside the block.
+ *   - containing it: the line's own text was replaced, so the fence this line
+ *     was is not there any more, whatever ends up at that number. Reported as
+ *     gone rather than guessed at, because the alternative is a line number
+ *     that could land on a *different* diagram and have the panel show, and
+ *     write into, the wrong one.
+ *
+ * Ranges are the document's before the change, and each is measured against the
+ * line's own before-position, so the changes of one event may arrive in any
+ * order.
+ *
+ * @param {number} line zero-based
+ * @param {readonly {range: {start: {line: number}, end: {line: number,
+ *   character: number}}, text: string}[]} changes one event's content changes,
+ *   in vscode's shape but read only for these three numbers and the text
+ * @returns {number} the line's new number, or LINE_GONE
+ */
+function trackLine(line, changes) {
+	let shifted = line;
+
+	for (const change of changes) {
+		const { start, end } = change.range;
+
+		if (start.line > line) {
+			continue;
+		}
+
+		if (end.line < line || (end.line === line && end.character === 0)) {
+			const added = change.text.split('\n').length - 1;
+			shifted += added - (end.line - start.line);
+			continue;
+		}
+
+		return LINE_GONE;
+	}
+
+	return shifted;
+}
+
 module.exports = {
 	wholeDocumentRegion,
 	regionSource,
@@ -218,5 +279,7 @@ module.exports = {
 	indentSource,
 	toDocumentRow,
 	toRegionRow,
-	containsLine
+	containsLine,
+	trackLine,
+	LINE_GONE
 };
