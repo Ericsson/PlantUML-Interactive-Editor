@@ -211,7 +211,7 @@ instances do not. Every message carries a `type` discriminator.
 
 | Direction | Message | Payload | Sent when |
 | --- | --- | --- | --- |
-| host → webview | `documentChanged` | `{ text }` | Once the webview has posted `ready`, on every document change, debounced 300 ms, and on a switch to another diagram file. |
+| host → webview | `documentChanged` | `{ text, replaced }` | Once the webview has posted `ready`, on every document change, debounced 300 ms, and on a switch to another diagram or file. `replaced` is true for a switch — a source that is not an edit of the one on screen, which the page seeds instead of diffing, so the app's change-highlighting does not mark every line of the new diagram as just edited. |
 | host → webview | `cursorMoved` | `{ row, column }` | On `onDidChangeTextEditorSelection`, undebounced, zero-based. |
 | webview → host | `applyPuml` | `{ text }` | A diagram operation produced new source. |
 | webview → host | `setHighlight` | `{ rows }`, zero-based line numbers | The shim's marker table changed. |

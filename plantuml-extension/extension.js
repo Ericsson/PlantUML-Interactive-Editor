@@ -854,8 +854,14 @@ async function createDiagramPanel(context) {
 	// app's own renderPlantUml(). The text is read at call time, so whatever the
 	// document holds when this runs is what the diagram shows. Called from the
 	// `ready` handler for the first render, from the change listener for every
-	// edit, and on a switch to another file.
-	const postDocument = () => {
+	// edit, and on a switch to another diagram or file.
+	/**
+	 * @param {object} [options]
+	 * @param {boolean} [options.replaced] whether this is a different diagram
+	 *   rather than an edit of the one on screen; see the webview's handler,
+	 *   which seeds a replacement instead of diffing it against what it has
+	 */
+	const postDocument = ({ replaced = false } = {}) => {
 		const region = currentRegion();
 
 		// Nothing to send: the panel keeps the diagram it is showing rather
@@ -867,7 +873,8 @@ async function createDiagramPanel(context) {
 
 		panel.webview.postMessage({
 			type: 'documentChanged',
-			text: regionSource(document.getText(), region)
+			text: regionSource(document.getText(), region),
+			replaced
 		});
 	};
 
@@ -885,7 +892,9 @@ async function createDiagramPanel(context) {
 		activeBlock = block;
 		panel.title = panelTitle(document, block);
 		outputChannel?.appendLine(`[panel] now showing ${panelSubject(document, block)}`);
-		postDocument();
+		// A different diagram, not an edit of the one on screen: the webview
+		// seeds it rather than diffing it against what it has.
+		postDocument({ replaced: true });
 	};
 
 	/**
@@ -977,7 +986,9 @@ async function createDiagramPanel(context) {
 		}
 
 		clearTimeout(debounceTimer);
-		debounceTimer = setTimeout(postDocument, LIVE_UPDATE_DEBOUNCE_MS);
+		// Called with no options: an edit of the diagram on screen, which the
+		// webview compares against what it has rather than reseeding.
+		debounceTimer = setTimeout(() => postDocument(), LIVE_UPDATE_DEBOUNCE_MS);
 	});
 
 	const messageListener = panel.webview.onDidReceiveMessage(async (message) => {
