@@ -66,8 +66,8 @@ suite('sourceRegion: the whole document as a region', () => {
 	});
 
 	test('counts a trailing newline as a line, as vscode does', () => {
-		// document.lineCount is 2 for "a\n": the empty last line is real, and a
-		// region that left it out would drop it on the next write-back.
+		// document.lineCount is 2 for "a\n": the empty last line is real, and the
+		// region covers it, so a write-back keeps it.
 		assert.strictEqual(wholeDocumentRegion('a\n').endLine, 1);
 		assert.strictEqual(wholeDocumentRegion('').endLine, 0);
 	});
@@ -95,8 +95,8 @@ suite('sourceRegion: reading part of a document', () => {
 	});
 
 	test('keeps the carriage returns of a CRLF document', () => {
-		// This is a slice of the user's file, not a rewrite of it. The renderer
-		// has always been given whatever line endings the document uses.
+		// This is a slice of the user's file. The renderer has always been given
+		// whatever line endings the document uses.
 		const crlf = '# Notes\r\n```plantuml\r\n@startuml\r\na -> b\r\n@enduml\r\n```\r\n';
 
 		assert.strictEqual(
@@ -106,8 +106,8 @@ suite('sourceRegion: reading part of a document', () => {
 	});
 
 	test('yields what is there when the region has gone stale', () => {
-		// Total rather than throwing: noticing is the caller's job, and a
-		// throw here would take down a document-change handler.
+		// Total, so a document-change handler stays on its feet; noticing is the
+		// caller's job.
 		assert.strictEqual(regionSource('a\nb', { startLine: 1, endLine: 9, indent: '' }), 'b');
 		assert.strictEqual(regionSource('a\nb', { startLine: 5, endLine: 9, indent: '' }), '');
 	});
@@ -134,8 +134,7 @@ suite('sourceRegion: indentation', () => {
 	});
 
 	test('strips what a short line has rather than mangling it', () => {
-		// Blank lines are left unpadded by most editors, and hand-written
-		// blocks are not always uniform.
+		// Editors leave blank lines unpadded, and hand-written blocks vary.
 		assert.strictEqual(stripIndent('', '  '), '');
 		assert.strictEqual(stripIndent(' a', '  '), 'a');
 		assert.strictEqual(stripIndent('  a', '  '), 'a');
@@ -149,8 +148,9 @@ suite('sourceRegion: indentation', () => {
 	});
 
 	test('does not indent blank lines on the way back', () => {
-		// Trailing whitespace many editors strip on save, which would make the
-		// file dirty again just after a diagram edit, for a change nobody made.
+		// Blank lines stay blank, which keeps trailing whitespace out of a file
+		// whose editor strips it on save -- that would make the file dirty again
+		// just after a diagram edit, for a change nobody made.
 		assert.strictEqual(indentSource('a\n\nb', '  '), '  a\n\n  b');
 		assert.strictEqual(indentSource('a\n   \nb', '  '), '  a\n   \n  b');
 	});
@@ -193,15 +193,16 @@ suite('sourceRegion: row translation', () => {
 	});
 
 	test('reports lines outside the region as outside', () => {
-		// Left to the caller to check rather than clamped: a clamp would paint
-		// the diagram's first line whenever the caret sat above the block.
+		// The arithmetic reports the row as it falls, and containsLine is the
+		// check the caller makes: a clamp here would paint the diagram's first
+		// line whenever the caret sat above the block.
 		assert.strictEqual(toRegionRow(region, 9), -1);
 		assert.strictEqual(toRegionRow(region, 15), 5);
 	});
 
 	test('answers whether a line belongs to the region at all', () => {
-		// The check the caret needs before its line is translated: outside the
-		// region there is no row to send, not a row to clamp to.
+		// The check the caret needs before its line is translated: the region's
+		// own lines are the ones with rows to send.
 		assert.ok(containsLine(region, 10), 'the first line');
 		assert.ok(containsLine(region, 12), 'a line within');
 		assert.ok(containsLine(region, 14), 'the last line, endLine being inclusive');
@@ -262,8 +263,9 @@ suite('sourceRegion: following a line through an edit', () => {
 
 	test('reports a line whose own text was replaced as gone', () => {
 		// Typing in the fence itself, or deleting a span that covers it. The
-		// fence this line was is not there any more, and a guess could land on
-		// a different diagram -- which the panel would then show and write into.
+		// fence this line was has gone, and a line number carried over could land
+		// on a different diagram -- which the panel would then show and write
+		// into.
 		assert.strictEqual(trackLine(10, [change(10, 3, 10, 8, 'x')]), LINE_GONE, 'edited');
 		assert.strictEqual(trackLine(10, [change(9, 0, 11, 0, '')]), LINE_GONE, 'deleted with');
 		assert.strictEqual(trackLine(10, [change(10, 0, 12, 0, '')]), LINE_GONE, 'deleted from');
@@ -271,8 +273,8 @@ suite('sourceRegion: following a line through an edit', () => {
 
 	test('sums every change of one event, in any order', () => {
 		// Multi-cursor edits and reformatting arrive as several changes. Each is
-		// measured against the line's position before the event, so the order
-		// they arrive in cannot matter.
+		// measured against the line's position before the event, which leaves the
+		// order they arrive in free.
 		const above = change(1, 0, 1, 0, 'x\n');
 		const alsoAbove = change(5, 0, 6, 0, '');
 		const below = change(30, 0, 30, 0, 'y\n');

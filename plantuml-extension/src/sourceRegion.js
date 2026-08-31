@@ -25,16 +25,14 @@
 // Which part of the document is the diagram.
 //
 // Everything downstream of the host -- the webview, the shim, the sidecar's 79
-// routes -- deals in one complete PlantUML source and nothing else. For a
-// `.puml` file that is the whole document, and the extension was written on
-// that assumption: read it all, send it all, replace it all. A diagram in a
-// Markdown code fence breaks the assumption, because only a slice of the file
-// is the diagram and the rest is prose that must come out untouched.
+// routes -- deals in one complete PlantUML source. For a `.puml` file that is
+// the whole document, and the extension was written on that assumption: read it
+// all, send it all, replace it all. A diagram in a Markdown code fence is a
+// slice of the file, and the prose around it comes out untouched.
 //
 // A region is that slice: a line range, plus the indentation its lines carry
-// inside the document. The whole document is simply the region that covers it,
-// which is what keeps `.puml` on the same code path as Markdown rather than
-// beside it.
+// inside the document. The whole document is the region that covers it, which is
+// what keeps `.puml` on the same code path as Markdown.
 //
 // This module is where the boundary is crossed, in all four directions:
 //
@@ -45,24 +43,24 @@
 //
 // Sign errors in those translations are the whole risk of the feature -- an
 // off-by-one paints the wrong line, an inverted subtraction writes a diagram
-// into the prose -- so each direction is named rather than open-coded at the
-// call sites, and each is unit-tested.
+// into the prose -- so each direction is named at the call sites, and each is
+// unit-tested.
 //
 // One more piece of line arithmetic lives here for the same reason: trackLine,
 // which says where a line has moved to after an edit. That is what keeps a
 // diagram findable while the prose around it is being written.
 //
-// Requires nothing from vscode, which is what makes it testable in plain Node,
-// and takes text rather than a TextDocument for the same reason. Line numbers
-// are zero-based throughout, matching both vscode and Ace.
+// It depends on Node alone, and works on text and line numbers, which is what
+// makes it testable outside the VS Code host. Line numbers are zero-based
+// throughout, matching both vscode and Ace.
 
 /**
  * The part of a document that holds one diagram.
  *
  * `endLine` is inclusive: the region is a set of whole lines, and the last one
- * belongs to it. `indent` is what every line of the region carries on account
- * of where it sits in the document -- a Markdown fence inside a list item --
- * and never anything the diagram itself is written with.
+ * belongs to it. `indent` is what every line of the region carries on account of
+ * where it sits in the document -- a Markdown fence inside a list item -- as
+ * distinct from the indentation the diagram itself is written with.
  *
  * @typedef {object} SourceRegion
  * @property {number} startLine zero-based, inclusive
@@ -73,14 +71,13 @@
 /**
  * The region covering all of `text`.
  *
- * What every file that is a diagram in its own right gets, so that the read,
- * the write and the two row translations have one implementation rather than a
- * region case and a whole-file case. `regionSource` against this region returns
- * `text` unchanged, byte for byte, whatever line endings it uses.
+ * What every file that is a diagram in its own right gets, so that the read, the
+ * write and the two row translations have one implementation between them.
+ * `regionSource` against this region returns `text` unchanged, byte for byte,
+ * whatever line endings it uses.
  *
- * Derived from the text on each use rather than stored, because the answer
- * changes with every edit that adds or removes a line, and a remembered one
- * would be a stale range to write into.
+ * Derived from the text on each use, because the answer changes with every edit
+ * that adds or removes a line, and a write goes to the range as it is now.
  *
  * @param {string} text the whole document
  * @returns {SourceRegion}
@@ -94,11 +91,10 @@ function wholeDocumentRegion(text) {
  *
  * Split on '\n' alone, and rejoined the same way, so a CRLF document keeps its
  * carriage returns exactly where they were: this is a slice of the user's file,
- * not a rewrite of it, and the whole-document case has to come back identical.
+ * and the whole-document case comes back identical.
  *
- * A region reaching past the end of the text yields what is there. The caller
- * that let it go stale is the one that has to notice; see the region tracking
- * in extension.js.
+ * A region reaching past the end of the text yields what is there, leaving it to
+ * the caller to notice; see the region tracking in extension.js.
  *
  * @param {string} text the whole document
  * @param {SourceRegion} region
@@ -115,18 +111,16 @@ function regionSource(text, region) {
 /**
  * Remove a region's indentation from one of its lines.
  *
- * The diagram handed to the renderer must not carry the document's
- * indentation. Rendering would survive it -- PlantUML ignores leading space --
- * but every rewrite comes back without it, and writing that into an indented
- * fence takes the block out of the list item it was in and quietly breaks the
- * Markdown.
+ * The diagram handed to the renderer carries the diagram's own indentation and
+ * none of the document's. PlantUML ignores leading space either way, but every
+ * rewrite comes back at column zero, and writing that into an indented fence
+ * would move the block out of the list item it was in.
  *
- * Lines are not required to match the region exactly. Editors leave blank lines
- * empty rather than padded, and hand-written blocks are not always uniform, so
- * a line carrying less than the region's indentation gives up what it has.
- * Anything beyond that indentation is the diagram's own and is kept: PlantUML's
- * nesting is written with leading space, and the app's own indentPuml()
- * produces it.
+ * A line carrying less than the region's indentation gives up what it has, which
+ * is how the blank lines editors leave unpadded and the odd hand-written block
+ * come through. What a line carries beyond that indentation is the diagram's own
+ * and is kept: PlantUML's nesting is written with leading space, and the app's
+ * own indentPuml() produces it.
  *
  * @param {string} line
  * @param {string} indent
@@ -152,8 +146,8 @@ function stripIndent(line, indent) {
  * The inverse of the strip above, and next to it because the pair has to
  * agree: a change to one is a change to both.
  *
- * Blank lines are left alone. Indenting them would put trailing whitespace
- * into the user's file, which many editors strip on save -- making the file
+ * Blank lines are left as they are, which keeps trailing whitespace out of the
+ * user's file -- many editors strip it on save, and that would make the file
  * dirty again just after a diagram edit, for a change nobody made.
  *
  * @param {string} source the diagram, as the renderer returned it
@@ -188,9 +182,9 @@ function toDocumentRow(region, row) {
 /**
  * Where a line of the document is in the diagram.
  *
- * The direction the caret travels. The result is outside the diagram -- past
- * its end, or negative -- for a line outside the region, which the caller is
- * expected to check rather than post; `containsLine` is that check.
+ * The direction the caret travels. For a line the region covers this is a row of
+ * the diagram; `containsLine` is the check that says so, and the caller makes it
+ * before sending a row.
  *
  * @param {SourceRegion} region
  * @param {number} line zero-based, relative to the document
@@ -203,9 +197,9 @@ function toRegionRow(region, line) {
 /**
  * Whether `line` is one of the region's.
  *
- * The question the caret raises: a line outside the region has no row in the
- * diagram, so there is nothing to say about it rather than a row to clamp it
- * to. Both ends inclusive, `endLine` being part of the region.
+ * The question the caret raises: a row of the diagram exists for the lines the
+ * region covers, so this is what the caller asks before translating one. Both
+ * ends inclusive, `endLine` being part of the region.
  *
  * @param {SourceRegion} region
  * @param {number} line zero-based, relative to the document
@@ -215,30 +209,30 @@ function containsLine(region, line) {
 	return line >= region.startLine && line <= region.endLine;
 }
 
-/** What trackLine reports for a line an edit did away with. */
+/** What trackLine reports for a line an edit rewrote. */
 const LINE_GONE = -1;
 
 /**
  * Where `line` is after a document change, or LINE_GONE if it was rewritten.
  *
  * What keeps a diagram in a Markdown file findable while the prose around it is
- * written. The panel remembers a diagram by the line its fence is on, and
- * typing anywhere above moves that line; without this, the panel would lose
- * the diagram on the next paragraph the author adds.
+ * written. The panel remembers a diagram by the line its fence is on, and typing
+ * anywhere above moves that line; this is what follows it there, so the diagram
+ * survives the next paragraph the author adds.
  *
- * Three kinds of change, and only one of them moves the line:
+ * Three kinds of change, of which one moves the line:
  *
  *   - entirely above it: the line moves by whatever the change added or
  *     removed. An insertion that *ends* at the start of the line counts as
- *     above, since it pushes the line down without touching its text -- that is
- *     the newline you get from pressing Enter with the caret before a fence.
- *   - below it: no effect. This is the ordinary case, every rewrite the diagram
- *     itself makes being inside the block.
+ *     above, since it pushes the line down and leaves its text as it was --
+ *     that is the newline you get from pressing Enter with the caret before a
+ *     fence.
+ *   - below it: the line stays. This is the ordinary case, every rewrite the
+ *     diagram itself makes being inside the block.
  *   - containing it: the line's own text was replaced, so the fence this line
- *     was is not there any more, whatever ends up at that number. Reported as
- *     gone rather than guessed at, because the alternative is a line number
- *     that could land on a *different* diagram and have the panel show, and
- *     write into, the wrong one.
+ *     was has gone, whatever ends up at that number. Reported as gone, since a
+ *     line number carried over could land on a *different* diagram and have the
+ *     panel show, and write into, the wrong one.
  *
  * Ranges are the document's before the change, and each is measured against the
  * line's own before-position, so the changes of one event may arrive in any
@@ -247,7 +241,7 @@ const LINE_GONE = -1;
  * @param {number} line zero-based
  * @param {readonly {range: {start: {line: number}, end: {line: number,
  *   character: number}}, text: string}[]} changes one event's content changes,
- *   in vscode's shape but read only for these three numbers and the text
+ *   in vscode's shape, read for these three numbers and the text
  * @returns {number} the line's new number, or LINE_GONE
  */
 function trackLine(line, changes) {

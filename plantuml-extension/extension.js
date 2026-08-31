@@ -32,10 +32,10 @@
 // The webview's page is rendered by that same backend and fetched by
 // src/webviewPage.js.
 //
-// What the panel shows is not the document but a *region* of it -- a line range
-// plus the indentation it carries; see src/sourceRegion.js. For a `.puml` file
-// that region covers the whole document, which is why one code path serves both
-// it and a diagram sitting in a Markdown code fence. Everything crossing the
+// What the panel shows is a *region* of the document -- a line range plus the
+// indentation it carries; see src/sourceRegion.js. For a `.puml` file that
+// region covers the whole document, which is why one code path serves both it
+// and a diagram sitting in a Markdown code fence. Everything crossing the
 // boundary is translated: the source sent out, the rewrite written back, the
 // highlighted rows, the caret's row.
 //
@@ -111,14 +111,13 @@ const PLANTUML_EXTENSIONS = new Set(['.puml', '.plantuml', '.pu', '.iuml', '.wsd
 const DIAGRAM_SNIFF_LINES = 200;
 
 /**
- * The row posted for a caret that is not in the diagram on screen.
+ * The row posted for a caret that has left the diagram on screen.
  *
  * Reading the prose around a diagram, or a different diagram in the same file,
- * leaves the caret on a line the diagram has no row for. A row no element can
- * own says exactly that: the frontend's cursor handler clears the highlight and
- * then looks this row up, finds nothing, and lights nothing -- so the diagram
- * stops pointing at a line the caret has left, instead of keeping the last one
- * lit. Nothing else in the app reads the cursor.
+ * puts the caret outside the region the panel is showing. This row reports that:
+ * the frontend's cursor handler clears the highlight and then looks the row up
+ * among the diagram's own, so the diagram stops pointing at a line the caret has
+ * left. The app reads the cursor in that one place.
  */
 const NO_DIAGRAM_ROW = -1;
 
@@ -725,12 +724,12 @@ async function createDiagramPanel(context) {
 	//
 	// What is remembered of the block is its opening fence, kept current by
 	// trackBlockThroughChanges as the document is edited. The lines themselves
-	// are re-read on every use, so no other field here is relied on to be
-	// fresh -- currentRegion() is what everything downstream actually reads.
+	// are re-read on every use, through currentRegion(), which is what
+	// everything downstream reads.
 	//
-	// Resolved here, before anything is spawned: a Markdown file with no block
-	// is nothing to open a panel for, and starting a backend first would be a
-	// slow way to say so.
+	// Resolved here, before anything is spawned: a Markdown file with a block is
+	// what there is a panel to open, and finding that out costs a line scan
+	// where starting a backend first would cost a wait.
 	/** @type {import('./src/markdownBlocks').MarkdownBlock | undefined} */
 	let activeBlock = isMarkdownDocument(document)
 		? blockToShow(document.getText(), editor.selection.active.line)
@@ -830,19 +829,19 @@ async function createDiagramPanel(context) {
 	/**
 	 * The part of the document to act on, located afresh.
 	 *
-	 * Deliberately not a remembered range. A block's lines move under every
-	 * edit -- its own rewrites change how many it has, and typing above it
-	 * moves all of them -- so the range is found in the text as it is now,
-	 * every time it is needed. Nothing downstream can then write into a span
-	 * that has stopped being the block.
+	 * Found in the text as it is now, every time it is needed. A block's lines
+	 * move under every edit -- its own rewrites change how many it has, and
+	 * typing above it moves all of them -- so locating it at use is what keeps
+	 * every write and every highlight aimed at the block as it stands.
 	 *
 	 * The block is recognised by its opening fence, which the change listener
 	 * keeps current as the document is edited -- see trackBlockThroughChanges.
-	 * It still comes to nothing when an edit rewrote the fence line itself or
-	 * took the block away, so every call site has an answer for that.
+	 * An edit that rewrote the fence line itself, or took the block away, leaves
+	 * the panel with the diagram on screen and its call sites with the undefined
+	 * each of them answers for.
 	 *
-	 * @returns {import('./src/sourceRegion').SourceRegion | undefined} undefined
-	 *   when the block the panel is on is no longer in the document
+	 * @returns {import('./src/sourceRegion').SourceRegion | undefined} where the
+	 *   diagram lives now, once the document still holds the block
 	 */
 	const currentRegion = () => {
 		const text = document.getText();
@@ -863,16 +862,15 @@ async function createDiagramPanel(context) {
 	// edit, and on a switch to another diagram or file.
 	/**
 	 * @param {object} [options]
-	 * @param {boolean} [options.replaced] whether this is a different diagram
-	 *   rather than an edit of the one on screen; see the webview's handler,
-	 *   which seeds a replacement instead of diffing it against what it has
+	 * @param {boolean} [options.replaced] whether this is a different diagram,
+	 *   as opposed to an edit of the one on screen; see the webview's handler,
+	 *   which seeds a replacement and diffs an edit
 	 */
 	const postDocument = ({ replaced = false } = {}) => {
 		const region = currentRegion();
 
-		// Nothing to send: the panel keeps the diagram it is showing rather
-		// than being blanked, which is what the user asked for -- the last
-		// diagram stays until another one is chosen.
+		// The panel keeps the diagram it is showing until another is chosen,
+		// which is what the user asked for.
 		if (!region) {
 			return;
 		}
@@ -889,7 +887,7 @@ async function createDiagramPanel(context) {
 	// shown block changes, called by the caret listener and by showDocument.
 	/** @param {import('./src/markdownBlocks').MarkdownBlock} [block] */
 	const showBlock = (block) => {
-		// Painted for the diagram being left, and about to mean nothing.
+		// Painted for the diagram being left, and cleared with it.
 		clearHighlight(document);
 		// A post left pending by the previous diagram would fire just after
 		// this one and resend what it is about to send.
@@ -898,22 +896,21 @@ async function createDiagramPanel(context) {
 		activeBlock = block;
 		panel.title = panelTitle(document, block);
 		outputChannel?.appendLine(`[panel] now showing ${panelSubject(document, block)}`);
-		// A different diagram, not an edit of the one on screen: the webview
-		// seeds it rather than diffing it against what it has.
+		// A different diagram, as opposed to an edit of the one on screen: the
+		// webview seeds it, where it diffs an edit.
 		postDocument({ replaced: true });
 	};
 
 	/**
 	 * Switch to the diagram the caret has moved into, if it moved into another.
 	 *
-	 * The whole of the caret-picks-the-diagram behaviour. Everything about when
-	 * *not* to switch is in blockToFollow, which is where it can be tested: the
-	 * caret in prose, on a fence, or in the diagram already on screen all leave
-	 * the panel where it is.
+	 * The whole of the caret-picks-the-diagram behaviour. When the panel stays
+	 * put -- the caret in prose, on a fence, or in the diagram already on screen
+	 * -- is blockToFollow's business, which is where it is tested.
 	 *
-	 * This is also how the panel recovers after an edit above the block moved
-	 * its fence out from under `activeBlock`: the caret coming back into the
-	 * block finds it at its new line and adopts it.
+	 * This is also how the panel takes up a block again after an edit above it
+	 * rewrote its fence: the caret coming back into the block finds it at its new
+	 * line and adopts it.
 	 *
 	 * @param {number} caretLine zero-based
 	 */
@@ -934,14 +931,14 @@ async function createDiagramPanel(context) {
 	 *
 	 * The block is remembered by the line its opening fence is on, so writing a
 	 * paragraph above a diagram moves it. Following it there is what keeps the
-	 * panel live while the document around the diagram is written: the fence
-	 * line is the only thing the panel remembers, and everything else about the
-	 * block is read from the document at use.
+	 * panel live while the document around the diagram is written: the fence line
+	 * is what the panel remembers, and the rest of the block is read from the
+	 * document at use.
 	 *
-	 * An edit that rewrote the fence line itself leaves nothing to follow, and
-	 * trackLine says so rather than guessing -- a guessed line could land on a
-	 * different diagram, and the panel would show, and write into, the wrong
-	 * one. The fence then matches nothing until the caret picks a block again.
+	 * An edit that rewrote the fence line itself leaves the fence reported as
+	 * gone, since a line number carried over could land on a different diagram
+	 * and have the panel show, and write into, the wrong one. The caret picking a
+	 * block takes the panel on from there.
 	 *
 	 * @param {readonly vscode.TextDocumentContentChangeEvent[]} changes
 	 */
@@ -970,10 +967,11 @@ async function createDiagramPanel(context) {
 			: undefined;
 
 		if (isMarkdownDocument(next) && !nextBlock) {
-			// Only the command reaches this: the active-editor listener follows
-			// nothing isPlantUmlDocument rejects, and it rejects Markdown with
-			// no block. So it is an explicit request, and it gets an answer
-			// rather than a panel that quietly did nothing.
+			// The command is what reaches this, being the one caller that points
+			// the panel at any file the user runs it on; the active-editor
+			// listener follows what isPlantUmlDocument accepts, which is
+			// Markdown that holds a block. So this is an explicit request, and
+			// it gets an answer.
 			vscode.window.showInformationMessage(
 				`${path.basename(next.fileName)} has no \`\`\`plantuml block. The diagram ` +
 					`panel is still showing ${path.basename(document.fileName)}.`
@@ -1015,14 +1013,14 @@ async function createDiagramPanel(context) {
 			return;
 		}
 
-		// Before the debounce, and on every event rather than the last one: the
-		// shifts of two quick edits have to both be counted, and the ranges an
-		// event carries describe the document as it was when that event fired.
+		// Before the debounce, and on every event: the shifts of two quick edits
+		// both count, and the ranges an event carries describe the document as
+		// it was when that event fired.
 		trackBlockThroughChanges(event.contentChanges);
 
 		clearTimeout(debounceTimer);
 		// Called with no options: an edit of the diagram on screen, which the
-		// webview compares against what it has rather than reseeding.
+		// webview diffs against what it has.
 		debounceTimer = setTimeout(() => postDocument(), LIVE_UPDATE_DEBOUNCE_MS);
 	});
 
@@ -1100,10 +1098,9 @@ async function createDiagramPanel(context) {
 /**
  * Write `source` into `region` of `document` as a single undoable edit.
  *
- * The region is the only part of the file the diagram speaks for. Replacing it
- * rather than the whole document is what lets a diagram live in a Markdown
- * fence: the prose around it is not in the edit at all, so it cannot be
- * reformatted, and the fences themselves stay as the author wrote them.
+ * The region is the part of the file the diagram speaks for. Replacing it is
+ * what lets a diagram live in a Markdown fence: the prose around it stays
+ * outside the edit, and the fences stay as the author wrote them.
  *
  * The equality check is the primary defence against the write-back loop: an
  * edit we apply fires onDidChangeTextDocument, which posts documentChanged back
@@ -1113,7 +1110,7 @@ async function createDiagramPanel(context) {
  *
  * @param {vscode.TextDocument} document
  * @param {import('./src/sourceRegion').SourceRegion | undefined} region where
- *   the diagram lives now, or undefined if it could not be found
+ *   the diagram lives now, as currentRegion() found it
  * @param {string} source the diagram, without the region's indentation
  */
 async function applyPuml(document, region, source) {
@@ -1121,10 +1118,10 @@ async function applyPuml(document, region, source) {
 		return;
 	}
 
-	// Refused rather than aimed at where the block used to be. The panel can
-	// outlive the block it is showing -- an edit above it moves it, a deletion
-	// takes it away -- and a diagram gesture arriving then would otherwise
-	// overwrite whatever lines now sit at those numbers, which is prose.
+	// A write goes to a block the document still holds. The panel can outlive
+	// the block it is showing -- an edit can rewrite its fence, a deletion can
+	// take it away -- and a diagram gesture arriving then is logged and left,
+	// since the lines at those numbers are prose.
 	if (!region) {
 		outputChannel?.appendLine(
 			'[panel] a diagram change was not written: the block it belongs to was ' +
@@ -1151,19 +1148,17 @@ async function applyPuml(document, region, source) {
  * The webview posts a bare `savePng`; the source comes from the document, which
  * this process owns and which every diagram edit is written into before a render
  * can be asked for. From the *region* of it the panel is showing, so a diagram
- * in a Markdown file is exported as that diagram rather than as a page of prose
- * the renderer would choke on.
+ * in a Markdown file is exported as that diagram.
  *
  * @param {vscode.TextDocument} document
  * @param {import('./src/sourceRegion').SourceRegion | undefined} region where
- *   the diagram lives now, or undefined if it could not be found
+ *   the diagram lives now, as currentRegion() found it
  * @param {import('./src/sidecar').Sidecar} sidecar a running sidecar
  */
 async function savePng(document, region, sidecar) {
-	// The panel can outlive the block it is showing, and what is on screen is
-	// not a source this process kept a copy of -- the document is the only
-	// authority. So there is nothing to render, and the button says so rather
-	// than saving a picture of whatever else is in the file.
+	// A render comes from a block the document still holds: what is on screen is
+	// the document's to give, this process keeping no copy of it. The panel can
+	// outlive the block it is showing, and the button says so when it has.
 	if (!region) {
 		vscode.window.showErrorMessage(
 			'The diagram could not be rendered: the ```plantuml block it came from is ' +
@@ -1282,10 +1277,9 @@ function panelSubject(document, block) {
 /**
  * Whether `document` holds diagrams rather than being one.
  *
- * The language id alone, unlike the PlantUML case below: VS Code ships the
- * Markdown language itself, so every `.md` and `.markdown` file arrives with
- * this id and nothing else claims it. There is no zoo of extensions to enumerate
- * and no other extension's choice to honour.
+ * The language id alone, where the PlantUML case below reads the extension too:
+ * VS Code ships the Markdown language, so every `.md` and `.markdown` file
+ * arrives with this id.
  *
  * @param {vscode.TextDocument} document
  * @returns {boolean}
@@ -1304,8 +1298,7 @@ function isMarkdownDocument(document) {
  *   - a PlantUML file extension, or a `plantuml` language id, is followed
  *     whatever the file holds. An empty `.puml` is a diagram being started.
  *   - a Markdown file is followed once it holds a ```plantuml block. The panel
- *     shows one block of it rather than the file, so a document with none is
- *     one it has nothing to show for.
+ *     shows one block of it, so a block is what it has to show.
  *   - a plain-text file is followed once it opens a `@start…` block. The name
  *     says nothing, so the content decides, which is what lets `.txt` work and
  *     what leaves a notes file alone.
@@ -1328,9 +1321,9 @@ function isPlantUmlDocument(document) {
 	}
 
 	if (isMarkdownDocument(document)) {
-		// Read whole, with no equivalent of DIAGRAM_SNIFF_LINES: a diagram
-		// belongs wherever the prose put it, and prose is what the top of a
-		// documentation file is for.
+		// Read whole, where DIAGRAM_SNIFF_LINES bounds the plain-text sniff: a
+		// diagram belongs wherever the prose put it, and prose is what the top
+		// of a documentation file is for.
 		return findPlantUmlBlocks(document.getText()).length > 0;
 	}
 
@@ -1368,18 +1361,18 @@ function opensDiagramBlock(document) {
  *
  * @param {vscode.TextDocument} document
  * @param {import('./src/sourceRegion').SourceRegion | undefined} region where
- *   the diagram lives now, or undefined if it could not be found
+ *   the diagram lives now, as currentRegion() found it
  * @param {number[]} rows zero-based, relative to the region
  */
 function applyHighlight(document, region, rows) {
-	// Without a region there is no line these rows could name, so the highlight
-	// comes off rather than being left where the diagram used to be.
+	// The highlight comes off while the panel holds a diagram the document has
+	// moved on from, its rows naming lines that are now prose.
 	const lines = !region
 		? []
 		: (rows ?? [])
 				.map((row) => toDocumentRow(region, row))
-				// A row the diagram has and the document does not: a marker on a
-				// line an edit has just removed.
+				// The rows the document has lines for: an edit can take away a
+				// line a marker was on.
 				.filter((line) => line >= 0 && line < document.lineCount);
 
 	paintHighlight(
@@ -1391,9 +1384,9 @@ function applyHighlight(document, region, rows) {
 /**
  * Drop the highlight from every editor showing `document`.
  *
- * Not expressed as an empty row list through applyHighlight, because clearing
- * is the one case with no rows to translate and so no region to translate them
- * against -- which is exactly when it is called, on the way off a file.
+ * Its own function, so that clearing asks for a document and a document alone --
+ * which is what suits the one place it is called, on the way off a file, where
+ * the region belongs to the file being left.
  *
  * @param {vscode.TextDocument} document
  */
@@ -1419,10 +1412,9 @@ function paintHighlight(document, ranges) {
  * @returns {vscode.Range} a range covering the region's whole lines.
  */
 function regionRange(document, region) {
-	// Clamped so that lineAt cannot throw inside a message handler. The clamp
-	// is not a correctness measure: a region that no longer matches the document
-	// must not be written into at all, rather than aimed at whatever is there
-	// now, so that guard belongs with the region and not here.
+	// Clamped to keep lineAt inside the document, and so inside a message
+	// handler that stays on its feet. Whether the region still describes the
+	// document is the region's own question, which currentRegion() answers.
 	const endLine = Math.min(region.endLine, document.lineCount - 1);
 
 	return new vscode.Range(region.startLine, 0, endLine, document.lineAt(endLine).text.length);

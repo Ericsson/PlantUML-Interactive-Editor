@@ -24,8 +24,7 @@
 
 // Finds the PlantUML diagrams inside a Markdown document.
 //
-// A Markdown file is not a diagram; it *contains* diagrams, in fenced code
-// blocks:
+// A Markdown file holds diagrams, in fenced code blocks:
 //
 //     Some prose.
 //
@@ -37,33 +36,30 @@
 //
 // This module answers where those blocks are. Everything else about the
 // feature -- which one the panel shows, how an edit is written back -- is
-// extension.js's business; this file only reads text and reports line numbers.
+// extension.js's business; this file reads text and reports line numbers.
 //
-// Requires nothing from vscode, which is what makes it testable in plain Node.
-// It takes a string rather than a TextDocument for the same reason.
+// It depends on Node alone, and works on a string and line numbers, which is
+// what makes it testable outside the VS Code host.
 //
-// The scan is a line walk with one bit of state -- the fence we are inside --
-// rather than a set of regex matches over the whole text, because a fence found
-// in isolation cannot be trusted. Inside a code block, ```plantuml is just a
-// line of text:
+// The scan is a line walk carrying one bit of state, the fence it is inside,
+// because a fence has to be read in context. Inside a code block, ```plantuml
+// is a line of text:
 //
 //     ```text
-//     ```plantuml        <- content of the text block, not an opening fence:
-//     @startuml             a closing fence may carry no info string
+//     ```plantuml        <- content of the text block, a closing fence being
+//     @startuml             the one with an empty info string
 //     @enduml
 //     ```
 //
-// So every fence is tracked, of either kind, and only the ones opened with
-// backticks and the exact info string are reported. Missing a diagram is a
-// feature that did not fire; reporting one that is quoted inside another block
-// would have the panel write a diagram edit into somebody's example.
+// So every fence is tracked, of either kind, and the ones opened with backticks
+// and the exact info string are reported. That keeps a diagram quoted inside
+// somebody's example out of the panel, which would otherwise write an edit into
+// their example.
 //
-// Deliberately not handled: a fence indented four spaces or more, which
-// CommonMark reads as an indented code block holding literal text. Telling that
-// from a fence legitimately indented inside a list item needs the list
-// structure, which needs a Markdown parser, and the failure it would prevent --
-// rendering a diagram somebody wrote as an example of how to write one -- is
-// rarer than the list-item case it would break.
+// A fence indented four spaces or more is read as an ordinary block. CommonMark
+// reads it as an indented code block holding literal text, which would take the
+// list structure to tell from a fence indented inside a list item, and that
+// takes a Markdown parser; a fence in a list item is the case worth serving.
 
 const { containsLine } = require('./sourceRegion');
 
@@ -81,9 +77,8 @@ const PLANTUML_INFO = 'plantuml';
 /**
  * A diagram's opening line, in any of PlantUML's flavours.
  *
- * Required of a block's content: a ```plantuml fence holding a fragment with no
- * `@start…` is not something the renderer can be given -- java would reject it
- * -- so it is passed over rather than offered as a diagram.
+ * Required of a block's content, so that what the panel offers is what the
+ * renderer accepts: java takes a source that opens a `@start…` block.
  */
 const DIAGRAM_START = /^[ \t]*@start\w+/;
 
@@ -92,13 +87,12 @@ const DIAGRAM_START = /^[ \t]*@start\w+/;
  *
  * A `SourceRegion` -- see sourceRegion.js -- with the fence it came from, so a
  * block found here can be handed straight to `regionSource` and the rest of the
- * translation without being converted into anything. The diagram's own text is
- * deliberately not carried along: one function reads the text of a region, and
- * two copies of it could disagree.
+ * translation as it is. The diagram's text comes from `regionSource` reading the
+ * document, which keeps one function in charge of what a region says.
  *
- * The range covers the *content* only. The fences are the document's, not the
- * diagram's, and neither one is ever rewritten; `fenceLine` is kept for the
- * places that name the block to the user, a fence being what they see.
+ * The range covers the *content*. The fences are the document's, and stay as
+ * the author wrote them; `fenceLine` is kept for the places that name the block
+ * to the user, a fence being what they see.
  *
  * @typedef {object} MarkdownBlock
  * @property {number} fenceLine zero-based line of the opening fence
@@ -111,11 +105,9 @@ const DIAGRAM_START = /^[ \t]*@start\w+/;
 /**
  * The PlantUML blocks in `text`, in the order they appear.
  *
- * A block must be closed to be reported. An unterminated fence swallows the
- * rest of the file by CommonMark's reading, so there is no line at which the
- * diagram ends -- and a range that ends at the end of the document is not one
- * an edit can be written back into safely. The practical effect is that a block
- * being typed becomes available once its closing fence is there.
+ * A block is reported once its closing fence is there, that fence being the line
+ * the diagram ends at and the end of the range an edit is written back into. So
+ * a block being typed joins the list as soon as it is closed.
  *
  * @param {string} text the whole document
  * @returns {MarkdownBlock[]}
@@ -160,9 +152,9 @@ function findPlantUmlBlocks(text) {
 /**
  * Whether a fence line ends the block that is open.
  *
- * A closing fence must use the same character, be at least as long, and carry
- * no info string -- so ```plantuml inside a ``` block is content rather than
- * the end of it, and a longer fence can hold shorter ones.
+ * A closing fence uses the same character, is at least as long, and carries an
+ * empty info string. So ```plantuml inside a ``` block reads as content, and a
+ * longer fence holds shorter ones.
  *
  * @param {{ marker: string }} open the fence that is open
  * @param {RegExpExecArray | null} match the current line, if it is a fence
@@ -185,20 +177,20 @@ function closes(open, match) {
 /**
  * @param {{ marker: string, info: string }} open
  * @returns {boolean} whether this fence opens a diagram, as opposed to a code
- *   block this module only tracks so as not to read inside it
+ *   block the scan tracks so that it reads the lines inside as content
  */
 function isPlantUml(open) {
 	return open.marker[0] === '`' && open.info.toLowerCase() === PLANTUML_INFO;
 }
 
 /**
- * Build the block for a closed ```plantuml fence, or reject it.
+ * Build the block for a closed ```plantuml fence.
  *
  * @param {string[]} lines the document
  * @param {{ line: number, indent: string }} open the opening fence
  * @param {number} closingLine
- * @returns {MarkdownBlock | undefined} undefined when the content is not a
- *   diagram; see DIAGRAM_START
+ * @returns {MarkdownBlock | undefined} a block once the content opens a
+ *   `@start…` block; see DIAGRAM_START
  */
 function describe(lines, open, closingLine) {
 	const startLine = open.line + 1;
@@ -218,15 +210,15 @@ function describe(lines, open, closingLine) {
 }
 
 /**
- * The block containing `line`, if any.
+ * The block whose content covers `line`.
  *
- * A line inside the content, not on a fence: the fences belong to the document.
- * Clicking one is not a request to edit the diagram it wraps, and it is also
- * where the caret sits just after typing the fence, before the diagram exists.
+ * Content lines, the fences being the document's: a fence is where the caret
+ * sits while the block is still being typed, and clicking one is a move about
+ * the document rather than a request for the diagram it wraps.
  *
- * The plain question, with no fallback -- which is what makes it the right one
- * for deciding whether the caret has moved into a *different* diagram, where
- * prose has to mean "no change" rather than "the first one".
+ * Answers about the caret's line alone, which is what makes it right for
+ * deciding whether the caret has moved into a *different* diagram, where prose
+ * means the panel stays where it is.
  *
  * @param {MarkdownBlock[]} blocks
  * @param {number} line zero-based
@@ -241,13 +233,12 @@ function blockAtLine(blocks, line) {
  *
  * The caret's, so that running the command on a diagram shows that diagram;
  * else the first in the file, so that running it anywhere in a document that
- * has one still shows something. A caret is not always available -- the panel
- * can be pointed at a document no editor has the focus of -- and a caret in
- * prose is not a choice between diagrams, so both fall back the same way.
+ * has one shows something. A caret in prose falls back that way, and so does a
+ * panel pointed at a document from outside an editor.
  *
  * @param {string} text the whole document
  * @param {number} [caretLine] zero-based, where the caret is
- * @returns {MarkdownBlock | undefined} undefined when the document holds none
+ * @returns {MarkdownBlock | undefined} a block for a document that holds one
  */
 function blockToShow(text, caretLine) {
 	const blocks = findPlantUmlBlocks(text);
@@ -263,16 +254,15 @@ function blockToShow(text, caretLine) {
  * The block the caret has moved into, when the panel should follow it there.
  *
  * How a Markdown file's several diagrams are chosen between: put the caret in
- * one and the panel shows it. There is no per-line hover event to use instead,
- * and clicking into the diagram you mean is what a reader does anyway.
+ * one and the panel shows it, which is the gesture VS Code offers for text and
+ * what a reader reaches for anyway.
  *
- * Nothing to follow -- no switch -- in three cases, which is the sticky rule:
- * the caret is in prose, or on a fence, or already in the diagram on screen.
- * Reading around a diagram must not take it off the screen.
- *
- * Unlike blockToShow there is no falling back to the first block. A fallback
- * here would mean that clicking into prose switched the panel to the top of the
- * file, which is the opposite of staying put.
+ * The panel stays on the diagram it is showing in the other three cases -- the
+ * caret in prose, on a fence, or already in that diagram -- so that reading
+ * around a diagram keeps it on screen. That is also why the caret's own block is
+ * the whole answer here, where blockToShow falls back to the first: falling back
+ * would send the panel to the top of the file as soon as the caret left a
+ * diagram.
  *
  * @param {string} text the whole document
  * @param {number} caretLine zero-based

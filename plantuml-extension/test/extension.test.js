@@ -255,9 +255,9 @@ suite('extension: which document the panel shows', () => {
 	});
 
 	test('follows a Markdown file that holds a diagram', () => {
-		// Unlike the languages above, a Markdown file is not the source and is
-		// still followed: the panel shows one fenced block of it, so the prose
-		// around the diagram is never handed to the renderer.
+		// A Markdown file holds diagrams and is followed for them: the panel
+		// shows one fenced block of it, so the renderer is handed a diagram and
+		// the prose stays where it is.
 		const notes = doc('/w/notes.md', {
 			languageId: 'markdown',
 			text: `# Notes\n\n\`\`\`plantuml\n${DIAGRAM}\`\`\`\n\nAfter.\n`
@@ -267,8 +267,9 @@ suite('extension: which document the panel shows', () => {
 	});
 
 	test('follows a Markdown file whose diagram is far down it', () => {
-		// No equivalent of DIAGRAM_SNIFF_LINES: prose is exactly what the top
-		// of a documentation file is for, so the whole of it is read.
+		// The whole file is read, where DIAGRAM_SNIFF_LINES bounds the
+		// plain-text sniff: prose is exactly what the top of a documentation
+		// file is for.
 		const long = doc('/w/guide.md', {
 			languageId: 'markdown',
 			text: `${'Prose.\n'.repeat(400)}\`\`\`plantuml\n${DIAGRAM}\`\`\`\n`
@@ -278,8 +279,8 @@ suite('extension: which document the panel shows', () => {
 	});
 
 	test('leaves the panel alone for Markdown with no diagram', () => {
-		// The panel has nothing to show for it. Following it would mean either
-		// rendering the prose or blanking the diagram the user was looking at.
+		// A block is what the panel has to show, and the panel keeps the diagram
+		// the user was looking at until it finds one.
 		for (const [name, text] of [
 			['prose.md', '# Notes\n\nProse.\n'],
 			['code.md', '```python\nprint("hi")\n```\n'],
@@ -300,8 +301,8 @@ suite('extension: which document the panel shows', () => {
 	});
 
 	test('names the block it is showing, by its fence', () => {
-		// A Markdown file can hold several diagrams, so the file name alone
-		// would not say which one is live. One-based, as the gutter is.
+		// A Markdown file can hold several diagrams, so the title carries the
+		// fence line to say which one is live. One-based, as the gutter is.
 		const block = { fenceLine: 11, startLine: 12, endLine: 14, indent: '' };
 
 		assert.strictEqual(

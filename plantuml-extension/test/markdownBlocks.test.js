@@ -120,8 +120,8 @@ suite('markdownBlocks: what counts as a diagram', () => {
 	});
 
 	test('ignores a block with no @start line', () => {
-		// Nothing java could be given: it would come back as a failed render
-		// rather than as a diagram, so it is not offered as one.
+		// A diagram is what java takes and what the panel offers: content that
+		// opens a @start block.
 		assert.deepStrictEqual(
 			findPlantUmlBlocks(md('```plantuml', 'a -> b', '```')),
 			[]
@@ -129,7 +129,7 @@ suite('markdownBlocks: what counts as a diagram', () => {
 	});
 
 	test('accepts any @start flavour', () => {
-		// Which flavour a diagram is is not this module's business.
+		// Any flavour counts; which one a diagram is belongs to the renderer.
 		for (const start of ['@startuml', '@startmindmap', '@startgantt', '@startjson']) {
 			assert.strictEqual(
 				findPlantUmlBlocks(md('```plantuml', start, 'x', '@end', '```')).length,
@@ -144,10 +144,10 @@ suite('markdownBlocks: what counts as a diagram', () => {
 	});
 
 	test('ignores an unterminated fence', () => {
-		// It swallows the rest of the file by CommonMark's reading, so there is
-		// no line at which the diagram ends -- and no range an edit could be
-		// written back into. A block being typed becomes available once its
-		// closing fence is there.
+		// A closing fence is the line the diagram ends at, and the end of the
+		// range an edit is written back into, so a block joins the list once it
+		// is closed. CommonMark reads an open fence as running to the end of the
+		// file, which is the whole of the rest of the document.
 		assert.deepStrictEqual(findPlantUmlBlocks(md('```plantuml', ...DIAGRAM)), []);
 	});
 
@@ -157,10 +157,9 @@ suite('markdownBlocks: what counts as a diagram', () => {
 	});
 
 	test('does not read a diagram quoted inside another code block', () => {
-		// The reason the scan tracks every fence rather than matching openings:
-		// a closing fence may carry no info string, so the ```plantuml line
-		// here is content of the ```text block. Reported as a diagram, a panel
-		// edit would rewrite somebody's example of how to write one.
+		// Why the scan tracks every fence: a closing fence is the one carrying an
+		// empty info string, so the ```plantuml line here is content of the
+		// ```text block, and stays somebody's example of how to write one.
 		const text = md(
 			'How to write one:',
 			'',
@@ -176,8 +175,8 @@ suite('markdownBlocks: what counts as a diagram', () => {
 	});
 
 	test('reads a diagram after a code block that quoted one', () => {
-		// The state is per block, not per document: a fence consumed as content
-		// must not leave the scan confused about what is open.
+		// The state is per block, so a fence consumed as content leaves the scan
+		// knowing which fence is still open.
 		const text = md(
 			'```text',
 			'```plantuml',
@@ -220,9 +219,10 @@ suite('markdownBlocks: what counts as a diagram', () => {
 suite('markdownBlocks: indented fences', () => {
 	test('reports the fence indentation', () => {
 		// A fence inside a list item carries the item's indentation, and the
-		// diagram must not: every rewrite comes back without it, and writing
-		// that back would take the block out of the list. Stripping it is
-		// sourceRegion's job; reporting it is this module's.
+		// diagram carries its own: every rewrite comes back at column zero, and
+		// the write-back puts the fence's share back so the block stays in the
+		// list. Stripping it is sourceRegion's job; reporting it is this
+		// module's.
 		const text = md(
 			'- The flow:',
 			'',
@@ -242,8 +242,8 @@ suite('markdownBlocks: indented fences', () => {
 	});
 
 	test('does not require the content to match the fence', () => {
-		// Hand-written blocks are not uniform, and the fence is what says how
-		// far in the block sits.
+		// The fence says how far in the block sits, which is what hand-written
+		// blocks vary against.
 		const text = md('  ```plantuml', '@startuml', '  a -> b', '  ```');
 
 		const [block] = findPlantUmlBlocks(text);
@@ -281,8 +281,8 @@ suite('markdownBlocks: the block at a line', () => {
 	});
 
 	test('finds nothing on a fence or in prose', () => {
-		// A fence belongs to the document, not to the diagram it wraps, and is
-		// also where the caret sits while the block is still being typed.
+		// A fence belongs to the document, and is where the caret sits while the
+		// block is still being typed.
 		assert.strictEqual(blockAtLine(blocks, 1), undefined, 'the opening fence');
 		assert.strictEqual(blockAtLine(blocks, 5), undefined, 'the closing fence');
 		assert.strictEqual(blockAtLine(blocks, 0), undefined, 'the heading');
@@ -318,16 +318,16 @@ suite('markdownBlocks: the block a panel opens on', () => {
 	});
 
 	test('falls back to the first diagram', () => {
-		// A caret in prose is not a choice between diagrams, and a panel can be
-		// pointed at a document no editor has the focus of. Both still show
-		// something rather than nothing.
+		// A caret in prose leaves the choice open, and a panel can be pointed at
+		// a document whose editor has the focus of nothing. Both show the first
+		// diagram in the file.
 		assert.strictEqual(blockToShow(text, 6).fenceLine, 1, 'caret in prose');
 		assert.strictEqual(blockToShow(text, 0).fenceLine, 1, 'caret above every block');
 		assert.strictEqual(blockToShow(text).fenceLine, 1, 'no caret at all');
 	});
 
 	test('has nothing to show for a document without blocks', () => {
-		// What the caller reports rather than opening a panel on prose.
+		// What the caller reports to the user, a panel opening on a diagram.
 		assert.strictEqual(blockToShow(md('# Notes', 'Prose.'), 0), undefined);
 		assert.strictEqual(blockToShow(md('```text', 'not a diagram', '```')), undefined);
 	});
@@ -359,22 +359,21 @@ suite('markdownBlocks: the diagram the caret moves into', () => {
 	});
 
 	test('stays on the diagram already shown', () => {
-		// Moving about inside the diagram on screen is not a switch, and a
-		// switch would resend and retitle for nothing.
+		// Moving about inside the diagram on screen keeps it there, which spares
+		// a resend and a retitle.
 		for (const line of [2, 3, 4]) {
 			assert.strictEqual(blockToFollow(text, line, first), undefined, `line ${line}`);
 		}
 	});
 
 	test('stays put for a caret in prose or on a fence', () => {
-		// The sticky rule: reading around a diagram must not take it off the
-		// screen, and there is no first-block fallback here for that reason.
+		// The sticky rule: reading around a diagram keeps it on screen, which is
+		// why the caret's own block is the whole answer here.
 		assert.strictEqual(blockToFollow(text, 0, first), undefined, 'the heading');
 		assert.strictEqual(blockToFollow(text, 6, first), undefined, 'the prose between');
 		assert.strictEqual(blockToFollow(text, 1, first), undefined, 'an opening fence');
 		assert.strictEqual(blockToFollow(text, 5, first), undefined, 'a closing fence');
-		// Including when it is another diagram's fence, which is the caret on
-		// its way in rather than in.
+		// Including another diagram's fence, which is the caret on its way in.
 		assert.strictEqual(blockToFollow(text, 7, first), undefined, "another's fence");
 	});
 

@@ -107,18 +107,16 @@
 		const message = event.data;
 
 		if (message.type === 'documentChanged') {
-			// `replaced` says this source is not an edit of the one on screen:
-			// the panel was pointed at another diagram, or another file. It
-			// takes the same path as the very first document, and for the same
-			// reason the first one needs it -- going through applyDocumentText
-			// would render through the debounce, whose last act is to highlight
-			// the lines that changed since the previous render. Diffing two
-			// unrelated diagrams says they differ everywhere, so every line of
-			// the new one would come up marked as just edited.
+			// `replaced` marks a different diagram: the panel was pointed at
+			// another block, or another file. It takes the same path as the very
+			// first document, and for the same reason the first one takes it --
+			// applyDocumentText renders through the debounce, whose last act is
+			// to highlight the lines that changed since the previous render, and
+			// two unrelated diagrams differ everywhere.
 			if (!booted || message.replaced) {
-				// Seed the text without firing `change`, then render once
-				// explicitly. For the first message this also avoids racing the
-				// handler setup.
+				// Seed the text, which leaves `change` unfired, then render once
+				// explicitly. For the first message this also keeps the render
+				// clear of the handler setup.
 				booted = true;
 				editor.primeDocumentText(message.text);
 				renderPlantUml();
