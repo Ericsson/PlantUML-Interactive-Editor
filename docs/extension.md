@@ -878,7 +878,7 @@ talks to the sidecar and the host only owns the document; here the host does bot
 
 ```
 webview   #png clicked → post {savePng}          no payload
-host      POST /renderPNG {plantuml: document.getText()}
+host      POST /renderPNG {plantuml: regionSource(document.getText(), region)}
 sidecar   routes.py renderpng() → render.py → java -pipe -tpng -Sdpi=300
 sidecar   send_file(image/png) → response.arrayBuffer()
 host      showSaveDialog → workspace.fs.writeFile
@@ -890,13 +890,20 @@ Three things about it are deliberate:
   reaches it through `applyPuml` before a render can be asked for — and the webview's copy is
   a shim's cache of the same text. Reading it here removes the question of which is newer.
   It also means the PNG ignores the panel's pan and zoom, and comes out identical to the one
-  the web app's button produces.
+  the web app's button produces. What is read is the [region](#6-host--the-document) the panel
+  is showing, so a diagram in a Markdown fence is exported as that diagram; a region that
+  cannot be found is reported rather than rendered, there being no copy of the diagram on
+  screen anywhere in this process.
 - **An empty body is a failure.** `_create_png_from_uml` runs java with `check=False` and
   returns its stdout whatever happened, so a jar that could not run arrives as `200` with
   nothing in it. Writing that leaves a zero-byte `.png` that looks like a save that worked, so
   the host checks the length before opening the dialog.
 - **A cancelled dialog is not an error.** `showSaveDialog` resolves to `undefined`, and the
   handler returns without a notification.
+
+The save dialog opens on `<basename>.png` beside the document, which for a Markdown file
+holding several diagrams is the same name for each of them; the name is the user's to change
+in the dialog.
 
 The web app's own `#png` handler in `script.js` is never reached: it is registered by
 `buttonEventListeners()`, which `webviewInit.js` does not call. Its approach — a temporary

@@ -1040,7 +1040,7 @@ async function createDiagramPanel(context) {
 		} else if (message.type === 'setHighlight') {
 			applyHighlight(document, currentRegion(), message.rows);
 		} else if (message.type === 'savePng') {
-			await savePng(document, active);
+			await savePng(document, currentRegion(), active);
 		} else if (message.type === 'backendUnreachable') {
 			reportBackendUnreachable(message);
 		} else if (message.type === 'ready') {
@@ -1146,16 +1146,32 @@ async function applyPuml(document, region, source) {
 }
 
 /**
- * Render the document as a PNG and write it wherever the user chooses.
+ * Render the diagram as a PNG and write it wherever the user chooses.
  *
- * The webview posts a bare `savePng`; the source comes from the document,
- * which this process owns and which every diagram edit is written into before
- * a render can be asked for.
+ * The webview posts a bare `savePng`; the source comes from the document, which
+ * this process owns and which every diagram edit is written into before a render
+ * can be asked for. From the *region* of it the panel is showing, so a diagram
+ * in a Markdown file is exported as that diagram rather than as a page of prose
+ * the renderer would choke on.
  *
  * @param {vscode.TextDocument} document
+ * @param {import('./src/sourceRegion').SourceRegion | undefined} region where
+ *   the diagram lives now, or undefined if it could not be found
  * @param {import('./src/sidecar').Sidecar} sidecar a running sidecar
  */
-async function savePng(document, sidecar) {
+async function savePng(document, region, sidecar) {
+	// The panel can outlive the block it is showing, and what is on screen is
+	// not a source this process kept a copy of -- the document is the only
+	// authority. So there is nothing to render, and the button says so rather
+	// than saving a picture of whatever else is in the file.
+	if (!region) {
+		vscode.window.showErrorMessage(
+			'The diagram could not be rendered: the ```plantuml block it came from is ' +
+				'no longer in the document. Put the caret back in a block and try again.'
+		);
+		return;
+	}
+
 	let response;
 
 	try {
@@ -1165,7 +1181,7 @@ async function savePng(document, sidecar) {
 				'Content-Type': 'application/json',
 				[TOKEN_HEADER]: sidecar.token
 			},
-			body: JSON.stringify({ plantuml: document.getText() }),
+			body: JSON.stringify({ plantuml: regionSource(document.getText(), region) }),
 			signal: AbortSignal.timeout(RENDER_PNG_TIMEOUT_MS)
 		});
 	} catch (err) {
