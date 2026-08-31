@@ -88,17 +88,22 @@ const DIAGRAM_START = /^[ \t]*@start\w+/;
 /**
  * A PlantUML diagram found in a Markdown document.
  *
- * The range covers the *content* only: the fences are the document's, not the
- * diagram's, and neither one is ever rewritten. `fenceLine` is kept for the
+ * A `SourceRegion` -- see sourceRegion.js -- with the fence it came from, so a
+ * block found here can be handed straight to `regionSource` and the rest of the
+ * translation without being converted into anything. The diagram's own text is
+ * deliberately not carried along: one function reads the text of a region, and
+ * two copies of it could disagree.
+ *
+ * The range covers the *content* only. The fences are the document's, not the
+ * diagram's, and neither one is ever rewritten; `fenceLine` is kept for the
  * places that name the block to the user, a fence being what they see.
  *
  * @typedef {object} MarkdownBlock
  * @property {number} fenceLine zero-based line of the opening fence
  * @property {number} startLine zero-based first content line
  * @property {number} endLine zero-based last content line, inclusive
- * @property {string} indent the opening fence's leading whitespace, stripped
- *   from `source` and to be restored on write-back
- * @property {string} source the diagram, de-indented, newline-joined
+ * @property {string} indent the opening fence's leading whitespace, which the
+ *   content lines carry and a write-back has to restore
  */
 
 /**
@@ -206,66 +211,8 @@ function describe(lines, open, closingLine) {
 		fenceLine: open.line,
 		startLine,
 		endLine,
-		indent: open.indent,
-		source: content.map((line) => stripIndent(line, open.indent)).join('\n')
+		indent: open.indent
 	};
-}
-
-/**
- * Remove the fence's indentation from one of its content lines.
- *
- * The diagram the backend is given must not carry the Markdown's indentation:
- * PlantUML would tolerate it, but every rewrite comes back without it, and
- * writing that into an indented fence takes the block out of its list item.
- *
- * Lines are not required to match the fence exactly. Editors and reformatters
- * leave blank lines empty rather than padded, and hand-written blocks are not
- * always uniform, so a line that carries less indentation than the fence gives
- * up what it has instead of being left as-is or mangled. What a line has beyond
- * the fence's indentation is the diagram's own and is kept -- PlantUML's own
- * nesting is written that way.
- *
- * @param {string} line
- * @param {string} indent the opening fence's leading whitespace
- * @returns {string}
- */
-function stripIndent(line, indent) {
-	if (!indent) {
-		return line;
-	}
-
-	if (line.startsWith(indent)) {
-		return line.slice(indent.length);
-	}
-
-	const whitespace = /^[ \t]*/.exec(line)[0];
-
-	return line.slice(Math.min(whitespace.length, indent.length));
-}
-
-/**
- * Put the fence's indentation back on a diagram about to be written into it.
- *
- * The inverse of the strip above, and the reason it is here rather than beside
- * the writer: the pair has to agree, and a change to one is a change to both.
- *
- * Blank lines are left alone, because indenting them would put trailing
- * whitespace into the user's file -- which many editors strip on save, quietly
- * making the file dirty again after a diagram edit.
- *
- * @param {string} source the diagram, as the backend returned it
- * @param {string} indent
- * @returns {string}
- */
-function indentSource(source, indent) {
-	if (!indent) {
-		return source;
-	}
-
-	return source
-		.split('\n')
-		.map((line) => (line.trim() === '' ? line : `${indent}${line}`))
-		.join('\n');
 }
 
 /**
@@ -285,7 +232,5 @@ function blockAtLine(blocks, line) {
 
 module.exports = {
 	findPlantUmlBlocks,
-	blockAtLine,
-	indentSource,
-	stripIndent
+	blockAtLine
 };

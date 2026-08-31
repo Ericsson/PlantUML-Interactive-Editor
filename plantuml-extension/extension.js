@@ -32,6 +32,13 @@
 // The webview's page is rendered by that same backend and fetched by
 // src/webviewPage.js.
 //
+// What the panel shows is not the document but a *region* of it -- a line range
+// plus the indentation it carries; see src/sourceRegion.js. For a `.puml` file
+// that region covers the whole document, which is why one code path serves both
+// it and a diagram sitting in a Markdown code fence. Everything crossing the
+// boundary is translated: the source sent out, the rewrite written back, the
+// highlighted rows, the caret's row.
+//
 // That backend is installed on first use, out of a wheel inside the vsix, into
 // a virtual environment under this extension's global storage; see
 // src/backendInstall.js.
@@ -57,6 +64,13 @@ const {
 } = require('./src/backendInstall');
 const { resolvePlantUmlJarPath, PlantUmlConfigError } = require('./src/plantumlJar');
 const { fetchWebviewPage, vendorRoot, WebviewPageError } = require('./src/webviewPage');
+const {
+	wholeDocumentRegion,
+	regionSource,
+	indentSource,
+	toDocumentRow,
+	toRegionRow
+} = require('./src/sourceRegion');
 
 const LIVE_UPDATE_DEBOUNCE_MS = 300;
 
@@ -773,13 +787,27 @@ async function createDiagramPanel(context) {
 	// are what actually terminate the write-back loop.
 	let applyingEdit = false;
 
-	// Hands the whole source over; the frontend renders itself from it through
-	// the app's own renderPlantUml(). The text is read at call time, so
-	// whatever the document holds when this runs is what the diagram shows.
-	// Called from the `ready` handler for the first render, from the change
-	// listener for every edit, and on a switch to another file.
+	// Which part of the document the panel is showing, when it is not all of
+	// it. Undefined is the whole document -- every file that is a diagram in
+	// its own right -- and is resolved against the text at each use rather than
+	// stored, because the last line moves with every edit that adds or removes
+	// one, and a remembered range is a stale range to write into.
+	/** @type {import('./src/sourceRegion').SourceRegion | undefined} */
+	let activeRegion;
+
+	/** @returns {import('./src/sourceRegion').SourceRegion} */
+	const currentRegion = () => activeRegion ?? wholeDocumentRegion(document.getText());
+
+	// Hands the diagram over; the frontend renders itself from it through the
+	// app's own renderPlantUml(). The text is read at call time, so whatever the
+	// document holds when this runs is what the diagram shows. Called from the
+	// `ready` handler for the first render, from the change listener for every
+	// edit, and on a switch to another file.
 	const postDocument = () => {
-		panel.webview.postMessage({ type: 'documentChanged', text: document.getText() });
+		panel.webview.postMessage({
+			type: 'documentChanged',
+			text: regionSource(document.getText(), currentRegion())
+		});
 	};
 
 	// The one way onto another file: retitle, resend, and drop what belonged to
@@ -840,12 +868,12 @@ async function createDiagramPanel(context) {
 			}
 			applyingEdit = true;
 			try {
-				await applyPuml(document, message.text);
+				await applyPuml(document, currentRegion(), message.text);
 			} finally {
 				applyingEdit = false;
 			}
 		} else if (message.type === 'setHighlight') {
-			applyHighlight(document, message.rows);
+			applyHighlight(document, currentRegion(), message.rows);
 		} else if (message.type === 'savePng') {
 			await savePng(document, active);
 		} else if (message.type === 'backendUnreachable') {
@@ -871,7 +899,7 @@ async function createDiagramPanel(context) {
 		const position = event.selections[0].active;
 		panel.webview.postMessage({
 			type: 'cursorMoved',
-			row: position.line,
+			row: toRegionRow(currentRegion(), position.line),
 			column: position.character
 		});
 	});
@@ -894,23 +922,30 @@ async function createDiagramPanel(context) {
 }
 
 /**
- * Write `text` into `document` as a single undoable edit.
+ * Write `source` into `region` of `document` as a single undoable edit.
+ *
+ * The region is the only part of the file the diagram speaks for. Replacing it
+ * rather than the whole document is what lets a diagram live in a Markdown
+ * fence: the prose around it is not in the edit at all, so it cannot be
+ * reformatted, and the fences themselves stay as the author wrote them.
  *
  * The equality check is the primary defence against the write-back loop: an
  * edit we apply fires onDidChangeTextDocument, which posts documentChanged back
  * to the webview, whose own equality check stops there. Comparing values rather
  * than tracking whose turn it is means a genuine edit can never be swallowed.
+ * It compares the *region's* text, since that is what the webview was given.
  *
  * @param {vscode.TextDocument} document
- * @param {string} text
+ * @param {import('./src/sourceRegion').SourceRegion} region
+ * @param {string} source the diagram, without the region's indentation
  */
-async function applyPuml(document, text) {
-	if (typeof text !== 'string' || text === document.getText()) {
+async function applyPuml(document, region, source) {
+	if (typeof source !== 'string' || source === regionSource(document.getText(), region)) {
 		return;
 	}
 
 	const edit = new vscode.WorkspaceEdit();
-	edit.replace(document.uri, fullRange(document), text);
+	edit.replace(document.uri, regionRange(document, region), indentSource(source, region.indent));
 
 	if (!(await vscode.workspace.applyEdit(edit))) {
 		vscode.window.showErrorMessage('Could not write the diagram change into the document.');
@@ -1069,19 +1104,49 @@ function opensDiagramBlock(document) {
 }
 
 /**
- * Paint the given puml lines in every editor showing `document`.
+ * Paint the given diagram rows in every editor showing `document`.
  *
  * The diagram -> editor direction: the editor shim turns the app's Ace
- * addMarker calls into a row list and posts it here.
+ * addMarker calls into a row list and posts it here. Those rows are the
+ * diagram's, so they are translated into the document's before anything is
+ * painted -- a diagram in a Markdown fence starts at line 1 of itself and
+ * somewhere else entirely in the file.
  *
  * @param {vscode.TextDocument} document
- * @param {number[]} rows zero-based line numbers
+ * @param {import('./src/sourceRegion').SourceRegion} region
+ * @param {number[]} rows zero-based, relative to the region
  */
-function applyHighlight(document, rows) {
-	const ranges = (rows ?? [])
-		.filter((row) => row >= 0 && row < document.lineCount)
-		.map((row) => document.lineAt(row).range);
+function applyHighlight(document, region, rows) {
+	const lines = (rows ?? [])
+		.map((row) => toDocumentRow(region, row))
+		// A row the diagram has and the document does not: a stale region, or a
+		// marker on a line an edit has just removed.
+		.filter((line) => line >= 0 && line < document.lineCount);
 
+	paintHighlight(
+		document,
+		lines.map((line) => document.lineAt(line).range)
+	);
+}
+
+/**
+ * Drop the highlight from every editor showing `document`.
+ *
+ * Not expressed as an empty row list through applyHighlight, because clearing
+ * is the one case with no rows to translate and so no region to translate them
+ * against -- which is exactly when it is called, on the way off a file.
+ *
+ * @param {vscode.TextDocument} document
+ */
+function clearHighlight(document) {
+	paintHighlight(document, []);
+}
+
+/**
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Range[]} ranges
+ */
+function paintHighlight(document, ranges) {
 	for (const editor of vscode.window.visibleTextEditors) {
 		if (editor.document === document) {
 			editor.setDecorations(hoverDecoration, ranges);
@@ -1089,18 +1154,19 @@ function applyHighlight(document, rows) {
 	}
 }
 
-/** @param {vscode.TextDocument} document */
-function clearHighlight(document) {
-	applyHighlight(document, []);
-}
-
 /**
  * @param {vscode.TextDocument} document
- * @returns {vscode.Range} a range covering the whole document.
+ * @param {import('./src/sourceRegion').SourceRegion} region
+ * @returns {vscode.Range} a range covering the region's whole lines.
  */
-function fullRange(document) {
-	const lastLine = document.lineAt(document.lineCount - 1);
-	return new vscode.Range(0, 0, lastLine.lineNumber, lastLine.text.length);
+function regionRange(document, region) {
+	// Clamped so that lineAt cannot throw inside a message handler. The clamp
+	// is not a correctness measure: a region that no longer matches the document
+	// must not be written into at all, rather than aimed at whatever is there
+	// now, so that guard belongs with the region and not here.
+	const endLine = Math.min(region.endLine, document.lineCount - 1);
+
+	return new vscode.Range(region.startLine, 0, endLine, document.lineAt(endLine).text.length);
 }
 
 /** Called when VS Code shuts the extension down; stops the backend with it. */

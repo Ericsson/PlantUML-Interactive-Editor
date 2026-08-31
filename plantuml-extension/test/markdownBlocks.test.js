@@ -24,12 +24,8 @@
 
 const assert = require('assert');
 
-const {
-	findPlantUmlBlocks,
-	blockAtLine,
-	indentSource,
-	stripIndent
-} = require('../src/markdownBlocks');
+const { findPlantUmlBlocks, blockAtLine } = require('../src/markdownBlocks');
+const { regionSource } = require('../src/sourceRegion');
 
 /** @param {string[]} lines */
 const md = (...lines) => lines.join('\n');
@@ -48,7 +44,9 @@ suite('markdownBlocks: what counts as a diagram', () => {
 		assert.strictEqual(block.startLine, 3);
 		assert.strictEqual(block.endLine, 5);
 		assert.strictEqual(block.indent, '');
-		assert.strictEqual(block.source, DIAGRAM.join('\n'));
+		// A block is a region, so this is how its text is read -- there is no
+		// second copy of it on the block to disagree with the document.
+		assert.strictEqual(regionSource(text, block), DIAGRAM.join('\n'));
 	});
 
 	test('finds every block, in order', () => {
@@ -71,8 +69,8 @@ suite('markdownBlocks: what counts as a diagram', () => {
 		const blocks = findPlantUmlBlocks(text);
 
 		assert.strictEqual(blocks.length, 2);
-		assert.match(blocks[0].source, /first/);
-		assert.match(blocks[1].source, /second/);
+		assert.match(regionSource(text, blocks[0]), /first/);
+		assert.match(regionSource(text, blocks[1]), /second/);
 		assert.strictEqual(blocks[1].startLine, 7);
 	});
 
@@ -193,7 +191,7 @@ suite('markdownBlocks: what counts as a diagram', () => {
 		const blocks = findPlantUmlBlocks(text);
 
 		assert.strictEqual(blocks.length, 1);
-		assert.match(blocks[0].source, /real/);
+		assert.match(regionSource(text, blocks[0]), /real/);
 	});
 
 	test('lets a longer fence hold shorter ones', () => {
@@ -204,7 +202,7 @@ suite('markdownBlocks: what counts as a diagram', () => {
 		const [block] = findPlantUmlBlocks(text);
 
 		assert.strictEqual(block.endLine, 5);
-		assert.match(block.source, /still inside/);
+		assert.match(regionSource(text, block), /still inside/);
 	});
 
 	test('closes a block on a longer fence', () => {
@@ -214,11 +212,12 @@ suite('markdownBlocks: what counts as a diagram', () => {
 	});
 });
 
-suite('markdownBlocks: indentation', () => {
-	test('reports the fence indentation and strips it from the source', () => {
+suite('markdownBlocks: indented fences', () => {
+	test('reports the fence indentation', () => {
 		// A fence inside a list item carries the item's indentation, and the
 		// diagram must not: every rewrite comes back without it, and writing
-		// that back would take the block out of the list.
+		// that back would take the block out of the list. Stripping it is
+		// sourceRegion's job; reporting it is this module's.
 		const text = md(
 			'- The flow:',
 			'',
@@ -232,49 +231,20 @@ suite('markdownBlocks: indentation', () => {
 		const [block] = findPlantUmlBlocks(text);
 
 		assert.strictEqual(block.indent, '  ');
-		assert.strictEqual(block.source, DIAGRAM.join('\n'));
+		assert.strictEqual(block.startLine, 3);
+		assert.strictEqual(block.endLine, 5);
+		assert.strictEqual(regionSource(text, block), DIAGRAM.join('\n'));
 	});
 
-	test('keeps indentation the diagram itself has', () => {
-		// PlantUML's nesting is written with leading space, and the app's own
-		// indentPuml() produces it. Only the fence's share comes off.
-		const text = md('  ```plantuml', '  @startuml', '  if (a) then', '    :b;', '  @enduml', '  ```');
+	test('does not require the content to match the fence', () => {
+		// Hand-written blocks are not uniform, and the fence is what says how
+		// far in the block sits.
+		const text = md('  ```plantuml', '@startuml', '  a -> b', '  ```');
 
 		const [block] = findPlantUmlBlocks(text);
 
-		assert.strictEqual(block.source, '@startuml\nif (a) then\n  :b;\n@enduml');
-	});
-
-	test('strips what a short line has rather than mangling it', () => {
-		// Blank lines are left unpadded by most editors, and hand-written
-		// blocks are not always uniform.
-		assert.strictEqual(stripIndent('', '  '), '');
-		assert.strictEqual(stripIndent(' a', '  '), 'a');
-		assert.strictEqual(stripIndent('  a', '  '), 'a');
-		assert.strictEqual(stripIndent('a', ''), 'a');
-	});
-
-	test('restores the indentation on the way back', () => {
-		// The inverse of the strip: what the writer puts back into the fence.
-		assert.strictEqual(indentSource('@startuml\na -> b', '  '), '  @startuml\n  a -> b');
-		assert.strictEqual(indentSource('@startuml', ''), '@startuml');
-	});
-
-	test('does not indent blank lines on the way back', () => {
-		// Trailing whitespace many editors strip on save, which would make the
-		// file dirty again just after a diagram edit.
-		assert.strictEqual(indentSource('a\n\nb', '  '), '  a\n\n  b');
-	});
-
-	test('round-trips a source through the fence indentation', () => {
-		const source = '@startuml\nif (a) then\n  :b;\n\n@enduml';
-
-		const stripped = indentSource(source, '   ')
-			.split('\n')
-			.map((line) => stripIndent(line, '   '))
-			.join('\n');
-
-		assert.strictEqual(stripped, source);
+		assert.strictEqual(block.indent, '  ');
+		assert.strictEqual(regionSource(text, block), '@startuml\na -> b');
 	});
 });
 
