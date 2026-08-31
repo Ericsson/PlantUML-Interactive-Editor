@@ -71,6 +71,7 @@ const {
 	toDocumentRow,
 	toRegionRow
 } = require('./src/sourceRegion');
+const { findPlantUmlBlocks, blockToShow } = require('./src/markdownBlocks');
 
 const LIVE_UPDATE_DEBOUNCE_MS = 300;
 
@@ -158,8 +159,9 @@ let diagramPanelOpening;
  * @property {vscode.WebviewPanel} panel the panel itself, to reveal or dispose
  * @property {import('./src/sidecar').Sidecar} sidecar the backend its page was
  *   built against; a dead one leaves the panel unusable, see panelAction
- * @property {(document: vscode.TextDocument) => void} show point it at a file,
- *   resending the text and retitling the tab
+ * @property {(document: vscode.TextDocument, caretLine?: number) => void} show
+ *   point it at a file, resending the text and retitling the tab; the caret
+ *   line, where one is known, chooses which diagram in a Markdown file
  */
 
 /**
@@ -643,7 +645,7 @@ function openDiagramPanel(context) {
 		const editor = vscode.window.activeTextEditor;
 
 		if (editor) {
-			open.show(editor.document);
+			open.show(editor.document, editor.selection.active.line);
 		}
 
 		open.panel.reveal();
@@ -704,6 +706,25 @@ async function createDiagramPanel(context) {
 	// listener), so it is read at use rather than captured.
 	let document = editor.document;
 
+	// Which diagram in it, when the document holds diagrams rather than being
+	// one. Undefined for a PlantUML file, whose diagram is the whole of it.
+	//
+	// Resolved here, before anything is spawned: a Markdown file with no block
+	// is nothing to open a panel for, and starting a backend first would be a
+	// slow way to say so.
+	/** @type {import('./src/markdownBlocks').MarkdownBlock | undefined} */
+	let activeBlock = isMarkdownDocument(document)
+		? blockToShow(document.getText(), editor.selection.active.line)
+		: undefined;
+
+	if (isMarkdownDocument(document) && !activeBlock) {
+		vscode.window.showErrorMessage(
+			`${path.basename(document.fileName)} has no \`\`\`plantuml block to show. ` +
+				'Add one, or run this on a PlantUML file.'
+		);
+		return;
+	}
+
 	// Checked before anything is spawned: serve.py only warns about a bad jar
 	// on stderr, so catching it here makes it a notification naming the setting,
 	// and skips starting a backend that could not render.
@@ -749,7 +770,7 @@ async function createDiagramPanel(context) {
 
 	const panel = vscode.window.createWebviewPanel(
 		'plantumlInteractiveDiagram',
-		panelTitle(document),
+		panelTitle(document, activeBlock),
 		vscode.ViewColumn.Beside,
 		{
 			enableScripts: true,
@@ -787,16 +808,34 @@ async function createDiagramPanel(context) {
 	// are what actually terminate the write-back loop.
 	let applyingEdit = false;
 
-	// Which part of the document the panel is showing, when it is not all of
-	// it. Undefined is the whole document -- every file that is a diagram in
-	// its own right -- and is resolved against the text at each use rather than
-	// stored, because the last line moves with every edit that adds or removes
-	// one, and a remembered range is a stale range to write into.
-	/** @type {import('./src/sourceRegion').SourceRegion | undefined} */
-	let activeRegion;
+	/**
+	 * The part of the document to act on, located afresh.
+	 *
+	 * Deliberately not a remembered range. A block's lines move under every
+	 * edit -- its own rewrites change how many it has, and typing above it
+	 * moves all of them -- so the range is found in the text as it is now,
+	 * every time it is needed. Nothing downstream can then write into a span
+	 * that has stopped being the block.
+	 *
+	 * The block is recognised by its opening fence, which stays put under any
+	 * edit inside it. An edit *above* it moves the fence too, and this stops
+	 * finding it; see the undefined case at each call site, which is why they
+	 * all have one.
+	 *
+	 * @returns {import('./src/sourceRegion').SourceRegion | undefined} undefined
+	 *   when the block the panel is on is no longer in the document
+	 */
+	const currentRegion = () => {
+		const text = document.getText();
 
-	/** @returns {import('./src/sourceRegion').SourceRegion} */
-	const currentRegion = () => activeRegion ?? wholeDocumentRegion(document.getText());
+		if (!activeBlock) {
+			return wholeDocumentRegion(text);
+		}
+
+		return findPlantUmlBlocks(text).find(
+			(block) => block.fenceLine === activeBlock.fenceLine
+		);
+	};
 
 	// Hands the diagram over; the frontend renders itself from it through the
 	// app's own renderPlantUml(). The text is read at call time, so whatever the
@@ -804,18 +843,46 @@ async function createDiagramPanel(context) {
 	// `ready` handler for the first render, from the change listener for every
 	// edit, and on a switch to another file.
 	const postDocument = () => {
+		const region = currentRegion();
+
+		// Nothing to send: the panel keeps the diagram it is showing rather
+		// than being blanked, which is what the user asked for -- the last
+		// diagram stays until another one is chosen.
+		if (!region) {
+			return;
+		}
+
 		panel.webview.postMessage({
 			type: 'documentChanged',
-			text: regionSource(document.getText(), currentRegion())
+			text: regionSource(document.getText(), region)
 		});
 	};
 
 	// The one way onto another file: retitle, resend, and drop what belonged to
 	// the file being left. Called by the active-editor listener below, and by
 	// the command when it reveals this panel.
-	/** @param {vscode.TextDocument} next */
-	const showDocument = (next) => {
+	/**
+	 * @param {vscode.TextDocument} next
+	 * @param {number} [caretLine] where the caret is in `next`, when it is known
+	 */
+	const showDocument = (next, caretLine) => {
 		if (next === document) {
+			return;
+		}
+
+		const nextBlock = isMarkdownDocument(next)
+			? blockToShow(next.getText(), caretLine)
+			: undefined;
+
+		if (isMarkdownDocument(next) && !nextBlock) {
+			// Only the command reaches this: the active-editor listener follows
+			// nothing isPlantUmlDocument rejects, and it rejects Markdown with
+			// no block. So it is an explicit request, and it gets an answer
+			// rather than a panel that quietly did nothing.
+			vscode.window.showInformationMessage(
+				`${path.basename(next.fileName)} has no \`\`\`plantuml block. The diagram ` +
+					`panel is still showing ${path.basename(document.fileName)}.`
+			);
 			return;
 		}
 
@@ -826,8 +893,9 @@ async function createDiagramPanel(context) {
 		clearTimeout(debounceTimer);
 
 		document = next;
-		panel.title = panelTitle(document);
-		outputChannel?.appendLine(`[panel] now showing ${document.fileName}`);
+		activeBlock = nextBlock;
+		panel.title = panelTitle(document, activeBlock);
+		outputChannel?.appendLine(`[panel] now showing ${panelSubject(document, activeBlock)}`);
 		postDocument();
 	};
 
@@ -849,7 +917,7 @@ async function createDiagramPanel(context) {
 			return;
 		}
 
-		showDocument(next.document);
+		showDocument(next.document, next.selection.active.line);
 	});
 
 	const changeListener = vscode.workspace.onDidChangeTextDocument((event) => {
@@ -896,10 +964,17 @@ async function createDiagramPanel(context) {
 		if (event.textEditor.document !== document) {
 			return;
 		}
+
+		const region = currentRegion();
+
+		if (!region) {
+			return;
+		}
+
 		const position = event.selections[0].active;
 		panel.webview.postMessage({
 			type: 'cursorMoved',
-			row: toRegionRow(currentRegion(), position.line),
+			row: toRegionRow(region, position.line),
 			column: position.character
 		});
 	});
@@ -936,11 +1011,28 @@ async function createDiagramPanel(context) {
  * It compares the *region's* text, since that is what the webview was given.
  *
  * @param {vscode.TextDocument} document
- * @param {import('./src/sourceRegion').SourceRegion} region
+ * @param {import('./src/sourceRegion').SourceRegion | undefined} region where
+ *   the diagram lives now, or undefined if it could not be found
  * @param {string} source the diagram, without the region's indentation
  */
 async function applyPuml(document, region, source) {
-	if (typeof source !== 'string' || source === regionSource(document.getText(), region)) {
+	if (typeof source !== 'string') {
+		return;
+	}
+
+	// Refused rather than aimed at where the block used to be. The panel can
+	// outlive the block it is showing -- an edit above it moves it, a deletion
+	// takes it away -- and a diagram gesture arriving then would otherwise
+	// overwrite whatever lines now sit at those numbers, which is prose.
+	if (!region) {
+		outputChannel?.appendLine(
+			'[panel] a diagram change was not written: the block it belongs to was ' +
+				'not found in the document'
+		);
+		return;
+	}
+
+	if (source === regionSource(document.getText(), region)) {
 		return;
 	}
 
@@ -1041,13 +1133,48 @@ function defaultPngUri(document) {
  * Which file the panel is showing, in its tab.
  *
  * The panel follows the active editor, so its title names the file it is
- * currently pointed at.
+ * currently pointed at. One Markdown file can hold several diagrams, so it
+ * names the block too, by its opening fence -- the line the reader can see, and
+ * one-based as the editor's own gutter is.
  *
  * @param {vscode.TextDocument} document
+ * @param {import('./src/markdownBlocks').MarkdownBlock} [block] the diagram
+ *   being shown, when the document holds more than the one
  * @returns {string}
  */
-function panelTitle(document) {
-	return `PlantUML: ${path.basename(document.fileName)}`;
+function panelTitle(document, block) {
+	const name = path.basename(document.fileName);
+
+	return block ? `PlantUML: ${name}:${block.fenceLine + 1}` : `PlantUML: ${name}`;
+}
+
+/**
+ * What the panel is showing, for the output channel.
+ *
+ * The full path, as the log has always carried, plus the fence for a block --
+ * in the `file:line` shape terminals and editors make clickable.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {import('./src/markdownBlocks').MarkdownBlock} [block]
+ * @returns {string}
+ */
+function panelSubject(document, block) {
+	return block ? `${document.fileName}:${block.fenceLine + 1}` : document.fileName;
+}
+
+/**
+ * Whether `document` holds diagrams rather than being one.
+ *
+ * The language id alone, unlike the PlantUML case below: VS Code ships the
+ * Markdown language itself, so every `.md` and `.markdown` file arrives with
+ * this id and nothing else claims it. There is no zoo of extensions to enumerate
+ * and no other extension's choice to honour.
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {boolean}
+ */
+function isMarkdownDocument(document) {
+	return document.languageId === 'markdown';
 }
 
 /**
@@ -1059,6 +1186,9 @@ function panelTitle(document) {
  *
  *   - a PlantUML file extension, or a `plantuml` language id, is followed
  *     whatever the file holds. An empty `.puml` is a diagram being started.
+ *   - a Markdown file is followed once it holds a ```plantuml block. The panel
+ *     shows one block of it rather than the file, so a document with none is
+ *     one it has nothing to show for.
  *   - a plain-text file is followed once it opens a `@start…` block. The name
  *     says nothing, so the content decides, which is what lets `.txt` work and
  *     what leaves a notes file alone.
@@ -1078,6 +1208,13 @@ function isPlantUmlDocument(document) {
 
 	if (PLANTUML_EXTENSIONS.has(path.extname(document.uri.path).toLowerCase())) {
 		return true;
+	}
+
+	if (isMarkdownDocument(document)) {
+		// Read whole, with no equivalent of DIAGRAM_SNIFF_LINES: a diagram
+		// belongs wherever the prose put it, and prose is what the top of a
+		// documentation file is for.
+		return findPlantUmlBlocks(document.getText()).length > 0;
 	}
 
 	return document.languageId === 'plaintext' && opensDiagramBlock(document);
@@ -1113,15 +1250,20 @@ function opensDiagramBlock(document) {
  * somewhere else entirely in the file.
  *
  * @param {vscode.TextDocument} document
- * @param {import('./src/sourceRegion').SourceRegion} region
+ * @param {import('./src/sourceRegion').SourceRegion | undefined} region where
+ *   the diagram lives now, or undefined if it could not be found
  * @param {number[]} rows zero-based, relative to the region
  */
 function applyHighlight(document, region, rows) {
-	const lines = (rows ?? [])
-		.map((row) => toDocumentRow(region, row))
-		// A row the diagram has and the document does not: a stale region, or a
-		// marker on a line an edit has just removed.
-		.filter((line) => line >= 0 && line < document.lineCount);
+	// Without a region there is no line these rows could name, so the highlight
+	// comes off rather than being left where the diagram used to be.
+	const lines = !region
+		? []
+		: (rows ?? [])
+				.map((row) => toDocumentRow(region, row))
+				// A row the diagram has and the document does not: a marker on a
+				// line an edit has just removed.
+				.filter((line) => line >= 0 && line < document.lineCount);
 
 	paintHighlight(
 		document,

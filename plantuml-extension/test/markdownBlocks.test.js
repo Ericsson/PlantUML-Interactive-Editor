@@ -24,7 +24,7 @@
 
 const assert = require('assert');
 
-const { findPlantUmlBlocks, blockAtLine } = require('../src/markdownBlocks');
+const { findPlantUmlBlocks, blockAtLine, blockToShow } = require('../src/markdownBlocks');
 const { regionSource } = require('../src/sourceRegion');
 
 /** @param {string[]} lines */
@@ -286,5 +286,44 @@ suite('markdownBlocks: the block at a line', () => {
 
 	test('finds nothing when there are no blocks', () => {
 		assert.strictEqual(blockAtLine([], 0), undefined);
+	});
+});
+
+suite('markdownBlocks: the block a panel opens on', () => {
+	const text = md(
+		'# Notes',
+		'```plantuml',
+		'@startuml',
+		'first',
+		'@enduml',
+		'```',
+		'prose',
+		'```plantuml',
+		'@startuml',
+		'second',
+		'@enduml',
+		'```'
+	);
+
+	test('shows the diagram the caret is in', () => {
+		// Running the command on a diagram means that diagram, which is the
+		// whole point of the caret deciding.
+		assert.strictEqual(blockToShow(text, 9).fenceLine, 7);
+		assert.strictEqual(blockToShow(text, 3).fenceLine, 1);
+	});
+
+	test('falls back to the first diagram', () => {
+		// A caret in prose is not a choice between diagrams, and a panel can be
+		// pointed at a document no editor has the focus of. Both still show
+		// something rather than nothing.
+		assert.strictEqual(blockToShow(text, 6).fenceLine, 1, 'caret in prose');
+		assert.strictEqual(blockToShow(text, 0).fenceLine, 1, 'caret above every block');
+		assert.strictEqual(blockToShow(text).fenceLine, 1, 'no caret at all');
+	});
+
+	test('has nothing to show for a document without blocks', () => {
+		// What the caller reports rather than opening a panel on prose.
+		assert.strictEqual(blockToShow(md('# Notes', 'Prose.'), 0), undefined);
+		assert.strictEqual(blockToShow(md('```text', 'not a diagram', '```')), undefined);
 	});
 });

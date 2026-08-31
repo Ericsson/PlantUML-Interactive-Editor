@@ -254,10 +254,60 @@ suite('extension: which document the panel shows', () => {
 		assert.ok(!extension.isPlantUmlDocument(python));
 	});
 
+	test('follows a Markdown file that holds a diagram', () => {
+		// Unlike the languages above, a Markdown file is not the source and is
+		// still followed: the panel shows one fenced block of it, so the prose
+		// around the diagram is never handed to the renderer.
+		const notes = doc('/w/notes.md', {
+			languageId: 'markdown',
+			text: `# Notes\n\n\`\`\`plantuml\n${DIAGRAM}\`\`\`\n\nAfter.\n`
+		});
+
+		assert.ok(extension.isPlantUmlDocument(notes));
+	});
+
+	test('follows a Markdown file whose diagram is far down it', () => {
+		// No equivalent of DIAGRAM_SNIFF_LINES: prose is exactly what the top
+		// of a documentation file is for, so the whole of it is read.
+		const long = doc('/w/guide.md', {
+			languageId: 'markdown',
+			text: `${'Prose.\n'.repeat(400)}\`\`\`plantuml\n${DIAGRAM}\`\`\`\n`
+		});
+
+		assert.ok(extension.isPlantUmlDocument(long));
+	});
+
+	test('leaves the panel alone for Markdown with no diagram', () => {
+		// The panel has nothing to show for it. Following it would mean either
+		// rendering the prose or blanking the diagram the user was looking at.
+		for (const [name, text] of [
+			['prose.md', '# Notes\n\nProse.\n'],
+			['code.md', '```python\nprint("hi")\n```\n'],
+			['fragment.md', '```plantuml\na -> b\n```\n'],
+			['empty.md', '']
+		]) {
+			assert.ok(
+				!extension.isPlantUmlDocument(doc(`/w/${name}`, { languageId: 'markdown', text })),
+				`${name} is followed`
+			);
+		}
+	});
+
 	test('names the file it is showing', () => {
 		// The one place a user can see which of several open diagrams the panel
 		// is pointed at.
 		assert.strictEqual(extension.panelTitle(doc('/w/test2.puml')), 'PlantUML: test2.puml');
+	});
+
+	test('names the block it is showing, by its fence', () => {
+		// A Markdown file can hold several diagrams, so the file name alone
+		// would not say which one is live. One-based, as the gutter is.
+		const block = { fenceLine: 11, startLine: 12, endLine: 14, indent: '' };
+
+		assert.strictEqual(
+			extension.panelTitle(doc('/w/notes.md', { languageId: 'markdown' }), block),
+			'PlantUML: notes.md:12'
+		);
 	});
 });
 

@@ -222,6 +222,10 @@ function describe(lines, open, closingLine) {
  * Clicking one is not a request to edit the diagram it wraps, and it is also
  * where the caret sits just after typing the fence, before the diagram exists.
  *
+ * The plain question, with no fallback -- which is what makes it the right one
+ * for deciding whether the caret has moved into a *different* diagram, where
+ * prose has to mean "no change" rather than "the first one".
+ *
  * @param {MarkdownBlock[]} blocks
  * @param {number} line zero-based
  * @returns {MarkdownBlock | undefined}
@@ -230,7 +234,31 @@ function blockAtLine(blocks, line) {
 	return blocks.find((block) => line >= block.startLine && line <= block.endLine);
 }
 
+/**
+ * The block a panel opening on this document should show.
+ *
+ * The caret's, so that running the command on a diagram shows that diagram;
+ * else the first in the file, so that running it anywhere in a document that
+ * has one still shows something. A caret is not always available -- the panel
+ * can be pointed at a document no editor has the focus of -- and a caret in
+ * prose is not a choice between diagrams, so both fall back the same way.
+ *
+ * @param {string} text the whole document
+ * @param {number} [caretLine] zero-based, where the caret is
+ * @returns {MarkdownBlock | undefined} undefined when the document holds none
+ */
+function blockToShow(text, caretLine) {
+	const blocks = findPlantUmlBlocks(text);
+
+	if (caretLine === undefined) {
+		return blocks[0];
+	}
+
+	return blockAtLine(blocks, caretLine) ?? blocks[0];
+}
+
 module.exports = {
 	findPlantUmlBlocks,
-	blockAtLine
+	blockAtLine,
+	blockToShow
 };
