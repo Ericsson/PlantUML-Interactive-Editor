@@ -69,9 +69,10 @@ const {
 	regionSource,
 	indentSource,
 	toDocumentRow,
-	toRegionRow
+	toRegionRow,
+	containsLine
 } = require('./src/sourceRegion');
-const { findPlantUmlBlocks, blockToShow } = require('./src/markdownBlocks');
+const { findPlantUmlBlocks, blockToShow, blockToFollow } = require('./src/markdownBlocks');
 
 const LIVE_UPDATE_DEBOUNCE_MS = 300;
 
@@ -107,6 +108,18 @@ const PLANTUML_EXTENSIONS = new Set(['.puml', '.plantuml', '.pu', '.iuml', '.wsd
 
 /** How far into a plain-text file to look for a `@start…` block. */
 const DIAGRAM_SNIFF_LINES = 200;
+
+/**
+ * The row posted for a caret that is not in the diagram on screen.
+ *
+ * Reading the prose around a diagram, or a different diagram in the same file,
+ * leaves the caret on a line the diagram has no row for. A row no element can
+ * own says exactly that: the frontend's cursor handler clears the highlight and
+ * then looks this row up, finds nothing, and lights nothing -- so the diagram
+ * stops pointing at a line the caret has left, instead of keeping the last one
+ * lit. Nothing else in the app reads the cursor.
+ */
+const NO_DIAGRAM_ROW = -1;
 
 /**
  * Line highlight for the diagram -> editor direction: hovering an element in
@@ -858,6 +871,49 @@ async function createDiagramPanel(context) {
 		});
 	};
 
+	// Point the panel at a diagram of the document it is already on: retitle,
+	// resend, and drop what belonged to the diagram being left. The one way the
+	// shown block changes, called by the caret listener and by showDocument.
+	/** @param {import('./src/markdownBlocks').MarkdownBlock} [block] */
+	const showBlock = (block) => {
+		// Painted for the diagram being left, and about to mean nothing.
+		clearHighlight(document);
+		// A post left pending by the previous diagram would fire just after
+		// this one and resend what it is about to send.
+		clearTimeout(debounceTimer);
+
+		activeBlock = block;
+		panel.title = panelTitle(document, block);
+		outputChannel?.appendLine(`[panel] now showing ${panelSubject(document, block)}`);
+		postDocument();
+	};
+
+	/**
+	 * Switch to the diagram the caret has moved into, if it moved into another.
+	 *
+	 * The whole of the caret-picks-the-diagram behaviour. Everything about when
+	 * *not* to switch is in blockToFollow, which is where it can be tested: the
+	 * caret in prose, on a fence, or in the diagram already on screen all leave
+	 * the panel where it is.
+	 *
+	 * This is also how the panel recovers after an edit above the block moved
+	 * its fence out from under `activeBlock`: the caret coming back into the
+	 * block finds it at its new line and adopts it.
+	 *
+	 * @param {number} caretLine zero-based
+	 */
+	const followCaretIntoBlock = (caretLine) => {
+		if (!isMarkdownDocument(document)) {
+			return;
+		}
+
+		const next = blockToFollow(document.getText(), caretLine, activeBlock);
+
+		if (next) {
+			showBlock(next);
+		}
+	};
+
 	// The one way onto another file: retitle, resend, and drop what belonged to
 	// the file being left. Called by the active-editor listener below, and by
 	// the command when it reveals this panel.
@@ -886,17 +942,12 @@ async function createDiagramPanel(context) {
 			return;
 		}
 
-		// Painted for the file the panel is leaving, and about to mean nothing.
+		// Painted for the file the panel is leaving, and cleared before
+		// `document` moves on, since that is the handle the decorations are on.
 		clearHighlight(document);
-		// A post left pending by the previous file would fire just after this
-		// one and resend what it is about to send.
-		clearTimeout(debounceTimer);
 
 		document = next;
-		activeBlock = nextBlock;
-		panel.title = panelTitle(document, activeBlock);
-		outputChannel?.appendLine(`[panel] now showing ${panelSubject(document, activeBlock)}`);
-		postDocument();
+		showBlock(nextBlock);
 	};
 
 	// Handed to the window from here, not from createWebviewPanel: the early
@@ -957,24 +1008,28 @@ async function createDiagramPanel(context) {
 		}
 	});
 
-	// Cursor -> diagram highlighting. VS Code exposes no per-line mouse-hover
-	// event for text editors, so the web app's editor-to-diagram hover
-	// direction degrades to following the caret.
+	// Cursor -> diagram highlighting, and -- in a Markdown file -- which diagram
+	// the panel is on. VS Code exposes no per-line mouse-hover event for text
+	// editors, so the web app's editor-to-diagram hover direction degrades to
+	// following the caret, and the caret is also the only gesture available for
+	// choosing between the diagrams a document holds.
 	const selectionListener = vscode.window.onDidChangeTextEditorSelection((event) => {
 		if (event.textEditor.document !== document) {
 			return;
 		}
 
+		const position = event.selections[0].active;
+
+		followCaretIntoBlock(position.line);
+
 		const region = currentRegion();
 
-		if (!region) {
-			return;
-		}
-
-		const position = event.selections[0].active;
 		panel.webview.postMessage({
 			type: 'cursorMoved',
-			row: toRegionRow(region, position.line),
+			row:
+				region && containsLine(region, position.line)
+					? toRegionRow(region, position.line)
+					: NO_DIAGRAM_ROW,
 			column: position.character
 		});
 	});

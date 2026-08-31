@@ -30,7 +30,8 @@ const {
 	stripIndent,
 	indentSource,
 	toDocumentRow,
-	toRegionRow
+	toRegionRow,
+	containsLine
 } = require('../src/sourceRegion');
 
 /** @param {string[]} lines */
@@ -194,5 +195,15 @@ suite('sourceRegion: row translation', () => {
 		// the diagram's first line whenever the caret sat above the block.
 		assert.strictEqual(toRegionRow(region, 9), -1);
 		assert.strictEqual(toRegionRow(region, 15), 5);
+	});
+
+	test('answers whether a line belongs to the region at all', () => {
+		// The check the caret needs before its line is translated: outside the
+		// region there is no row to send, not a row to clamp to.
+		assert.ok(containsLine(region, 10), 'the first line');
+		assert.ok(containsLine(region, 12), 'a line within');
+		assert.ok(containsLine(region, 14), 'the last line, endLine being inclusive');
+		assert.ok(!containsLine(region, 9), 'the line above');
+		assert.ok(!containsLine(region, 15), 'the line below');
 	});
 });

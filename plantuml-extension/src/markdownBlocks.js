@@ -65,6 +65,8 @@
 // rendering a diagram somebody wrote as an example of how to write one -- is
 // rarer than the list-item case it would break.
 
+const { containsLine } = require('./sourceRegion');
+
 /**
  * Opening fence: indentation, the run of fence characters, and the info string.
  *
@@ -231,7 +233,7 @@ function describe(lines, open, closingLine) {
  * @returns {MarkdownBlock | undefined}
  */
 function blockAtLine(blocks, line) {
-	return blocks.find((block) => line >= block.startLine && line <= block.endLine);
+	return blocks.find((block) => containsLine(block, line));
 }
 
 /**
@@ -257,8 +259,40 @@ function blockToShow(text, caretLine) {
 	return blockAtLine(blocks, caretLine) ?? blocks[0];
 }
 
+/**
+ * The block the caret has moved into, when the panel should follow it there.
+ *
+ * How a Markdown file's several diagrams are chosen between: put the caret in
+ * one and the panel shows it. There is no per-line hover event to use instead,
+ * and clicking into the diagram you mean is what a reader does anyway.
+ *
+ * Nothing to follow -- no switch -- in three cases, which is the sticky rule:
+ * the caret is in prose, or on a fence, or already in the diagram on screen.
+ * Reading around a diagram must not take it off the screen.
+ *
+ * Unlike blockToShow there is no falling back to the first block. A fallback
+ * here would mean that clicking into prose switched the panel to the top of the
+ * file, which is the opposite of staying put.
+ *
+ * @param {string} text the whole document
+ * @param {number} caretLine zero-based
+ * @param {MarkdownBlock} [showing] the block on screen
+ * @returns {MarkdownBlock | undefined} the block to switch to, or undefined to
+ *   stay on the one being shown
+ */
+function blockToFollow(text, caretLine, showing) {
+	const next = blockAtLine(findPlantUmlBlocks(text), caretLine);
+
+	if (!next || next.fenceLine === showing?.fenceLine) {
+		return undefined;
+	}
+
+	return next;
+}
+
 module.exports = {
 	findPlantUmlBlocks,
 	blockAtLine,
-	blockToShow
+	blockToShow,
+	blockToFollow
 };

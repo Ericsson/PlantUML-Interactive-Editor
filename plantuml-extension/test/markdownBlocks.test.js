@@ -24,7 +24,12 @@
 
 const assert = require('assert');
 
-const { findPlantUmlBlocks, blockAtLine, blockToShow } = require('../src/markdownBlocks');
+const {
+	findPlantUmlBlocks,
+	blockAtLine,
+	blockToShow,
+	blockToFollow
+} = require('../src/markdownBlocks');
 const { regionSource } = require('../src/sourceRegion');
 
 /** @param {string[]} lines */
@@ -325,5 +330,67 @@ suite('markdownBlocks: the block a panel opens on', () => {
 		// What the caller reports rather than opening a panel on prose.
 		assert.strictEqual(blockToShow(md('# Notes', 'Prose.'), 0), undefined);
 		assert.strictEqual(blockToShow(md('```text', 'not a diagram', '```')), undefined);
+	});
+});
+
+suite('markdownBlocks: the diagram the caret moves into', () => {
+	const text = md(
+		'# Notes',
+		'```plantuml',
+		'@startuml',
+		'first',
+		'@enduml',
+		'```',
+		'prose',
+		'```plantuml',
+		'@startuml',
+		'second',
+		'@enduml',
+		'```'
+	);
+	const [first, second] = findPlantUmlBlocks(text);
+
+	test('follows the caret into another diagram', () => {
+		// The only gesture available for choosing between a file's diagrams:
+		// put the caret in one and the panel shows it. Compared by value, each
+		// scan of the text producing its own objects.
+		assert.deepStrictEqual(blockToFollow(text, 9, first), second);
+		assert.deepStrictEqual(blockToFollow(text, 3, second), first);
+	});
+
+	test('stays on the diagram already shown', () => {
+		// Moving about inside the diagram on screen is not a switch, and a
+		// switch would resend and retitle for nothing.
+		for (const line of [2, 3, 4]) {
+			assert.strictEqual(blockToFollow(text, line, first), undefined, `line ${line}`);
+		}
+	});
+
+	test('stays put for a caret in prose or on a fence', () => {
+		// The sticky rule: reading around a diagram must not take it off the
+		// screen, and there is no first-block fallback here for that reason.
+		assert.strictEqual(blockToFollow(text, 0, first), undefined, 'the heading');
+		assert.strictEqual(blockToFollow(text, 6, first), undefined, 'the prose between');
+		assert.strictEqual(blockToFollow(text, 1, first), undefined, 'an opening fence');
+		assert.strictEqual(blockToFollow(text, 5, first), undefined, 'a closing fence');
+		// Including when it is another diagram's fence, which is the caret on
+		// its way in rather than in.
+		assert.strictEqual(blockToFollow(text, 7, first), undefined, "another's fence");
+	});
+
+	test('adopts the block when the panel is on none', () => {
+		assert.deepStrictEqual(blockToFollow(text, 3, undefined), first);
+	});
+
+	test('adopts the same diagram again once its fence has moved', () => {
+		// How the panel recovers after an edit above it moved the fence out from
+		// under the block being shown: the caret coming back in finds it at its
+		// new line, which is a different block by the only identity there is.
+		const shifted = md('# Notes', 'A new line.', ...text.split('\n').slice(1));
+
+		const adopted = blockToFollow(shifted, 4, first);
+
+		assert.ok(adopted, 'the moved block was not adopted');
+		assert.strictEqual(adopted.fenceLine, first.fenceLine + 1);
 	});
 });

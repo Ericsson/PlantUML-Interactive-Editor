@@ -196,11 +196,27 @@ function toRegionRow(region, line) {
 	return line - region.startLine;
 }
 
+/**
+ * Whether `line` is one of the region's.
+ *
+ * The question the caret raises: a line outside the region has no row in the
+ * diagram, so there is nothing to say about it rather than a row to clamp it
+ * to. Both ends inclusive, `endLine` being part of the region.
+ *
+ * @param {SourceRegion} region
+ * @param {number} line zero-based, relative to the document
+ * @returns {boolean}
+ */
+function containsLine(region, line) {
+	return line >= region.startLine && line <= region.endLine;
+}
+
 module.exports = {
 	wholeDocumentRegion,
 	regionSource,
 	stripIndent,
 	indentSource,
 	toDocumentRow,
-	toRegionRow
+	toRegionRow,
+	containsLine
 };
