@@ -219,7 +219,7 @@ suite('extension: which document the panel shows', () => {
 		// VS Code registers no language for PlantUML, so the id depends on
 		// which other extension the user has; when one does set it, honour it
 		// even for a name this would not otherwise recognise.
-		assert.ok(extension.isPlantUmlDocument(doc('/w/diagram.dat', 'plantuml')));
+		assert.ok(extension.isPlantUmlDocument(doc('/w/diagram.dat', { languageId: 'plantuml' })));
 	});
 
 	test('follows a plain-text file that opens a diagram', () => {
