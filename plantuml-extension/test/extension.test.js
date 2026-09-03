@@ -219,7 +219,7 @@ suite('extension: which document the panel shows', () => {
 		// VS Code registers no language for PlantUML, so the id depends on
 		// which other extension the user has; when one does set it, honour it
 		// even for a name this would not otherwise recognise.
-		assert.ok(extension.isPlantUmlDocument(doc('/w/diagram.dat', 'plantuml')));
+		assert.ok(extension.isPlantUmlDocument(doc('/w/diagram.dat', { languageId: 'plantuml' })));
 	});
 
 	test('follows a plain-text file that opens a diagram', () => {
@@ -254,10 +254,61 @@ suite('extension: which document the panel shows', () => {
 		assert.ok(!extension.isPlantUmlDocument(python));
 	});
 
+	test('follows a Markdown file that holds a diagram', () => {
+		// A Markdown file holds diagrams and is followed for them: the panel
+		// shows one fenced block of it, so the renderer is handed a diagram and
+		// the prose stays where it is.
+		const notes = doc('/w/notes.md', {
+			languageId: 'markdown',
+			text: `# Notes\n\n\`\`\`plantuml\n${DIAGRAM}\`\`\`\n\nAfter.\n`
+		});
+
+		assert.ok(extension.isPlantUmlDocument(notes));
+	});
+
+	test('follows a Markdown file whose diagram is far down it', () => {
+		// The whole file is read, where DIAGRAM_SNIFF_LINES bounds the
+		// plain-text sniff: prose is exactly what the top of a documentation
+		// file is for.
+		const long = doc('/w/guide.md', {
+			languageId: 'markdown',
+			text: `${'Prose.\n'.repeat(400)}\`\`\`plantuml\n${DIAGRAM}\`\`\`\n`
+		});
+
+		assert.ok(extension.isPlantUmlDocument(long));
+	});
+
+	test('leaves the panel alone for Markdown with no diagram', () => {
+		// A block is what the panel has to show, and the panel keeps the diagram
+		// the user was looking at until it finds one.
+		for (const [name, text] of [
+			['prose.md', '# Notes\n\nProse.\n'],
+			['code.md', '```python\nprint("hi")\n```\n'],
+			['fragment.md', '```plantuml\na -> b\n```\n'],
+			['empty.md', '']
+		]) {
+			assert.ok(
+				!extension.isPlantUmlDocument(doc(`/w/${name}`, { languageId: 'markdown', text })),
+				`${name} is followed`
+			);
+		}
+	});
+
 	test('names the file it is showing', () => {
 		// The one place a user can see which of several open diagrams the panel
 		// is pointed at.
 		assert.strictEqual(extension.panelTitle(doc('/w/test2.puml')), 'PlantUML: test2.puml');
+	});
+
+	test('names the block it is showing, by its fence', () => {
+		// A Markdown file can hold several diagrams, so the title carries the
+		// fence line to say which one is live. One-based, as the gutter is.
+		const block = { fenceLine: 11, startLine: 12, endLine: 14, indent: '' };
+
+		assert.strictEqual(
+			extension.panelTitle(doc('/w/notes.md', { languageId: 'markdown' }), block),
+			'PlantUML: notes.md:12'
+		);
 	});
 });
 

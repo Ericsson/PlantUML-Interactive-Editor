@@ -84,6 +84,32 @@ opened or switched to — so the command is needed once per window, and the tab
 names the file on show. A `.txt` counts when it starts with a `@startuml` block;
 a file that is not a diagram leaves the panel as it was.
 
+### Diagrams in Markdown
+
+A `.md` file works too, for diagrams written in a fenced code block:
+
+````markdown
+Some prose.
+
+```plantuml
+@startuml
+a -> b
+@enduml
+```
+````
+
+Put the caret in the block and the panel shows that diagram; editing it in the
+panel rewrites those lines and leaves the prose around them alone. A file can
+hold as many diagrams as you like — move the caret into another block and the
+panel follows, and the tab names the block by its fence line, `notes.md:12`.
+The caret in prose keeps the diagram you were last in on screen, so reading
+around a diagram keeps it up. A fence indented inside a list item works, and
+keeps its indentation.
+
+The fence is read as a diagram when it opens with ` ```plantuml `, holds a
+`@start…` line, and is closed. The PNG button exports the diagram the panel is
+showing.
+
 ## Development
 
 `F5` runs the Extension Development Host from `.vscode/launch.json`. That host

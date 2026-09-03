@@ -107,10 +107,16 @@
 		const message = event.data;
 
 		if (message.type === 'documentChanged') {
-			if (!booted) {
-				// First message: seed the text without firing `change`, then
-				// render once explicitly. Going through applyDocumentText here
-				// would render via the debounce and race the handler setup.
+			// `replaced` marks a different diagram: the panel was pointed at
+			// another block, or another file. It takes the same path as the very
+			// first document, and for the same reason the first one takes it --
+			// applyDocumentText renders through the debounce, whose last act is
+			// to highlight the lines that changed since the previous render, and
+			// two unrelated diagrams differ everywhere.
+			if (!booted || message.replaced) {
+				// Seed the text, which leaves `change` unfired, then render once
+				// explicitly. For the first message this also keeps the render
+				// clear of the handler setup.
 				booted = true;
 				editor.primeDocumentText(message.text);
 				renderPlantUml();

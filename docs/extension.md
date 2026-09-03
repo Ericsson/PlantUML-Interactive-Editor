@@ -102,6 +102,8 @@ Node side, `plantuml-extension/`:
 | --- | --- |
 | `package.json` | Manifest: the `plantuml-interactive-editor.openDiagram` and `.reinstallBackend` commands, the two settings, and the browser libraries as runtime dependencies. |
 | `extension.js` | Lifecycle, the commands, the webview panel, document listeners, and the message handlers. The only writer of the document. |
+| `src/sourceRegion.js` | The part of the document the panel shows: the four translations across its edge, and the line tracking that keeps it findable. Pure Node. |
+| `src/markdownBlocks.js` | Finds the ```plantuml blocks in a Markdown document, and answers which one the panel shows. Pure Node. |
 | `src/settings.js` | Only what more than one file needs: the configuration section, path normalization, and the is-it-a-file predicate. |
 | `src/sidecar.js` | Spawns and supervises the Python child; port handshake, token, health polling, error messages. |
 | `src/backendInstall.js` | Finds the wheel inside the vsix, decides where its virtual environment goes, and drives the installer under each candidate interpreter. |
@@ -211,7 +213,7 @@ instances do not. Every message carries a `type` discriminator.
 
 | Direction | Message | Payload | Sent when |
 | --- | --- | --- | --- |
-| host → webview | `documentChanged` | `{ text }` | Once the webview has posted `ready`, on every document change, debounced 300 ms, and on a switch to another diagram file. |
+| host → webview | `documentChanged` | `{ text, replaced }` | Once the webview has posted `ready`, on every document change, debounced 300 ms, and on a switch to another diagram or file. `replaced` marks a switch — a different diagram, as opposed to an edit of the one on screen — which the page seeds and renders directly, where it diffs an edit. That keeps the app's change-highlighting on the lines the user edited. |
 | host → webview | `cursorMoved` | `{ row, column }` | On `onDidChangeTextEditorSelection`, undebounced, zero-based. |
 | webview → host | `applyPuml` | `{ text }` | A diagram operation produced new source. |
 | webview → host | `setHighlight` | `{ rows }`, zero-based line numbers | The shim's marker table changed. |
@@ -296,23 +298,83 @@ the `PLANTUML_GUI_JAR_OVERRIDE` indirection work.
 ### 6. Host ↔ the document
 
 Not cross-process, but the link that closes the loop. The host reads with
-`document.getText()` and writes with a `WorkspaceEdit` replacing the full range — one edit,
-so one undo step, so Ctrl+Z undoes a diagram click. It is the **only** write path to the
-file; neither the webview nor the sidecar can reach it.
+`document.getText()` and writes with a `WorkspaceEdit` — one edit, so one undo step, so
+Ctrl+Z undoes a diagram click. It is the **only** write path to the file; neither the
+webview nor the sidecar can reach it.
 
 Which document that is follows the active editor: clicking into another diagram file points
 the panel at it, resends its text and retitles the tab, so one panel serves every diagram in
 the window.
 
+#### The region
+
+What the panel shows is a **region** of that document: a line range, plus the indentation
+its lines carry inside the file. `src/sourceRegion.js` owns the idea. For a `.puml` file the
+region covers the whole document, which is what keeps one code path serving both it and a
+diagram in a Markdown code fence.
+
+Five things cross that boundary, and each is translated:
+
+| Crossing | Translation |
+| --- | --- |
+| the source posted to the webview | `regionSource(text, region)`, which slices the lines and strips the region's indentation |
+| a rewrite written back | `regionRange()` covers the region's whole lines, and `indentSource()` puts the indentation back |
+| `setHighlight` rows → decorations | `toDocumentRow(region, row)` |
+| the caret's line → `cursorMoved` | `toRegionRow(region, line)` for the lines the region covers, `NO_DIAGRAM_ROW` (-1) for the rest |
+| the PNG source | `regionSource()`, as for the post |
+
+The region is **located afresh on every use**, by `currentRegion()`. A block's lines move
+under every edit — its own rewrites change how many it has, and typing above it moves all of
+them — so finding it in the text as it stands is what keeps each write and each highlight
+aimed at the block as it is. `activeBlock` remembers the block by its opening fence, and the
+change listener follows that line through each edit with `trackLine()`.
+
+An edit can rewrite the fence line itself, or take the block away. `currentRegion()` then
+has no region to give, and each of the five sites answers for it: the panel keeps the diagram
+on screen, the write is logged and left, the highlight comes off, the caret post carries
+`NO_DIAGRAM_ROW`, and the PNG button reports it. The caret moving into a block takes the
+panel on from there. So a diagram gesture only ever writes into a block the document holds,
+which is the property that keeps prose safe.
+
+#### Which files the panel follows
+
 `isPlantUmlDocument()` decides which files may take it over. A PlantUML extension —
 `.puml`, `.plantuml`, `.pu`, `.iuml`, `.wsd`, `.uml` — qualifies whatever the file holds, and
 so does a `plantuml` language id. A `plaintext` document qualifies once it opens a `@start…`
 block within its first `DIAGRAM_SNIFF_LINES` lines, which is what makes diagrams kept in
-`.txt` work. Any other language never qualifies: the whole document is the source, so a
-diagram quoted in a docstring would be rendered with the code around it.
+`.txt` work. A `markdown` document qualifies once it holds a ` ```plantuml ` block, the whole
+file being read since a diagram belongs wherever the prose put it. Every other language
+leaves the panel alone: the whole document is the source, so a diagram quoted in a docstring
+would be rendered with the code around it.
 
 A document that is not followed leaves the panel on the file it was showing. So does a
 settings tab, and so does focus in the panel itself — there is no active text editor then.
+
+#### Markdown blocks
+
+`src/markdownBlocks.js` finds the diagrams in a Markdown file. A block is a fence opened
+with backticks and the info string `plantuml`, compared case-insensitively, whose content
+holds a `@start…` line and which has a closing fence; that fence is the line the diagram ends
+at, and the end of the range a rewrite is written into. Any leading indentation is allowed,
+so a fence inside a list item works: the indentation is reported on the block, stripped from
+what the renderer is given, and put back on the way in. A block is a region plus its fence
+line, so what the scanner finds is what the translation above takes.
+
+The scan walks the document line by line, tracking every fence of either kind. A closing
+fence is the one carrying an empty info string, so a ` ```plantuml ` line inside a
+` ```text ` block reads as content and stays somebody's example. `puml`, `uml` and `~~~`
+fences are code blocks like any other.
+
+Which block the panel shows is the caret's business. Opening picks the caret's block, else
+the file's first (`blockToShow`). Moving the caret into another block switches to it
+(`blockToFollow`), and the panel stays where it is when the caret is in prose, on a fence, or
+in the diagram already on screen — so reading around a diagram keeps it on screen. The tab
+title carries the fence line, `PlantUML: notes.md:12`, since one file can hold several.
+
+One hazard is worth knowing: a modal open in the panel computes its rewrite from the source
+the page holds, so switching diagrams while one is open — which in a Markdown file is a caret
+move — leaves that modal working from the diagram the panel has left. Closing it would take
+a source token through `documentChanged` and `applyPuml`.
 
 ## Startup sequence
 
@@ -878,7 +940,7 @@ talks to the sidecar and the host only owns the document; here the host does bot
 
 ```
 webview   #png clicked → post {savePng}          no payload
-host      POST /renderPNG {plantuml: document.getText()}
+host      POST /renderPNG {plantuml: regionSource(document.getText(), region)}
 sidecar   routes.py renderpng() → render.py → java -pipe -tpng -Sdpi=300
 sidecar   send_file(image/png) → response.arrayBuffer()
 host      showSaveDialog → workspace.fs.writeFile
@@ -890,13 +952,19 @@ Three things about it are deliberate:
   reaches it through `applyPuml` before a render can be asked for — and the webview's copy is
   a shim's cache of the same text. Reading it here removes the question of which is newer.
   It also means the PNG ignores the panel's pan and zoom, and comes out identical to the one
-  the web app's button produces.
+  the web app's button produces. What is read is the [region](#6-host--the-document) the panel
+  is showing, so a diagram in a Markdown fence is exported as that diagram; a render comes
+  from a block the document still holds, the document being what has the diagram to give.
 - **An empty body is a failure.** `_create_png_from_uml` runs java with `check=False` and
   returns its stdout whatever happened, so a jar that could not run arrives as `200` with
   nothing in it. Writing that leaves a zero-byte `.png` that looks like a save that worked, so
   the host checks the length before opening the dialog.
 - **A cancelled dialog is not an error.** `showSaveDialog` resolves to `undefined`, and the
   handler returns without a notification.
+
+The save dialog opens on `<basename>.png` beside the document, which for a Markdown file
+holding several diagrams is the same name for each of them; the name is the user's to change
+in the dialog.
 
 The web app's own `#png` handler in `script.js` is never reached: it is registered by
 `buttonEventListeners()`, which `webviewInit.js` does not call. Its approach — a temporary
@@ -906,8 +974,9 @@ The web app's own `#png` handler in `script.js` is never reached: it is register
 
 **Diagram → editor** works fully. Hovering a diagram element makes the app call
 `session.addMarker(range, "hover", ...)`; the shim collects the marked rows and posts
-`setHighlight`; `applyHighlight()` filters out-of-range rows and calls `setDecorations` on
-every visible editor showing the document. The decoration type is created once at module
+`setHighlight`; `applyHighlight()` translates those rows into document lines through the
+[region](#the-region), keeps the ones the document has lines for, and calls `setDecorations`
+on every visible editor showing the document. The decoration type is created once at module
 level, since each one is a resource VS Code tracks.
 
 **Editor → diagram** is degraded by design. VS Code exposes no per-line mouse-hover event
@@ -916,7 +985,9 @@ for text editors, so the shim's `editor.on()` is a no-op and
 complete if that ever changes. The feature instead follows the caret:
 `onDidChangeTextEditorSelection` → `cursorMoved` → `applyCursor` → the app's
 `cursorChangeListener` → `highlightEditorRow()`, which uses the row tables fetched once per
-render from `/getActivityPositions` and `/getSequencePositions`.
+render from `/getActivityPositions` and `/getSequencePositions`. A caret on one of the
+region's lines carries that line's row; a caret elsewhere in the file carries
+`NO_DIAGRAM_ROW`, which clears the diagram's highlight as the caret leaves it.
 
 ## Configuration
 

@@ -32,6 +32,13 @@
 // The webview's page is rendered by that same backend and fetched by
 // src/webviewPage.js.
 //
+// What the panel shows is a *region* of the document -- a line range plus the
+// indentation it carries; see src/sourceRegion.js. For a `.puml` file that
+// region covers the whole document, which is why one code path serves both it
+// and a diagram sitting in a Markdown code fence. Everything crossing the
+// boundary is translated: the source sent out, the rewrite written back, the
+// highlighted rows, the caret's row.
+//
 // That backend is installed on first use, out of a wheel inside the vsix, into
 // a virtual environment under this extension's global storage; see
 // src/backendInstall.js.
@@ -57,6 +64,16 @@ const {
 } = require('./src/backendInstall');
 const { resolvePlantUmlJarPath, PlantUmlConfigError } = require('./src/plantumlJar');
 const { fetchWebviewPage, vendorRoot, WebviewPageError } = require('./src/webviewPage');
+const {
+	wholeDocumentRegion,
+	regionSource,
+	indentSource,
+	toDocumentRow,
+	toRegionRow,
+	containsLine,
+	trackLine
+} = require('./src/sourceRegion');
+const { findPlantUmlBlocks, blockToShow, blockToFollow } = require('./src/markdownBlocks');
 
 const LIVE_UPDATE_DEBOUNCE_MS = 300;
 
@@ -92,6 +109,17 @@ const PLANTUML_EXTENSIONS = new Set(['.puml', '.plantuml', '.pu', '.iuml', '.wsd
 
 /** How far into a plain-text file to look for a `@start…` block. */
 const DIAGRAM_SNIFF_LINES = 200;
+
+/**
+ * The row posted for a caret that has left the diagram on screen.
+ *
+ * Reading the prose around a diagram, or a different diagram in the same file,
+ * puts the caret outside the region the panel is showing. This row reports that:
+ * the frontend's cursor handler clears the highlight and then looks the row up
+ * among the diagram's own, so the diagram stops pointing at a line the caret has
+ * left. The app reads the cursor in that one place.
+ */
+const NO_DIAGRAM_ROW = -1;
 
 /**
  * Line highlight for the diagram -> editor direction: hovering an element in
@@ -144,8 +172,9 @@ let diagramPanelOpening;
  * @property {vscode.WebviewPanel} panel the panel itself, to reveal or dispose
  * @property {import('./src/sidecar').Sidecar} sidecar the backend its page was
  *   built against; a dead one leaves the panel unusable, see panelAction
- * @property {(document: vscode.TextDocument) => void} show point it at a file,
- *   resending the text and retitling the tab
+ * @property {(document: vscode.TextDocument, caretLine?: number) => void} show
+ *   point it at a file, resending the text and retitling the tab; the caret
+ *   line, where one is known, chooses which diagram in a Markdown file
  */
 
 /**
@@ -629,7 +658,7 @@ function openDiagramPanel(context) {
 		const editor = vscode.window.activeTextEditor;
 
 		if (editor) {
-			open.show(editor.document);
+			open.show(editor.document, editor.selection.active.line);
 		}
 
 		open.panel.reveal();
@@ -690,6 +719,30 @@ async function createDiagramPanel(context) {
 	// listener), so it is read at use rather than captured.
 	let document = editor.document;
 
+	// Which diagram in it, when the document holds diagrams rather than being
+	// one. Undefined for a PlantUML file, whose diagram is the whole of it.
+	//
+	// What is remembered of the block is its opening fence, kept current by
+	// trackBlockThroughChanges as the document is edited. The lines themselves
+	// are re-read on every use, through currentRegion(), which is what
+	// everything downstream reads.
+	//
+	// Resolved here, before anything is spawned: a Markdown file with a block is
+	// what there is a panel to open, and finding that out costs a line scan
+	// where starting a backend first would cost a wait.
+	/** @type {import('./src/markdownBlocks').MarkdownBlock | undefined} */
+	let activeBlock = isMarkdownDocument(document)
+		? blockToShow(document.getText(), editor.selection.active.line)
+		: undefined;
+
+	if (isMarkdownDocument(document) && !activeBlock) {
+		vscode.window.showErrorMessage(
+			`${path.basename(document.fileName)} has no \`\`\`plantuml block to show. ` +
+				'Add one, or run this on a PlantUML file.'
+		);
+		return;
+	}
+
 	// Checked before anything is spawned: serve.py only warns about a bad jar
 	// on stderr, so catching it here makes it a notification naming the setting,
 	// and skips starting a backend that could not render.
@@ -735,7 +788,7 @@ async function createDiagramPanel(context) {
 
 	const panel = vscode.window.createWebviewPanel(
 		'plantumlInteractiveDiagram',
-		panelTitle(document),
+		panelTitle(document, activeBlock),
 		vscode.ViewColumn.Beside,
 		{
 			enableScripts: true,
@@ -773,34 +826,165 @@ async function createDiagramPanel(context) {
 	// are what actually terminate the write-back loop.
 	let applyingEdit = false;
 
-	// Hands the whole source over; the frontend renders itself from it through
-	// the app's own renderPlantUml(). The text is read at call time, so
-	// whatever the document holds when this runs is what the diagram shows.
-	// Called from the `ready` handler for the first render, from the change
-	// listener for every edit, and on a switch to another file.
-	const postDocument = () => {
-		panel.webview.postMessage({ type: 'documentChanged', text: document.getText() });
+	/**
+	 * The part of the document to act on, located afresh.
+	 *
+	 * Found in the text as it is now, every time it is needed. A block's lines
+	 * move under every edit -- its own rewrites change how many it has, and
+	 * typing above it moves all of them -- so locating it at use is what keeps
+	 * every write and every highlight aimed at the block as it stands.
+	 *
+	 * The block is recognised by its opening fence, which the change listener
+	 * keeps current as the document is edited -- see trackBlockThroughChanges.
+	 * An edit that rewrote the fence line itself, or took the block away, leaves
+	 * the panel with the diagram on screen and its call sites with the undefined
+	 * each of them answers for.
+	 *
+	 * @returns {import('./src/sourceRegion').SourceRegion | undefined} where the
+	 *   diagram lives now, once the document still holds the block
+	 */
+	const currentRegion = () => {
+		const text = document.getText();
+
+		if (!activeBlock) {
+			return wholeDocumentRegion(text);
+		}
+
+		return findPlantUmlBlocks(text).find(
+			(block) => block.fenceLine === activeBlock.fenceLine
+		);
+	};
+
+	// Hands the diagram over; the frontend renders itself from it through the
+	// app's own renderPlantUml(). The text is read at call time, so whatever the
+	// document holds when this runs is what the diagram shows. Called from the
+	// `ready` handler for the first render, from the change listener for every
+	// edit, and on a switch to another diagram or file.
+	/**
+	 * @param {object} [options]
+	 * @param {boolean} [options.replaced] whether this is a different diagram,
+	 *   as opposed to an edit of the one on screen; see the webview's handler,
+	 *   which seeds a replacement and diffs an edit
+	 */
+	const postDocument = ({ replaced = false } = {}) => {
+		const region = currentRegion();
+
+		// The panel keeps the diagram it is showing until another is chosen,
+		// which is what the user asked for.
+		if (!region) {
+			return;
+		}
+
+		panel.webview.postMessage({
+			type: 'documentChanged',
+			text: regionSource(document.getText(), region),
+			replaced
+		});
+	};
+
+	// Point the panel at a diagram of the document it is already on: retitle,
+	// resend, and drop what belonged to the diagram being left. The one way the
+	// shown block changes, called by the caret listener and by showDocument.
+	/** @param {import('./src/markdownBlocks').MarkdownBlock} [block] */
+	const showBlock = (block) => {
+		// Painted for the diagram being left, and cleared with it.
+		clearHighlight(document);
+		// A post left pending by the previous diagram would fire just after
+		// this one and resend what it is about to send.
+		clearTimeout(debounceTimer);
+
+		activeBlock = block;
+		panel.title = panelTitle(document, block);
+		outputChannel?.appendLine(`[panel] now showing ${panelSubject(document, block)}`);
+		// A different diagram, as opposed to an edit of the one on screen: the
+		// webview seeds it, where it diffs an edit.
+		postDocument({ replaced: true });
+	};
+
+	/**
+	 * Switch to the diagram the caret has moved into, if it moved into another.
+	 *
+	 * The whole of the caret-picks-the-diagram behaviour. When the panel stays
+	 * put -- the caret in prose, on a fence, or in the diagram already on screen
+	 * -- is blockToFollow's business, which is where it is tested.
+	 *
+	 * This is also how the panel takes up a block again after an edit above it
+	 * rewrote its fence: the caret coming back into the block finds it at its new
+	 * line and adopts it.
+	 *
+	 * @param {number} caretLine zero-based
+	 */
+	const followCaretIntoBlock = (caretLine) => {
+		if (!isMarkdownDocument(document)) {
+			return;
+		}
+
+		const next = blockToFollow(document.getText(), caretLine, activeBlock);
+
+		if (next) {
+			showBlock(next);
+		}
+	};
+
+	/**
+	 * Keep the shown block's fence current as the document is edited.
+	 *
+	 * The block is remembered by the line its opening fence is on, so writing a
+	 * paragraph above a diagram moves it. Following it there is what keeps the
+	 * panel live while the document around the diagram is written: the fence line
+	 * is what the panel remembers, and the rest of the block is read from the
+	 * document at use.
+	 *
+	 * An edit that rewrote the fence line itself leaves the fence reported as
+	 * gone, since a line number carried over could land on a different diagram
+	 * and have the panel show, and write into, the wrong one. The caret picking a
+	 * block takes the panel on from there.
+	 *
+	 * @param {readonly vscode.TextDocumentContentChangeEvent[]} changes
+	 */
+	const trackBlockThroughChanges = (changes) => {
+		if (!activeBlock) {
+			return;
+		}
+
+		activeBlock = { ...activeBlock, fenceLine: trackLine(activeBlock.fenceLine, changes) };
 	};
 
 	// The one way onto another file: retitle, resend, and drop what belonged to
 	// the file being left. Called by the active-editor listener below, and by
 	// the command when it reveals this panel.
-	/** @param {vscode.TextDocument} next */
-	const showDocument = (next) => {
+	/**
+	 * @param {vscode.TextDocument} next
+	 * @param {number} [caretLine] where the caret is in `next`, when it is known
+	 */
+	const showDocument = (next, caretLine) => {
 		if (next === document) {
 			return;
 		}
 
-		// Painted for the file the panel is leaving, and about to mean nothing.
+		const nextBlock = isMarkdownDocument(next)
+			? blockToShow(next.getText(), caretLine)
+			: undefined;
+
+		if (isMarkdownDocument(next) && !nextBlock) {
+			// The command is what reaches this, being the one caller that points
+			// the panel at any file the user runs it on; the active-editor
+			// listener follows what isPlantUmlDocument accepts, which is
+			// Markdown that holds a block. So this is an explicit request, and
+			// it gets an answer.
+			vscode.window.showInformationMessage(
+				`${path.basename(next.fileName)} has no \`\`\`plantuml block. The diagram ` +
+					`panel is still showing ${path.basename(document.fileName)}.`
+			);
+			return;
+		}
+
+		// Painted for the file the panel is leaving, and cleared before
+		// `document` moves on, since that is the handle the decorations are on.
 		clearHighlight(document);
-		// A post left pending by the previous file would fire just after this
-		// one and resend what it is about to send.
-		clearTimeout(debounceTimer);
 
 		document = next;
-		panel.title = panelTitle(document);
-		outputChannel?.appendLine(`[panel] now showing ${document.fileName}`);
-		postDocument();
+		showBlock(nextBlock);
 	};
 
 	// Handed to the window from here, not from createWebviewPanel: the early
@@ -821,7 +1005,7 @@ async function createDiagramPanel(context) {
 			return;
 		}
 
-		showDocument(next.document);
+		showDocument(next.document, next.selection.active.line);
 	});
 
 	const changeListener = vscode.workspace.onDidChangeTextDocument((event) => {
@@ -829,8 +1013,15 @@ async function createDiagramPanel(context) {
 			return;
 		}
 
+		// Before the debounce, and on every event: the shifts of two quick edits
+		// both count, and the ranges an event carries describe the document as
+		// it was when that event fired.
+		trackBlockThroughChanges(event.contentChanges);
+
 		clearTimeout(debounceTimer);
-		debounceTimer = setTimeout(postDocument, LIVE_UPDATE_DEBOUNCE_MS);
+		// Called with no options: an edit of the diagram on screen, which the
+		// webview diffs against what it has.
+		debounceTimer = setTimeout(() => postDocument(), LIVE_UPDATE_DEBOUNCE_MS);
 	});
 
 	const messageListener = panel.webview.onDidReceiveMessage(async (message) => {
@@ -840,14 +1031,14 @@ async function createDiagramPanel(context) {
 			}
 			applyingEdit = true;
 			try {
-				await applyPuml(document, message.text);
+				await applyPuml(document, currentRegion(), message.text);
 			} finally {
 				applyingEdit = false;
 			}
 		} else if (message.type === 'setHighlight') {
-			applyHighlight(document, message.rows);
+			applyHighlight(document, currentRegion(), message.rows);
 		} else if (message.type === 'savePng') {
-			await savePng(document, active);
+			await savePng(document, currentRegion(), active);
 		} else if (message.type === 'backendUnreachable') {
 			reportBackendUnreachable(message);
 		} else if (message.type === 'ready') {
@@ -861,17 +1052,28 @@ async function createDiagramPanel(context) {
 		}
 	});
 
-	// Cursor -> diagram highlighting. VS Code exposes no per-line mouse-hover
-	// event for text editors, so the web app's editor-to-diagram hover
-	// direction degrades to following the caret.
+	// Cursor -> diagram highlighting, and -- in a Markdown file -- which diagram
+	// the panel is on. VS Code exposes no per-line mouse-hover event for text
+	// editors, so the web app's editor-to-diagram hover direction degrades to
+	// following the caret, and the caret is also the only gesture available for
+	// choosing between the diagrams a document holds.
 	const selectionListener = vscode.window.onDidChangeTextEditorSelection((event) => {
 		if (event.textEditor.document !== document) {
 			return;
 		}
+
 		const position = event.selections[0].active;
+
+		followCaretIntoBlock(position.line);
+
+		const region = currentRegion();
+
 		panel.webview.postMessage({
 			type: 'cursorMoved',
-			row: position.line,
+			row:
+				region && containsLine(region, position.line)
+					? toRegionRow(region, position.line)
+					: NO_DIAGRAM_ROW,
 			column: position.character
 		});
 	});
@@ -894,23 +1096,46 @@ async function createDiagramPanel(context) {
 }
 
 /**
- * Write `text` into `document` as a single undoable edit.
+ * Write `source` into `region` of `document` as a single undoable edit.
+ *
+ * The region is the part of the file the diagram speaks for. Replacing it is
+ * what lets a diagram live in a Markdown fence: the prose around it stays
+ * outside the edit, and the fences stay as the author wrote them.
  *
  * The equality check is the primary defence against the write-back loop: an
  * edit we apply fires onDidChangeTextDocument, which posts documentChanged back
  * to the webview, whose own equality check stops there. Comparing values rather
  * than tracking whose turn it is means a genuine edit can never be swallowed.
+ * It compares the *region's* text, since that is what the webview was given.
  *
  * @param {vscode.TextDocument} document
- * @param {string} text
+ * @param {import('./src/sourceRegion').SourceRegion | undefined} region where
+ *   the diagram lives now, as currentRegion() found it
+ * @param {string} source the diagram, without the region's indentation
  */
-async function applyPuml(document, text) {
-	if (typeof text !== 'string' || text === document.getText()) {
+async function applyPuml(document, region, source) {
+	if (typeof source !== 'string') {
+		return;
+	}
+
+	// A write goes to a block the document still holds. The panel can outlive
+	// the block it is showing -- an edit can rewrite its fence, a deletion can
+	// take it away -- and a diagram gesture arriving then is logged and left,
+	// since the lines at those numbers are prose.
+	if (!region) {
+		outputChannel?.appendLine(
+			'[panel] a diagram change was not written: the block it belongs to was ' +
+				'not found in the document'
+		);
+		return;
+	}
+
+	if (source === regionSource(document.getText(), region)) {
 		return;
 	}
 
 	const edit = new vscode.WorkspaceEdit();
-	edit.replace(document.uri, fullRange(document), text);
+	edit.replace(document.uri, regionRange(document, region), indentSource(source, region.indent));
 
 	if (!(await vscode.workspace.applyEdit(edit))) {
 		vscode.window.showErrorMessage('Could not write the diagram change into the document.');
@@ -918,16 +1143,30 @@ async function applyPuml(document, text) {
 }
 
 /**
- * Render the document as a PNG and write it wherever the user chooses.
+ * Render the diagram as a PNG and write it wherever the user chooses.
  *
- * The webview posts a bare `savePng`; the source comes from the document,
- * which this process owns and which every diagram edit is written into before
- * a render can be asked for.
+ * The webview posts a bare `savePng`; the source comes from the document, which
+ * this process owns and which every diagram edit is written into before a render
+ * can be asked for. From the *region* of it the panel is showing, so a diagram
+ * in a Markdown file is exported as that diagram.
  *
  * @param {vscode.TextDocument} document
+ * @param {import('./src/sourceRegion').SourceRegion | undefined} region where
+ *   the diagram lives now, as currentRegion() found it
  * @param {import('./src/sidecar').Sidecar} sidecar a running sidecar
  */
-async function savePng(document, sidecar) {
+async function savePng(document, region, sidecar) {
+	// A render comes from a block the document still holds: what is on screen is
+	// the document's to give, this process keeping no copy of it. The panel can
+	// outlive the block it is showing, and the button says so when it has.
+	if (!region) {
+		vscode.window.showErrorMessage(
+			'The diagram could not be rendered: the ```plantuml block it came from is ' +
+				'no longer in the document. Put the caret back in a block and try again.'
+		);
+		return;
+	}
+
 	let response;
 
 	try {
@@ -937,7 +1176,7 @@ async function savePng(document, sidecar) {
 				'Content-Type': 'application/json',
 				[TOKEN_HEADER]: sidecar.token
 			},
-			body: JSON.stringify({ plantuml: document.getText() }),
+			body: JSON.stringify({ plantuml: regionSource(document.getText(), region) }),
 			signal: AbortSignal.timeout(RENDER_PNG_TIMEOUT_MS)
 		});
 	} catch (err) {
@@ -1006,13 +1245,47 @@ function defaultPngUri(document) {
  * Which file the panel is showing, in its tab.
  *
  * The panel follows the active editor, so its title names the file it is
- * currently pointed at.
+ * currently pointed at. One Markdown file can hold several diagrams, so it
+ * names the block too, by its opening fence -- the line the reader can see, and
+ * one-based as the editor's own gutter is.
  *
  * @param {vscode.TextDocument} document
+ * @param {import('./src/markdownBlocks').MarkdownBlock} [block] the diagram
+ *   being shown, when the document holds more than the one
  * @returns {string}
  */
-function panelTitle(document) {
-	return `PlantUML: ${path.basename(document.fileName)}`;
+function panelTitle(document, block) {
+	const name = path.basename(document.fileName);
+
+	return block ? `PlantUML: ${name}:${block.fenceLine + 1}` : `PlantUML: ${name}`;
+}
+
+/**
+ * What the panel is showing, for the output channel.
+ *
+ * The full path, as the log has always carried, plus the fence for a block --
+ * in the `file:line` shape terminals and editors make clickable.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {import('./src/markdownBlocks').MarkdownBlock} [block]
+ * @returns {string}
+ */
+function panelSubject(document, block) {
+	return block ? `${document.fileName}:${block.fenceLine + 1}` : document.fileName;
+}
+
+/**
+ * Whether `document` holds diagrams rather than being one.
+ *
+ * The language id alone, where the PlantUML case below reads the extension too:
+ * VS Code ships the Markdown language, so every `.md` and `.markdown` file
+ * arrives with this id.
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {boolean}
+ */
+function isMarkdownDocument(document) {
+	return document.languageId === 'markdown';
 }
 
 /**
@@ -1024,6 +1297,8 @@ function panelTitle(document) {
  *
  *   - a PlantUML file extension, or a `plantuml` language id, is followed
  *     whatever the file holds. An empty `.puml` is a diagram being started.
+ *   - a Markdown file is followed once it holds a ```plantuml block. The panel
+ *     shows one block of it, so a block is what it has to show.
  *   - a plain-text file is followed once it opens a `@start…` block. The name
  *     says nothing, so the content decides, which is what lets `.txt` work and
  *     what leaves a notes file alone.
@@ -1043,6 +1318,13 @@ function isPlantUmlDocument(document) {
 
 	if (PLANTUML_EXTENSIONS.has(path.extname(document.uri.path).toLowerCase())) {
 		return true;
+	}
+
+	if (isMarkdownDocument(document)) {
+		// Read whole, where DIAGRAM_SNIFF_LINES bounds the plain-text sniff: a
+		// diagram belongs wherever the prose put it, and prose is what the top
+		// of a documentation file is for.
+		return findPlantUmlBlocks(document.getText()).length > 0;
 	}
 
 	return document.languageId === 'plaintext' && opensDiagramBlock(document);
@@ -1069,19 +1351,54 @@ function opensDiagramBlock(document) {
 }
 
 /**
- * Paint the given puml lines in every editor showing `document`.
+ * Paint the given diagram rows in every editor showing `document`.
  *
  * The diagram -> editor direction: the editor shim turns the app's Ace
- * addMarker calls into a row list and posts it here.
+ * addMarker calls into a row list and posts it here. Those rows are the
+ * diagram's, so they are translated into the document's before anything is
+ * painted -- a diagram in a Markdown fence starts at line 1 of itself and
+ * somewhere else entirely in the file.
  *
  * @param {vscode.TextDocument} document
- * @param {number[]} rows zero-based line numbers
+ * @param {import('./src/sourceRegion').SourceRegion | undefined} region where
+ *   the diagram lives now, as currentRegion() found it
+ * @param {number[]} rows zero-based, relative to the region
  */
-function applyHighlight(document, rows) {
-	const ranges = (rows ?? [])
-		.filter((row) => row >= 0 && row < document.lineCount)
-		.map((row) => document.lineAt(row).range);
+function applyHighlight(document, region, rows) {
+	// The highlight comes off while the panel holds a diagram the document has
+	// moved on from, its rows naming lines that are now prose.
+	const lines = !region
+		? []
+		: (rows ?? [])
+				.map((row) => toDocumentRow(region, row))
+				// The rows the document has lines for: an edit can take away a
+				// line a marker was on.
+				.filter((line) => line >= 0 && line < document.lineCount);
 
+	paintHighlight(
+		document,
+		lines.map((line) => document.lineAt(line).range)
+	);
+}
+
+/**
+ * Drop the highlight from every editor showing `document`.
+ *
+ * Its own function, so that clearing asks for a document and a document alone --
+ * which is what suits the one place it is called, on the way off a file, where
+ * the region belongs to the file being left.
+ *
+ * @param {vscode.TextDocument} document
+ */
+function clearHighlight(document) {
+	paintHighlight(document, []);
+}
+
+/**
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Range[]} ranges
+ */
+function paintHighlight(document, ranges) {
 	for (const editor of vscode.window.visibleTextEditors) {
 		if (editor.document === document) {
 			editor.setDecorations(hoverDecoration, ranges);
@@ -1089,18 +1406,18 @@ function applyHighlight(document, rows) {
 	}
 }
 
-/** @param {vscode.TextDocument} document */
-function clearHighlight(document) {
-	applyHighlight(document, []);
-}
-
 /**
  * @param {vscode.TextDocument} document
- * @returns {vscode.Range} a range covering the whole document.
+ * @param {import('./src/sourceRegion').SourceRegion} region
+ * @returns {vscode.Range} a range covering the region's whole lines.
  */
-function fullRange(document) {
-	const lastLine = document.lineAt(document.lineCount - 1);
-	return new vscode.Range(0, 0, lastLine.lineNumber, lastLine.text.length);
+function regionRange(document, region) {
+	// Clamped to keep lineAt inside the document, and so inside a message
+	// handler that stays on its feet. Whether the region still describes the
+	// document is the region's own question, which currentRegion() answers.
+	const endLine = Math.min(region.endLine, document.lineCount - 1);
+
+	return new vscode.Range(region.startLine, 0, endLine, document.lineAt(endLine).text.length);
 }
 
 /** Called when VS Code shuts the extension down; stops the backend with it. */
