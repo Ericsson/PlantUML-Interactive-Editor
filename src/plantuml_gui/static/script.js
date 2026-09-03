@@ -27,7 +27,22 @@ let fline = -1;
 let history = [];
 let historyPointer = -1;
 let editor;
-let colorqueue = [];
+let currentDiagramType = "unknown";
+// Monotonic render token. Each renderPlantUml() call takes the next value; the
+// async SVG fetch/apply in the diagram handlers checks it before writing into
+// #colb so a slow render (e.g. a cold PlantUML JAR) that resolves after the
+// user has already switched diagrams cannot clobber the newer diagram.
+let renderGeneration = 0;
+// One-time guards for the static (non-SVG) event listeners wired by
+// addActivityEventListeners / addSequenceEventListeners. checkDiagramType()
+// calls these on every render, but they only bind to static template elements
+// (context-menu items, toolbar buttons, and a document-level menu-dismiss
+// click). Native addEventListener with a fresh closure each render stacks
+// duplicate handlers, so after N renders a single click would fire N identical
+// fetches that race on setPuml/history. Attach them once. (Per-render SVG
+// element handlers are bound separately in setHandlersFor*Diagram.)
+let activityListenersAttached = false;
+let sequenceListenersAttached = false;
 var Range = ace.require("ace/range").Range
 
 async function initeditor() {
@@ -71,6 +86,9 @@ async function initeditor() {
         // Add the changeCursor event listener when the editor is clicked
         cursorChangeListener()
     });
+
+    // Editor hover/leave -> diagram highlight dispatch (see hover-highlight.js)
+    initEditorHoverHighlighting(editor);
     console.log("Editor initialization done.")
 }
 
@@ -105,27 +123,8 @@ function findChangedLines() {
 }
 
 const cursorChangeListener = async function(e) {
-    const svg = element.querySelector('g');
-    resetHighlight(svg);
-
-    let start = editor.getCursorPosition().row;
-    const line = editor.session.getLine(start).trimStart();
-    if (!line.startsWith(':') && !line.startsWith('#')) {
-        return;
-    }
-    let end = start;
-    const lastRow = editor.session.getLength() - 1;
-
-    // Make sure we don't go out of bounds
-    while (end <= lastRow && !editor.session.getLine(end).trim().endsWith(';')) {
-        end++;
-    }
-
-    const lines = editor.session.getLines(start, end);
-    let text = lines.join('\n');
-    text = (text.match(/:(.*?);/s) || [])[1]?.trim(); // get text between : and ;
-
-    highlightActivity(svg, text);
+    resetEditorHighlight();
+    highlightEditorRow(editor.getCursorPosition().row);
 };
 
 function initialize() {
@@ -217,17 +216,44 @@ stop
 
 function setSequence() {
     puml = `@startuml
-participant bob
-participant fred
-participant participant3
-bob -> fred: hello
-bob -> participant3: hello!
-participant3 -> participant3: test
+title
+This is the Sequence Diagram demo!
+Try double-click me to change the title!
+endtitle
+box "Right-click this box to edit\\nits title, color, or delete it" #LightBlue
+participant Alice
+participant Bob
+end box
+participant Server
+participant Database
+Alice -> Bob: Right-click a participant to add another\\nbeside it, or double-click it to rename it
+Bob -[#green]> Server: Right-click a message (the arrow or its text)\\nto edit the text or change the arrow color
+activate Server
+Server -> Database: Right-click a lifeline for Add Message,\\nActivate, Add Note, or Add Group
+activate Database
+Database --> Server: result
+deactivate Database
+note right of Server #LightPink: Add a note from the lifeline menu.\\nRight-click a note to edit or delete it
+Server --> Bob: response
+destroy Server
+group Add Group from the lifeline menu, then click two messages to wrap them (group / alt / opt / loop)
+Bob -> Alice: request
+alt success
+Alice -> Bob: granted
+else failure
+Alice -> Bob: denied
+end
+end
+Alice -> Alice: Self-messages are supported too!
+hnote over Bob #LightGreen: This is an "H Note"
+rnote over Alice, Bob: An "R Note" can span participants
 @enduml`;
         setPuml(puml)
 }
 
 function buttonEventListeners() {
+
+    document.getElementById('version').addEventListener('click', toggleVersionPanel);
 
     document.getElementById('demo').addEventListener('click', function() {
     setDemo()
@@ -334,6 +360,7 @@ function buttonEventListeners() {
             displayErrorMessage(`Error with fetch API: ${error.message}`, error);
         }
     })
+    // Download the diagram as a PNG file via a temporary download link.
     document.getElementById('png').addEventListener('click', async () => {
         try {
             const plantuml = trimlines(editor.session.getValue());
@@ -345,20 +372,14 @@ function buttonEventListeners() {
 
             const blob = await response.blob();
 
-            // Convert blob → base64 Data URL to make image copiable
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const imageUrl = reader.result; // data:image/png;base64,...
-
-                const newTab = window.open('', '_blank');
-                const img = newTab.document.createElement('img');
-                img.src = imageUrl;
-                newTab.document.body.appendChild(img);
-                newTab.document.body.style.textAlign = 'center';
-                newTab.document.close();
-            };
-
-            reader.readAsDataURL(blob);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "diagram.png";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
 
         } catch (error) {
             displayErrorMessage(`Error with fetch API: ${error.message}`, error);
@@ -463,14 +484,21 @@ function commandEventListeners() {
 function addUtilEventListeners() {
     buttonEventListeners();
     commandEventListeners();
+    // Title editing (modal submit, edit/delete menu items) is diagram-agnostic:
+    // the getTextTitle/editTitle/deleteTitle routes operate on the puml title
+    // block regardless of diagram type. Wire it here, once, so both activity
+    // and sequence diagrams can edit the title (e.g. via double-click) without
+    // double-binding the submit handler when a user switches diagram types.
+    titleEventListeners();
 
 }
 
 function addActivityEventListeners() {
+    if (activityListenersAttached) return;
+    activityListenersAttached = true;
     activityEventListeners();
     ifEventListeners();
     ellipseEventListeners();
-    titleEventListeners();
     forkEventListeners();
     noteEventListeners();
     groupEventListeners();
@@ -513,13 +541,20 @@ function addActivityEventListeners() {
 
 
 function addSequenceEventListeners() {
+    if (sequenceListenersAttached) return;
+    sequenceListenersAttached = true;
     sequenceEventListeners()
 
     document.addEventListener('click', function(e) {
         var menuIds = [
             'sequence-menu',
             'participant-menu',
-            'message-menu'
+            'message-menu',
+            'seq-note-placement-menu',
+            'seq-note-menu',
+            'activation-end-menu',
+            'seq-group-type-menu',
+            'seq-group-menu'
         ];
 
         menuIds.forEach(function(id) {
@@ -579,12 +614,26 @@ async function fetchSvgFromPlantUml() {
     }
 }
 
-function toggleLoadingOverlay() {
-    const overlay = document.getElementById('loading-overlay');
-    if (overlay.style.display === 'none' || overlay.style.display === '') {
-        overlay.style.display = 'block';
-    } else {
-        overlay.style.display = 'none';
+// Loading overlay visibility is reference-counted, not toggled: renders can
+// overlap (a slow render still in flight when the next one starts, or requests
+// resolving out of order), and a plain boolean toggle would desync - an even
+// number of overlapping show/hide flips could leave the overlay stuck visible
+// or hidden. Each render increments on start (showLoadingOverlay) and
+// decrements on every completion/bail path (hideLoadingOverlay); the overlay is
+// visible while any render is outstanding and hidden only once all finish.
+let loadingOverlayCount = 0;
+
+function showLoadingOverlay() {
+    loadingOverlayCount++;
+    document.getElementById('loading-overlay').style.display = 'block';
+}
+
+function hideLoadingOverlay() {
+    // Clamp at zero so an unexpected extra hide can't drive the count negative
+    // and wedge the overlay permanently visible.
+    loadingOverlayCount = Math.max(0, loadingOverlayCount - 1);
+    if (loadingOverlayCount === 0) {
+        document.getElementById('loading-overlay').style.display = 'none';
     }
 }
 
@@ -594,7 +643,7 @@ async function renderPlantUml() {
     if (document.getElementById('popup').style.visibility = "visible") {
         document.getElementById('popup').style.visibility = "hidden"; // Hide the error popup when rendering again.
     }
-    toggleLoadingOverlay();
+    showLoadingOverlay();
     let element = document.getElementById('colb')
     const pumlcontent = trimlines(editor.session.getValue());
     saveToHistory(pumlcontent);
@@ -621,18 +670,22 @@ async function renderPlantUml() {
         displayErrorMessage(`Error with fetch API: ${error.message}`, error);
     }
 
-    switch (checkDiagramType(pumlcontent)) {
+    currentDiagramType = checkDiagramType(pumlcontent);
+    const renderId = ++renderGeneration;
+    switch (currentDiagramType) {
         case "activity":
-            setHandlersForActivityDiagram(pumlcontent, element);
+            setHandlersForActivityDiagram(pumlcontent, element, renderId);
             break;
         case "sequence":
-            setHandlersForSequenceDiagram(pumlcontent, element);
+            setHandlersForSequenceDiagram(pumlcontent, element, renderId);
             break;
         default:
             fetchSvgFromPlantUml().then((svgContent) => {
+                // Drop the result if a newer render has since started.
+                if (renderId !== renderGeneration) return;
                 element.innerHTML = svgContent;
             });
-            toggleLoadingOverlay();
+            hideLoadingOverlay();
     }
 }
 
@@ -695,22 +748,6 @@ function indentPuml(pumlcontent) {
 function getHashParameter() {
     const query = window.location.search.substring(1); // Remove the leading "?"
     return query ? query : null;
-}
-
-function resetHighlight(svg) {
-    if (svg) {
-        const rects = svg.getElementsByTagName("rect");
-
-        for (let i = 0; i < rects.length; i++) {
-            const rect = rects[i];
-            if (checkIfActivity(rects, i)) {
-                if (rect.getAttribute('fill') == "#d8d8d8") {
-                    rect.setAttribute('fill', colorqueue.shift())
-                }
-            }
-        }
-        colorqueue = []
-    }
 }
 
 function trimlines(pumlcontent) {

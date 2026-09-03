@@ -1,0 +1,78 @@
+{
+  "name": "plantuml-editor",
+  "displayName": "PlantUML Editor",
+  "description": "PlantUML Interactive Editor",
+  "version": "0.31.0",
+  "publisher": "Ericsson",
+  "license": "MIT",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ericsson/PlantUML-Interactive-Editor.git"
+  },
+  "engines": {
+    "vscode": "^1.113.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "plantuml-interactive-editor.openDiagram",
+        "title": "PlantUML: Open Interactive Diagram"
+      },
+      {
+        "command": "plantuml-interactive-editor.reinstallBackend",
+        "title": "PlantUML: Reinstall Backend"
+      }
+    ],
+    "configuration": {
+      "title": "PlantUML Interactive Editor",
+      "properties": {
+        "plantumlInteractive.pythonPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "order": 1,
+          "markdownDescription": "Absolute path to a Python interpreter that has the `plantuml-gui` package installed. When empty, the `PLANTUML_GUI_PYTHON` environment variable is used, then the virtual environment the extension installs for itself the first time a diagram is opened."
+        },
+        "plantumlInteractive.plantumlJar": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "order": 2,
+          "markdownDescription": "Absolute path to `plantuml.jar`, used to render diagrams. When empty, the `PLANTUML_JAR` environment variable is used, then the shared internal install if this machine has it."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "pretest": "npm run lint",
+    "test": "vscode-test",
+    "package": "vsce package --baseImagesUrl https://github.com/Ericsson/PlantUML-Interactive-Editor/raw/HEAD/plantuml-extension"
+  },
+  "dependencies": {
+    "bootstrap": "4.6.2",
+    "diff": "8.0.3",
+    "jquery": "3.7.1",
+    "panzoom": "9.4.0"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "24.x",
+    "@types/vscode": "1.110.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.0.0",
+    "@vscode/vsce": "3.9.2",
+    "eslint": "^10.5.0",
+    "globals": "^16.5.0"
+  },
+  "overrides": {
+    "diff": "8.0.3",
+    "serialize-javascript": "^7.0.6"
+  }
+}

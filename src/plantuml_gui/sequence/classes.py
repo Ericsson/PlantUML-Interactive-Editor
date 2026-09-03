@@ -22,10 +22,132 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List
 
 from pyquery import PyQuery as Pq  # pragma: no cover
+
+# Style PlantUML gives participant header rects. Used to distinguish them from
+# other rects in the SVG (e.g. activation bars, which use stroke-width:1.0).
+# Matches the identification used by the frontend's checkIfParticipant.
+PARTICIPANT_RECT_STYLE = "stroke:#181818;stroke-width:0.5;"
+
+# A message arrow, matched so its optional embedded color bracket can be read or
+# rewritten. The arrow either starts with ``<`` (a reverse/bidirectional head)
+# or ends with a head (``>``, ``x`` or ``o``); either way it contains at least
+# one dash. Requiring a head keeps a lone ``-`` inside a participant name (e.g.
+# ``Web-Server``) from being mistaken for the arrow. An existing ``[#color]``
+# token may sit anywhere among the dashes.
+#
+# Lives here, in the base module, so both message parsing (index assignment,
+# below) and message.py's color read/rewrite share one arrow definition and
+# cannot drift apart. classes.py imports nothing from the package, so message.py
+# importing this back is cycle-free.
+ARROW_RE = re.compile(
+    r"<{1,2}[-\\/]*(?:\[#[^\]]*\])?[-\\/]*(?:>{1,2}|[xo])?"  # starts with '<'
+    r"|[-\\/]+(?:\[#[^\]]*\])?[-\\/]*(?:>{1,2}|[xo])"  # ends with a head
+)
+
+# A participant declaration, capturing the name PlantUML renders in the SVG:
+# the quoted text when present (``participant "Long name" as A``), otherwise the
+# bare token (``participant Alice``). Trailing modifiers such as ``as A``,
+# ``order 10`` or a ``#color`` are left unmatched on purpose -- only the
+# displayed name is needed, because that is what the SVG gives us to match on.
+PARTICIPANT_DECLARATION_RE = re.compile(
+    r'^participant\s+(?:"(?P<quoted>[^"]*)"|(?P<bare>[^\s#]+))'
+)
+
+
+def _declared_participant_name(line: str) -> str | None:
+    """The displayed name a participant declaration introduces, if it is one."""
+    match = PARTICIPANT_DECLARATION_RE.match(line.strip())
+    if match is None:
+        return None
+    quoted = match.group("quoted")
+    return quoted if quoted is not None else match.group("bare")
+
+
+def is_message_line(line: str) -> bool:
+    """Return True if a puml line is a message (``sender <arrow> receiver: text``).
+
+    The arrow always precedes the ``": "`` text separator, so only the part
+    before the first colon is inspected. Reverse (``<-``), bidirectional
+    (``<->``), dotted, self, and colored (``-[#red]>``) arrows are all matched
+    via :data:`ARROW_RE`.
+
+    Requiring a real dash in the matched arrow rejects two look-alikes:
+    non-message lines whose free text happens to contain a ``<`` before a colon
+    (e.g. a group label ``alt <size:12>...``), which :data:`ARROW_RE` would
+    otherwise match as a bare ``<``; and notes/labels that carry their arrow
+    only after the colon.
+    """
+    colon_pos = line.find(":")
+    if colon_pos == -1:
+        return False
+    match = ARROW_RE.search(line[:colon_pos])
+    return match is not None and "-" in match.group(0)
+
+
+def is_participant_rect(rect: Pq) -> bool:
+    """Return True if an SVG rect is a participant header (not an activation
+    bar or an rnote, which shares the same stroke-width:0.5 style but never
+    has rounded corners).
+    """
+    if (rect.attr("style") or "") != PARTICIPANT_RECT_STYLE:
+        return False
+    return rect.attr("rx") is not None and rect.attr("ry") is not None
+
+
+def participant_header_bounds(svg: Pq) -> List[Dict[str, float]]:
+    """Return the bounding box of every participant header rect in the SVG.
+
+    Shared participant geometry: used by box detection (a box rect is the one
+    that encloses a participant header) and by note detection (to exclude box
+    rects, which share the rnote signature).
+    """
+    bounds: List[Dict[str, float]] = []
+    for rect in svg("rect").items():
+        if not is_participant_rect(rect):
+            continue
+        bounds.append(
+            {
+                "x": float(rect.attr("x")),
+                "y": float(rect.attr("y")),
+                "width": float(rect.attr("width")),
+                "height": float(rect.attr("height")),
+            }
+        )
+    return bounds
+
+
+def rect_encloses(rect: Pq, bound: Dict[str, float]) -> bool:
+    """Return True if ``rect`` fully contains the participant ``bound``."""
+    x = float(rect.attr("x"))
+    y = float(rect.attr("y"))
+    width = float(rect.attr("width"))
+    height = float(rect.attr("height"))
+    return (
+        x <= bound["x"]
+        and bound["x"] + bound["width"] <= x + width
+        and y <= bound["y"]
+        and bound["y"] + bound["height"] <= y + height
+    )
+
+
+def _participant_at(participants: List["Participant"], x: float) -> "Participant":
+    """Return the participant whose header spans ``x``, else the closest by cx.
+
+    Falling back to the nearest participant keeps message parsing robust when an
+    arrow endpoint lands slightly outside a header box (for example when an
+    activation bar shifts where the arrow meets the lifeline), instead of
+    raising and turning the whole request into a 500. Callers only parse
+    messages after participants are parsed, so the list is non-empty here.
+    """
+    for participant in participants:
+        if participant.contains_x(x):
+            return participant
+    return min(participants, key=lambda p: abs(p.cx - x))
 
 
 @dataclass
@@ -87,8 +209,8 @@ class Message:
 
         message = text.text()
 
-        from_participant = next((p for p in participants if p.contains_x(start_x)))
-        to_participant = next((p for p in participants if p.contains_x(arrow_x)))
+        from_participant = _participant_at(participants, start_x)
+        to_participant = _participant_at(participants, arrow_x)
 
         return cls(from_participant, to_participant, message, cy)
 
@@ -106,8 +228,8 @@ class Message:
         start_x = x1
         to_x = x2
 
-        from_participant = next((p for p in participants if p.contains_x(start_x)))
-        to_participant = next((p for p in participants if p.contains_x(to_x)))
+        from_participant = _participant_at(participants, start_x)
+        to_participant = _participant_at(participants, to_x)
 
         return cls(
             from_participant=from_participant,
@@ -134,7 +256,7 @@ class Message:
 
         message = text.text()
 
-        from_participant = next((p for p in participants if p.contains_x(start_x)))
+        from_participant = _participant_at(participants, start_x)
 
         return cls(
             from_participant=from_participant,
@@ -164,6 +286,8 @@ class Diagram:
         unique_participants: Dict[int, Participant] = {}
 
         for rect in svg("rect").items():
+            if not is_participant_rect(rect):
+                continue  # skip activation bars and other non-participant rects
             text = rect.next()
             participant = Participant.from_svg(rect, text)
 
@@ -174,16 +298,36 @@ class Diagram:
         self._assign_participant_indexes(puml)
 
     def _assign_participant_indexes(self, puml: str):
-        """Assign indexes in the puml code to corresponding participant"""
-        lines = puml.splitlines()
+        """Attach each participant to the puml line that declares it.
 
-        participant_lines = [
-            i for i, line in enumerate(lines) if line.startswith("participant")
+        Matched by name, not by position. A participant can be introduced
+        implicitly by a message (``Alice -> Bob: hi``) and then has no
+        declaration line at all, so zipping the declaration lines against the
+        diagram-ordered participants shifts every later participant onto some
+        other participant's line and leaves the trailing ones at -1. Callers
+        treat -1 as "not found", and add_box used to insert at it directly --
+        Python's negative indexing then wrote ``end box`` to the top of the
+        file and ``box`` before the last line.
+
+        Participants with no declaration keep index -1, which is accurate:
+        there is no line to point at. Callers that need a real line must say so
+        (see add_box).
+        """
+        declarations = [
+            (line_index, name)
+            for line_index, line in enumerate(puml.splitlines())
+            if (name := _declared_participant_name(line)) is not None
         ]
 
-        for i, line_index in enumerate(participant_lines):
-            if i < len(self.participants):
-                self.participants[i].index = line_index
+        # Consume each declaration at most once, so repeated display names map
+        # to distinct lines in diagram order rather than all to the first.
+        claimed: set[int] = set()
+        for participant in self.participants:
+            for position, (line_index, declared_name) in enumerate(declarations):
+                if position not in claimed and declared_name == participant.name:
+                    participant.index = line_index
+                    claimed.add(position)
+                    break
 
     def _parse_messages(self, svg, puml):
         """Parse messages from svg"""
@@ -227,8 +371,10 @@ class Diagram:
         """Assign indexes in the puml code to corresponding message"""
         lines = puml.splitlines()
 
-        # Find all lines that represent messages (lines with '->')
-        message_lines = [i for i, line in enumerate(lines) if "->" in line]
+        # Find all lines that represent messages, in source order. This must
+        # count the same arrows the SVG parser does (both directions), or the
+        # message list and the source lines fall out of alignment.
+        message_lines = [i for i, line in enumerate(lines) if is_message_line(line)]
 
         # Messages are already in occuring order
         for i, line_index in enumerate(message_lines):

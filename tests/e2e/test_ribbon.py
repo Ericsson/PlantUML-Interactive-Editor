@@ -54,6 +54,105 @@ def test_divider_visible(app_url, page):
     assert divider.is_visible()
 
 
+def test_divider_toggle_visible(app_url, page):
+    """The collapse/expand toggle button exists inside the divider and is visible."""
+    toggle = page.locator("#divider-toggle")
+    toggle.wait_for(state="visible", timeout=5000)
+    assert toggle.is_visible()
+    assert page.locator(".divider #divider-toggle").count() == 1
+
+
+def test_divider_toggle_collapses_and_expands_pane(app_url, page):
+    """Clicking the toggle collapses the left pane to a thin strip, and clicking
+    again restores its previous width."""
+    page.wait_for_timeout(1000)
+    initial_width = page.evaluate(
+        "() => document.querySelector('.left-pane').offsetWidth"
+    )
+
+    page.locator("#divider-toggle").click()
+    page.wait_for_timeout(100)
+    collapsed_width = page.evaluate(
+        "() => document.querySelector('.left-pane').offsetWidth"
+    )
+    assert collapsed_width < 200
+    assert "collapsed" in page.locator(".left-pane").get_attribute("class")
+
+    page.locator("#divider-toggle").click()
+    page.wait_for_timeout(100)
+    restored_width = page.evaluate(
+        "() => document.querySelector('.left-pane').offsetWidth"
+    )
+    assert abs(restored_width - initial_width) <= 1
+    assert "collapsed" not in page.locator(".left-pane").get_attribute("class")
+
+
+def test_divider_toggle_before_any_drag_restores_default_split(app_url, page):
+    """Collapsing and expanding on a fresh page load, without ever dragging the
+    divider first, restores the original CSS-driven 40% default width (not a
+    fallback to the collapsed width or an unset value)."""
+    page.wait_for_timeout(1000)
+    container_width = page.evaluate(
+        "() => document.querySelector('.split-container').offsetWidth"
+    )
+    expected_default = container_width * 0.4
+
+    page.locator("#divider-toggle").click()
+    page.wait_for_timeout(100)
+    page.locator("#divider-toggle").click()
+    page.wait_for_timeout(100)
+
+    restored_width = page.evaluate(
+        "() => document.querySelector('.left-pane').offsetWidth"
+    )
+    assert abs(restored_width - expected_default) <= 5
+    assert "collapsed" not in page.locator(".left-pane").get_attribute("class")
+
+
+def test_collapsed_pane_hides_editor_content_but_preserves_ace_state(app_url, page):
+    """While collapsed, the code toolbar and Ace editor are visually hidden, but
+    the Ace instance stays mounted and its content/cursor position survive an
+    expand."""
+    page.wait_for_timeout(1000)
+    page.evaluate(
+        "() => { editor.session.setValue('@startuml\\nAlice -> Bob\\n@enduml'); "
+        "editor.moveCursorTo(1, 5); }"
+    )
+    content_before = page.evaluate("() => editor.session.getValue()")
+    cursor_before = page.evaluate(
+        "() => { const c = editor.getCursorPosition(); return [c.row, c.column]; }"
+    )
+
+    page.locator("#divider-toggle").click()
+    page.wait_for_timeout(100)
+    toolbar_opacity = page.evaluate(
+        "() => getComputedStyle(document.querySelector('.code-toolbar')).opacity"
+    )
+    editor_opacity = page.evaluate(
+        "() => getComputedStyle(document.getElementById('editor')).opacity"
+    )
+    assert toolbar_opacity == "0"
+    assert editor_opacity == "0"
+
+    page.locator("#divider-toggle").click()
+    page.wait_for_timeout(100)
+    toolbar_opacity = page.evaluate(
+        "() => getComputedStyle(document.querySelector('.code-toolbar')).opacity"
+    )
+    editor_opacity = page.evaluate(
+        "() => getComputedStyle(document.getElementById('editor')).opacity"
+    )
+    assert toolbar_opacity == "1"
+    assert editor_opacity == "1"
+
+    content_after = page.evaluate("() => editor.session.getValue()")
+    cursor_after = page.evaluate(
+        "() => { const c = editor.getCursorPosition(); return [c.row, c.column]; }"
+    )
+    assert content_after == content_before
+    assert cursor_after == cursor_before
+
+
 def test_split_container_visible(app_url, page):
     """The split container wraps both panes."""
     container = page.locator(".split-container")
@@ -109,10 +208,46 @@ def test_code_toolbar_paste_button(app_url, page, context):
 
 
 def test_code_toolbar_download_button(app_url, page):
-    """Download button exists with accent styling."""
+    """Download button exists and is visible."""
     btn = page.locator(".code-toolbar #save")
     assert btn.is_visible()
-    assert "toolbar-btn--accent" in btn.get_attribute("class")
+    assert "toolbar-btn" in btn.get_attribute("class")
+
+
+def test_code_toolbar_import_button_loads_file(app_url, page):
+    """Import button is visible left of the Download button and loads a file into the editor."""
+    import_btn = page.locator(".code-toolbar #load")
+    download_btn = page.locator(".code-toolbar #save")
+    assert import_btn.is_visible()
+
+    import_box = import_btn.bounding_box()
+    download_box = download_btn.bounding_box()
+    assert import_box["x"] < download_box["x"]
+
+    with page.expect_file_chooser() as fc_info:
+        import_btn.click()
+    file_chooser = fc_info.value
+    file_chooser.set_files(
+        files=[
+            {
+                "name": "demo.puml",
+                "mimeType": "text/plain",
+                "buffer": b"@startuml\nfoo -> bar\n@enduml",
+            }
+        ]
+    )
+    page.wait_for_timeout(500)
+    content = page.evaluate("() => editor.session.getValue()")
+    assert "foo -> bar" in content
+
+
+def test_diagram_toolbar_png_button_downloads_file(app_url, page):
+    """PNG button downloads the diagram as a file instead of opening a new tab."""
+    page.wait_for_timeout(1000)
+    with page.expect_download() as download_info:
+        page.locator("#png").click()
+    download = download_info.value
+    assert download.suggested_filename == "diagram.png"
 
 
 def test_zoom_in_increases_scale(app_url, page):
@@ -163,8 +298,9 @@ def test_divider_drag_resizes_panes(app_url, page):
     assert new_width > initial_width
 
 
-def test_divider_respects_min_width(app_url, page):
-    """Divider cannot shrink a pane below 200px."""
+def test_divider_drag_past_threshold_collapses_pane(app_url, page):
+    """Dragging the divider far enough to the left collapses the pane instead of
+    stopping at the old 200px minimum."""
     page.wait_for_timeout(2000)
     divider = page.locator("#pane-divider")
     box = divider.bounding_box()
@@ -175,7 +311,76 @@ def test_divider_respects_min_width(app_url, page):
     page.mouse.up()
     page.wait_for_timeout(100)
     width = page.evaluate("() => document.querySelector('.left-pane').offsetWidth")
-    assert width >= 200
+    assert width < 200
+    assert "collapsed" in page.locator(".left-pane").get_attribute("class")
+
+
+def test_divider_drag_out_of_collapsed_expands_pane(app_url, page):
+    """Dragging the divider to the right while collapsed expands the pane again."""
+    page.wait_for_timeout(2000)
+    page.locator("#divider-toggle").click()
+    page.wait_for_timeout(100)
+    assert "collapsed" in page.locator(".left-pane").get_attribute("class")
+
+    divider = page.locator("#pane-divider")
+    box = divider.bounding_box()
+    page.mouse.move(box["x"] + 2, box["y"] + box["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(box["x"] + 300, box["y"] + box["height"] / 2)
+    page.mouse.up()
+    page.wait_for_timeout(100)
+    width = page.evaluate("() => document.querySelector('.left-pane').offsetWidth")
+    assert width > 200
+    assert "collapsed" not in page.locator(".left-pane").get_attribute("class")
+
+
+def test_divider_small_drag_while_collapsed_stays_collapsed(app_url, page):
+    """A small drag on the divider that never crosses back past the collapse
+    threshold leaves the pane collapsed, with no intermediate jump."""
+    page.wait_for_timeout(2000)
+    page.locator("#divider-toggle").click()
+    page.wait_for_timeout(100)
+
+    divider = page.locator("#pane-divider")
+    box = divider.bounding_box()
+    y = box["y"] + box["height"] / 2
+    page.mouse.move(box["x"] + 2, y)
+    page.mouse.down()
+    page.mouse.move(box["x"] + 5, y)
+    page.mouse.move(box["x"] + 1, y)
+    page.mouse.up()
+    page.wait_for_timeout(100)
+    width = page.evaluate("() => document.querySelector('.left-pane').offsetWidth")
+    assert width < 200
+    assert "collapsed" in page.locator(".left-pane").get_attribute("class")
+
+
+def test_divider_drag_oscillating_across_threshold_ends_in_correct_state(app_url, page):
+    """Repeatedly crossing the collapse threshold during a single drag ends in
+    whichever state matches the final cursor position, without corrupting the
+    remembered expanded width for a later drag-out."""
+    page.wait_for_timeout(2000)
+    divider = page.locator("#pane-divider")
+    box = divider.bounding_box()
+    y = box["y"] + box["height"] / 2
+    page.mouse.move(box["x"] + 2, y)
+    page.mouse.down()
+    for x in [50, 300, 20, 400, 10, 500, 5]:
+        page.mouse.move(x, y)
+        page.wait_for_timeout(20)
+    page.mouse.up()
+    page.wait_for_timeout(100)
+    assert "collapsed" in page.locator(".left-pane").get_attribute("class")
+
+    box2 = divider.bounding_box()
+    page.mouse.move(box2["x"] + 2, y)
+    page.mouse.down()
+    page.mouse.move(600, y)
+    page.mouse.up()
+    page.wait_for_timeout(100)
+    width = page.evaluate("() => document.querySelector('.left-pane').offsetWidth")
+    assert abs(width - 600) <= 5
+    assert "collapsed" not in page.locator(".left-pane").get_attribute("class")
 
 
 def test_version_panel_opens(app_url, page):

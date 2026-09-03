@@ -1,0 +1,1058 @@
+# VS Code Extension
+
+The `plantuml-extension/` directory holds a VS Code extension that puts the interactive
+diagram next to a `.puml` file open in the editor. Clicking the diagram rewrites the
+document; typing in the document re-renders the diagram.
+
+The extension does **not** reimplement the editor. It runs the existing Flask app as a
+child process (a *sidecar*), loads that app's own frontend into a VS Code webview, and
+swaps out the two things that cannot work unchanged there: the Ace editor (replaced by the
+VS Code document) and the relative `fetch()` URLs (repointed at the sidecar). Everything
+else — the 56 puml-rewriting routes, the context menus, the render pipeline — is the web
+app, running as-is.
+
+## The four runtimes
+
+| Runtime | What it is | Code |
+| --- | --- | --- |
+| Extension host (Node.js) | The process VS Code loads the extension into. Owns the document, spawns the sidecar. | `plantuml-extension/` |
+| Webview (browser) | A sandboxed Chromium frame in a VS Code panel. No Node, no filesystem, strict CSP. | `templates/webview.html` + `static/` |
+| Sidecar (Python) | The Flask app as a child process, on a random loopback port. | `src/plantuml_gui/serve.py` |
+| PlantUML (Java) | `java -jar plantuml.jar`, spawned per render by the sidecar. | — |
+
+```
+┌─ VS CODE ────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                              │
+│ ┌─ diagram.puml ─────────────────────┐                                                       │
+│ │ the open TextDocument. VS Code     │                                                       │
+│ │ owns undo, dirty state and saving  │                                                       │
+│ └────────────────┬───────────────────┘                                                       │
+│                  │ getText · applyEdit(WorkspaceEdit) — the only write path                  │
+│                  ▼                                                                           │
+│ EXTENSION HOST · Node.js                    WEBVIEW PANEL · sandboxed Chromium frame         │
+│ plantuml-extension/                         no Node · no filesystem · strict CSP             │
+│ ┌────────────────────────────────────┐      ┌─────────────────────────────────────────────┐  │
+│ │ extension.js    panel · listeners  │      │ served by the sidecar — ③ then ④:           │  │
+│ │                 message handlers   │      │   page    webview.html                      │  │
+│ │ sidecar.js      spawn · handshake  │  ①   │   shims   fetchShim · editorShim ·          │  │
+│ │                 token · /health    │◄────►│           webviewInit                       │  │
+│ │ plantumlJar.js  validate the jar   │      │   app     script.js · title.js ·            │  │
+│ │ webviewPage.js  fetch the page     │      │           hover-highlight · activity.js ·   │  │
+│ │                                    │      │           sequence-*.js · diagram-toolbar   │  │
+│ │ ★ the ONLY writer of the document  │      │   css     styles.css · webview.css          │  │
+│ │                                    │      │                                             │  │
+│ │ owns: TextDocument · WorkspaceEdit │      │ shipped in the extension (node_modules):    │  │
+│ │       decorations · output channel │      │   vendor  jQuery · Bootstrap · panzoom ·    │  │
+│ │                                    │      │           diff   — no Ace, no Popper        │  │
+│ └────────────────────────────────────┘      └─────────────────────────────────────────────┘  │
+│         │              │                                        │                            │
+│      ②  │ spawn +   ③  │ GET /webview once per panel,           │ the app's own HTTP,        │
+│         │ stdio        │ POST /renderPNG on save                │ every interaction          │
+└─────────┼──────────────┼────────────────────────────────────────┼────────────────────────────┘
+          ▼              ▼                                        ▼
+┌─ SIDECAR · Python · Flask ───────────────────────────────────────────────────────────────────┐
+│ src/plantuml_gui/ , spawned as `python -m plantuml_gui.serve`                                │
+│ http://127.0.0.1:<port>   port picked by the OS at bind, token minted by Node at spawn       │
+│ X-PlantUML-Token required on every request but GET /static/*                                 │
+│                                                                                              │
+│ serve.py         ephemeral port · /health · /webview · token auth · CORS · jar override      │
+│ templates/       webview.html · app_scripts · diagram_toolbar · activity/sequence_menus      │
+│ static/          every script and stylesheet the page loads, incl. vscode/ shims             │
+│ 79 POST routes   56 rewrite the source   /editText · /addNote · /deleteActivity …            │
+│                  23 query or render      /getText · /getActivityPositions · /render …        │
+│ 4 GET routes     / · /changelog  (web app)   ·   /health · /webview  (sidecar only)          │
+│                                                                                              │
+│ stateless about files: every route takes the whole source in and hands it back out           │
+└──────────────────────────────────────────────────────────────────────┼───────────────────────┘
+                                                                       │ ⑤ one process per render
+                                                                       ▼
+                                        ┌─ PLANTUML · Java ─────────────────────────────────┐
+                                        │ java -jar plantuml.jar -pipe -tsvg  →  SVG        │
+                                        │ jar path resolved by Node, injected at spawn      │
+                                        └───────────────────────────────────────────────────┘
+```
+
+The five edges, each specified in full under [Interfaces](#interfaces):
+
+| | Between | Channel | When |
+| --- | --- | --- | --- |
+| ① | host ↔ webview | `postMessage` | continuous |
+| ② | host → sidecar | `spawn` + stdio | once per window |
+| ③ | host → sidecar | HTTP: `GET /webview`, `POST /renderPNG` | once per panel; once per PNG saved |
+| ④ | webview → sidecar | the frontend's own HTTP | every interaction |
+| ⑤ | sidecar → java | `subprocess` | once per render |
+
+Two independent channels, and the split is the whole design. The webview talks **HTTP to
+Python** for everything about the diagram, and **`postMessage` to Node** for everything about
+the document. Node never proxies ④ — its own HTTP is ③: the page fetch, made once before the
+page exists, and the PNG render, which is Node's only because a webview cannot receive a file.
+Python never learns that a file is involved: every route takes the full source in the request
+body and returns the full source back.
+
+Note where the frontend lives. Only the browser libraries come from the extension; the page,
+the shims, the CSS and the app's own scripts are all served by the sidecar out of
+`src/plantuml_gui/`. That is why there is no HTML, no frontend copy and no build step in
+`plantuml-extension/`.
+
+## Component map
+
+Node side, `plantuml-extension/`:
+
+| File | Responsibility |
+| --- | --- |
+| `package.json` | Manifest: the `plantuml-interactive-editor.openDiagram` and `.reinstallBackend` commands, the two settings, and the browser libraries as runtime dependencies. |
+| `extension.js` | Lifecycle, the commands, the webview panel, document listeners, and the message handlers. The only writer of the document. |
+| `src/settings.js` | Only what more than one file needs: the configuration section, path normalization, and the is-it-a-file predicate. |
+| `src/sidecar.js` | Spawns and supervises the Python child; port handshake, token, health polling, error messages. |
+| `src/backendInstall.js` | Finds the wheel inside the vsix, decides where its virtual environment goes, and drives the installer under each candidate interpreter. |
+| `src/plantumlJar.js` | Resolves and validates the jar path before anything is spawned. |
+| `src/webviewPage.js` | Fetches the page from the sidecar and supplies the values Flask cannot know. |
+| `backend/` | Build product, gitignored: the one wheel this vsix ships. Written by `scripts/build_release.sh`. |
+| `test/` | Mocha unit tests run by `@vscode/test-cli`. |
+
+Python side, `src/plantuml_gui/`:
+
+| File | Responsibility |
+| --- | --- |
+| `serve.py` | The sidecar entry point. Same Flask `app`, different startup: ephemeral port, `/health`, `/webview`, token auth, CORS, jar override. |
+| `__init__.py` | Empty, and load-bearing: it makes `plantuml_gui` a regular package rather than an implicit namespace one. |
+| `templates/webview.html` | The page the panel loads. Standalone, not a child of `index.html`. |
+| `templates/partials/app_scripts.html` | The frontend's script list, shared by `index.html` and `webview.html`. |
+| `templates/partials/diagram_toolbar.html` | The toolbar markup, shared by the same two pages; takes the attributes they differ on. |
+| `static/diagram-toolbar.js` | Panzoom and the zoom buttons, for both pages. Loads at the end of `<body>`, not with `app_scripts`. |
+| `static/vscode/fetchShim.js` | Rewrites the app's relative `fetch()` URLs, attaches the token, and reports requests that never reached the sidecar. |
+| `static/vscode/editorShim.js` | An Ace-shaped object backed by the VS Code document. |
+| `static/vscode/webviewInit.js` | Boots the reused app code inside the webview. |
+| `static/vscode/webview.css` | Lays out the toolbar and the diagram, repaints them in the editor's theme, and hides the DOM elements that exist only to satisfy the app's code. |
+
+Nothing under `static/vscode/` is loaded by the web app at `/`. It lives in this package
+rather than in the extension because it is `<script src>` on a page Flask renders — serving
+it next to `script.js` costs nothing, and the alternative is the extension resolving a
+webview URI for each file and passing it in.
+
+## Interfaces
+
+Six links, no two alike, each specified below as transport, who speaks first, payload,
+authentication and failure. None of it comes from a shared schema — every contract here is
+upheld by hand, so the constants are listed in
+[Cross-runtime contracts](#cross-runtime-contracts).
+
+Which pairs can talk at all is itself part of the design, and the empty cells matter as much
+as the full ones:
+
+| | host | webview | sidecar | java |
+| --- | --- | --- | --- | --- |
+| **host** | — | postMessage | spawn, and 2 HTTP GETs | never |
+| **webview** | postMessage | — | HTTP, continuously | never |
+| **sidecar** | stdout, stderr | HTTP responses | — | subprocess |
+
+### 1. Host → sidecar: process control
+
+`spawn(pythonPath, ['-m', 'plantuml_gui.serve'], { env })`, from `src/sidecar.js`. Node
+speaks first; the child can only answer through its own stdio. Environment is the only way
+to configure a process before it starts, so all of it rides in there:
+
+| Variable | Set when | Read by | Effect |
+| --- | --- | --- | --- |
+| `PLANTUML_GUI_TOKEN` | always | `install_token_auth()` | The per-launch secret. **Absent means no auth is installed at all**, which is what keeps plain `python -m plantuml_gui` usable. |
+| `PLANTUML_GUI_JAR_OVERRIDE` | only if a jar resolved | `apply_jar_override()` | Assigns `PLANTUML_JAR` from inside the process, after `load_dotenv`. See [Jar override](#jar-override). |
+| `PYTHONUNBUFFERED` | always `1` | CPython | Without it the port line sits in a block buffer and the handshake times out. |
+
+Coming back: **stdout** carries exactly one meaningful line, `PLANTUML_GUI_PORT=<port>\n`,
+and everything else on it is ignored (see [Port handshake](#port-handshake)); **stderr**
+carries unstructured tracebacks mixed with werkzeug's request log, streamed to the output
+channel and kept in a rolling 8 KB buffer (see [Failure reporting](#failure-reporting)).
+
+One sidecar per window, shared by every panel, killed in `deactivate()`. Spawn `ENOENT`, an
+import error, and no port line within 30 s all end the same way: panel disposed, notification
+naming the setting to fix. A child that dies later is reported too, but differently — see
+[Failure reporting](#failure-reporting).
+
+### 2. Host → sidecar: HTTP
+
+Node is not a proxy for the frontend: it makes three requests, two of them once each per
+panel, and every interaction with the diagram goes straight from the webview to the sidecar
+instead. All three carry `X-PlantUML-Token`.
+
+| Request | When | Response | On failure |
+| --- | --- | --- | --- |
+| `GET /health` | Every 100 ms after the port line until it answers or 30 s passes; 2 s per attempt. | `{"status": "ok", "version": "<backend __about__.py version>"}` — `status` is never read, only the fact that something answered; `version` lands in `Sidecar.backendVersion`, see [Version compatibility](#version-compatibility). | Not-ready-yet; the deadline is what gives up. |
+| `GET /webview?…` | Once per panel, 5 s timeout. | `text/html`, assigned verbatim to `panel.webview.html`. | `400` + `{"error": …}` on a bad parameter, `WebviewPageError` otherwise. |
+| `POST /renderPNG` | On `savePng`, 60 s timeout — the render shells out to java. | `image/png` bytes, written to the file the save dialog returns. | Notification; nothing is written. |
+
+The third one is the exception that proves the rule. It is the frontend's own route, called
+with the frontend's own envelope, and the webview would be the natural caller — but a webview
+has no filesystem and blocks downloads, so the bytes have to arrive in this process no matter
+who fetches them. Asking here costs one request; asking there would cost the same request
+plus a base64 copy of a 300-dpi image across the `postMessage` boundary. See
+[Saving a PNG](#saving-a-png).
+
+The `/webview` query string is the whole of what the extension tells Flask about the panel:
+
+| Parameter | Repeated | Value |
+| --- | --- | --- |
+| `base` | no | Where the *webview* reaches the sidecar, via `vscode.env.asExternalUri`. Must be an http(s) URL. |
+| `csp_source` | no | `webview.cspSource`. Validated more laxly than the rest, since spaces and single quotes are legal CSP grammar. |
+| `vendor_script`, `vendor_style` | yes | Webview URIs for the browser libraries. Sent with `append`, read with `getlist`, because **order is load order**. |
+
+Flask derives `origin`, `token`, `token_header` and `script_hash` itself rather than
+accepting them from the caller.
+
+### 3. Host ↔ webview: `postMessage`
+
+The only channel between Node and the browser frame — no shared memory, no filesystem, no
+HTTP. Host side: `panel.webview.postMessage()` and `.onDidReceiveMessage()`. Webview side:
+`acquireVsCodeApi()` once in `webviewInit.js`, then `.postMessage()` and a `window`
+`message` listener.
+
+Payloads go through the structured clone algorithm, so they must be plain data — strings,
+numbers, arrays and object literals survive; functions, `Error`s, DOM nodes and class
+instances do not. Every message carries a `type` discriminator.
+
+| Direction | Message | Payload | Sent when |
+| --- | --- | --- | --- |
+| host → webview | `documentChanged` | `{ text }` | Once the webview has posted `ready`, on every document change, debounced 300 ms, and on a switch to another diagram file. |
+| host → webview | `cursorMoved` | `{ row, column }` | On `onDidChangeTextEditorSelection`, undebounced, zero-based. |
+| webview → host | `applyPuml` | `{ text }` | A diagram operation produced new source. |
+| webview → host | `setHighlight` | `{ rows }`, zero-based line numbers | The shim's marker table changed. |
+| webview → host | `savePng` | `{}` | The toolbar's PNG button was clicked. Carries no source: the host renders from the document. |
+| webview → host | `backendUnreachable` | `{ route, detail }` | A `fetch()` to the sidecar was rejected rather than answered. See [Failure reporting](#failure-reporting). |
+| webview → host | `ready` | `{}` | The page finished booting. |
+
+Four properties of the channel shape the code on both sides. There is **no
+request/response** — no ids, no acks, no replies — which is why the write-back loop has to be
+terminated by [comparing values](#why-the-write-back-loop-terminates). **Unknown types are
+silently ignored**, both handlers being `if`/`else if` with no `else`, so adding a message
+type is backwards-compatible but a typo in one end fails quietly. **Delivery starts only
+once the receiver is listening**, which is the entire reason `ready` exists. And nothing is
+authenticated or reported: the channel is private to the panel by VS Code's guarantee, and
+posting to a disposed panel is a no-op rather than an error.
+
+### 4. Webview → sidecar: HTTP
+
+The app's own unmodified traffic — the same calls `index.html` makes. `fetchShim.js` adds
+exactly two things in flight: a relative URL becomes `base + path`, and every request gets
+the token header.
+
+All 79 POST routes take the same envelope:
+
+```
+POST <base><route>
+Content-Type: application/json
+X-PlantUML-Token: <token>
+
+{ "plantuml": "<the entire .puml source>",
+  "svg":      "<the currently rendered SVG>",
+  "svgelement": "<outerHTML of the clicked element>",
+  …operation-specific fields, e.g. "newname" }
+```
+
+Note what is *not* there: no file path, no document uri, no revision, no session id. The
+whole source goes out and the whole source comes back, which is why one sidecar can serve
+every panel without knowing that panels exist.
+
+Responses are **not** uniform, and the split follows blueprint rather than what the route
+does:
+
+| Routes | Content type | Body |
+| --- | --- | --- |
+| `activity/`, 46 of 48 | `text/html`, a bare Flask `str` | The whole new source, or the queried value. Read with `response.text()` — not JSON, and not a diff. |
+| `activity/`: `/getActivityPositions`, `/checkDuplicateArrow` | `application/json` | The blueprint's two exceptions: a row table, and `{"result", "type"}`. |
+| `sequence/`, all 23 | `application/json` | Always an envelope — `{"plantuml": …}` for a rewrite, `{"name": …}` or `{"text", "color"}` or a row table for a query. `/addGroup` and `/addBox` can answer `400` + `{"error": …}`. |
+| `shared/`: `/render`, `/encode`, `/decode`, the four title routes | `text/html` | Bare text; `/render` returns the SVG itself. |
+| `shared/`: `/renderPNG` | `image/png` | Bytes, as an attachment. |
+
+That inconsistency is historical rather than a rule being followed: the newer sequence
+blueprint standardised on JSON envelopes and the activity blueprint never did. The frontend
+matches it correctly today, but it is a trap when adding a route, because reading a JSON
+response with `.text()` yields a JSON *string* that flows onward into the document without
+erroring anywhere.
+
+Two things sit outside that shape. `GET /static/...` is issued by `<script src>` and
+`<link href>`, so it carries no token and is exempted by endpoint name (see
+[Token authentication](#token-authentication)). And every request here is cross-origin,
+since the page origin is `vscode-webview://<uuid>`, so the browser preflights anything
+carrying JSON or the token header; `install_cors()` answers with
+`Access-Control-Allow-Origin: *`, `Allow-Headers: Content-Type, X-PlantUML-Token`,
+`Allow-Methods: GET, POST, OPTIONS` and `Max-Age: 7200`.
+
+A bad or missing token gets `403` + `{"error": "invalid or missing token"}`. The app's code
+never anticipated a 403, so it surfaces as a failed render rather than a message — check the
+webview devtools network tab.
+
+### 5. Sidecar → PlantUML: subprocess
+
+One `java` process per render, from `shared/render.py`, source in on stdin and image out on
+stdout:
+
+```
+java -DPLANTUML_LIMIT_SIZE=16384 -jar $PLANTUML_JAR -pipe -tsvg
+java -DPLANTUML_LIMIT_SIZE=16384 -jar $PLANTUML_JAR -pipe -tpng -Sdpi=300
+```
+
+`PLANTUML_JAR` is read per call rather than captured at import, which is precisely what makes
+the `PLANTUML_GUI_JAR_OVERRIDE` indirection work.
+
+### 6. Host ↔ the document
+
+Not cross-process, but the link that closes the loop. The host reads with
+`document.getText()` and writes with a `WorkspaceEdit` replacing the full range — one edit,
+so one undo step, so Ctrl+Z undoes a diagram click. It is the **only** write path to the
+file; neither the webview nor the sidecar can reach it.
+
+Which document that is follows the active editor: clicking into another diagram file points
+the panel at it, resends its text and retitles the tab, so one panel serves every diagram in
+the window.
+
+`isPlantUmlDocument()` decides which files may take it over. A PlantUML extension —
+`.puml`, `.plantuml`, `.pu`, `.iuml`, `.wsd`, `.uml` — qualifies whatever the file holds, and
+so does a `plantuml` language id. A `plaintext` document qualifies once it opens a `@start…`
+block within its first `DIAGRAM_SNIFF_LINES` lines, which is what makes diagrams kept in
+`.txt` work. Any other language never qualifies: the whole document is the source, so a
+diagram quoted in a docstring would be rendered with the code around it.
+
+A document that is not followed leaves the panel on the file it was showing. So does a
+settings tab, and so does focus in the panel itself — there is no active text editor then.
+
+## Startup sequence
+
+1. VS Code loads `extension.js` and calls `activate()`, which creates the
+   `PlantUML Interactive` output channel, registers sidecar disposal, and registers the two
+   commands. Nothing is spawned yet.
+2. The command runs `openDiagramPanel()` against the active editor's document.
+3. `resolvePlantUmlJarPath()` resolves the jar: the setting, else `PLANTUML_JAR`, else the
+   shared internal install, and checks the winner is a file. A source that is set but
+   unusable stops resolution instead of falling through, so a mistyped setting cannot
+   silently render from a different jar. This happens **before** spawning, because
+   `check_jar()` in `serve.py` only warns on stderr — an unchecked bad path would first
+   appear as a 500 on the user's first render.
+4. `ensureBackendPython()` resolves the interpreter, and installs the managed backend if
+   nothing is configured and no venv exists yet — the `BackendMissingError` case, shown as a
+   progress notification while pip runs. Once per machine per backend version; see
+   [The managed backend](#the-managed-backend).
+5. `ensureSidecar()` starts the child if one is not already running. One sidecar is shared
+   by every panel in the window; concurrent callers await the same start rather than racing
+   to spawn two servers.
+6. `startSidecar()` resolves the interpreter again — the setting, else
+   `PLANTUML_GUI_PYTHON`, else the managed venv, checked to be a file — generates a
+   per-launch token, and spawns `python -m plantuml_gui.serve`.
+7. The sidecar applies the jar override, warns if the jar is unusable, installs its routes,
+   binds an ephemeral port, and prints `PLANTUML_GUI_PORT=<port>` to stdout.
+8. Node reads that line off stdout, then polls `GET /health` until it answers.
+9. `createWebviewPanel()` opens the panel beside the editor, with `enableScripts`,
+   `node_modules` as the single `localResourceRoots` entry, and `retainContextWhenHidden`
+   — without the last one, VS Code tears the page down whenever the panel is hidden, and
+   restoring it costs a full render plus a rewalk of every handler the frontend attached.
+10. `fetchWebviewPage()` GETs `/webview` from the sidecar and assigns the result to
+    `panel.webview.html`.
+11. The page loads its scripts in a fixed order and posts `ready`.
+12. The host posts `documentChanged` with the file's text; the webview renders.
+
+Any failure between steps 3 and 10 becomes a notification, and the panel is disposed rather
+than left blank. The failures whose answer really is a setting — an unusable jar and an
+unusable interpreter — carry an **Open Settings** button that opens the Settings UI filtered
+to `plantumlInteractive`. A backend that failed to boot does not:
+`describeStartFailure()` has already said what to install. A failed *install* carries
+**Show Output** instead, because the account of what went wrong is pip's.
+
+## The managed backend
+
+A release is one file. The `.vsix` carries the backend wheel in `backend/`, and the
+extension installs it into a virtual environment of its own the first time a diagram is
+opened, so installing the extension is the whole install.
+
+`scripts/build_release.sh` builds the wheel straight into `plantuml-extension/backend/`,
+which is inside the directory `vsce package` zips. The directory is gitignored as the build
+product it is, and still ships: `vsce` reads `.vscodeignore` **or** `.gitignore`, never
+both, and `.vscodeignore` exists. Excluding `backend/` there — which tidying up a generated
+directory would suggest — would ship an extension that cannot install its own backend.
+
+### Who does what
+
+The install is JavaScript, with one exception, and the exception is the interesting part:
+
+> `src/backendInstall.js` performs the install; each interpreter judges itself.
+
+Creating a virtual environment and running pip are two spawns and a rename, all of which Node
+does directly. Three questions belong to the interpreter itself — is it new enough, does it
+have `venv`, does it have `ensurepip` — so they are put to each candidate as a one-line Python
+program on the command line, `PROBE_SOURCE`, which prints the facts and leaves the judgement to
+`selectInterpreter()`.
+
+Probing is cheap, so every candidate is asked before anything is built:
+
+| The candidate | What it means | What the extension does |
+| --- | --- | --- |
+| answers, new enough, has both modules | usable | choose it, and stop looking |
+| answers, older than `requires-python` | too old | try the next candidate |
+| answers without the marker line | not a Python | try the next candidate |
+| cannot be spawned | not installed here | try the next candidate |
+| answers, new enough, missing `venv` or `ensurepip` | a good Python, unusable for this | stop, and name what to install |
+
+**"Answers without the marker line"** is what makes the search robust on Windows, where a
+`python3` on PATH is usually an App Execution Alias that opens the Microsoft Store. The marker
+word is the whole test: anything that answers without it — that alias, a shell reporting 9009,
+a wrapper script — sends the search on to the next candidate.
+
+**"Missing `venv` or `ensurepip`"** is the Debian and Ubuntu case, where `ensurepip` ships
+separately and a venv would come out with no pip in it. It stops the search, because the
+message is the useful outcome: it names the package to install, `python3.12-venv` or whichever
+version applies, which it can do because the probe reported the version.
+
+The install then runs once, against an interpreter already known to be suitable, so a failure
+of it is a failed install, reported as one. `NoInterpreterError` is a subclass of
+`BackendInstallError` so a caller that only wants to say "the install failed" can catch the
+base class, while the one message a user can act on differently — install a Python, or point
+the setting at one you already have — can be told apart.
+
+### Which interpreters are tried
+
+`PYTHON_CANDIDATES` holds argv prefixes rather than bare names, because the usual way to
+reach a chosen Python on Windows takes the version as an argument:
+
+| Platform | Tried, in order | Why |
+| --- | --- | --- |
+| Linux, macOS | `python3`, then `python3.13` … `python3.10` | `python3` is what the machine calls its Python; the versioned names reach a newer one on a machine whose `python3` is older than 3.10 |
+| Windows | `py -3`, then `python` | The launcher ships with every python.org install and already means "the newest Python 3 here", so it needs no version list. `python` reaches an interpreter that is on PATH without one |
+
+### The probe
+
+```
+python3 -I -c "import sys, importlib.util as u; print('probe', sys.version_info[0], sys.version_info[1], u.find_spec('venv') is not None, u.find_spec('ensurepip') is not None)"
+```
+
+It prints four facts, and `selectInterpreter()` judges them. The version is among them because
+the messages quote it: "`python3`: Python 3.9, too old", and the name of the `python3.12-venv`
+package to install. `-I` isolates the run from the user site directory, `PYTHONPATH` and
+`sitecustomize`, so the answer describes the interpreter itself. The `probe` marker identifies
+the line as this program's own output.
+
+Two constraints on editing it, both easy to undo by accident:
+
+- **Single quotes and spaces only.** It crosses `CreateProcess` argv quoting on Windows as one
+  argument, and staying inside that character set keeps it there intact. Hence `print(a, b)`
+  for the formatting.
+- **Python 3.6 syntax.** Python compiles the whole program before running any of it, so the
+  syntax has to be old enough for every interpreter the probe is put to. A Python 2 reaching
+  it stops at `importlib.util`, which is the answer wanted from a Python 2.
+
+`test/backendInstall.test.js` runs the probe under a real `python3` when the machine has one.
+That is the only test that would catch a syntax error in it; everything else uses shell
+stand-ins that answer with whatever version a test needs.
+
+### The install itself
+
+Three steps, against the chosen interpreter:
+
+```
+<chosen> -m venv --clear <target>.tmp-<pid>
+<target>.tmp-<pid>/bin/python -m pip install --no-input --disable-pip-version-check <wheel>
+rename <target>.tmp-<pid> -> <target>
+```
+
+pip runs through the venv's interpreter, whose path the rename leaves working. The absolute
+shebang in `bin/pip` would not survive it, and this package installs no console scripts of its
+own, so that shebang is the only one at stake.
+
+The rename is what makes the install atomic, and both reasons matter:
+
+- **Only a finished venv is ever visible.** The extension decides the backend is installed by
+  looking for the interpreter inside `<target>`. Building elsewhere and renaming a finished
+  result means `<target>` appears complete, with its package installed, the moment it appears
+  at all — through a cancelled window, a killed process or a full disk between the two spawns.
+- **Two windows racing settle through the filesystem.** Each window is its own extension
+  host, so both may find the venv missing and both start building. The pid in the build
+  directory's name keeps them apart, and then they race to rename: the loser finds `<target>`
+  already a directory, discards its own work, and uses the winner's. Safe precisely because
+  of the previous point.
+
+Renaming a venv works because `pyvenv.cfg` records the *base* interpreter's location, and
+`sys.prefix` is derived at run time from the path the interpreter was invoked by. Both survive
+a move.
+
+A build directory is removed when a step fails. A process killed outright leaves one behind,
+where it sits inert, since `<target>` is the only path anything looks for. Stale ones are left
+alone, because a live sibling window's build looks exactly the same from outside.
+
+### Where it goes, and updates
+
+`managedVenv()` puts it at `<globalStorageUri>/venv-<version>/`, the directory VS Code
+hands each extension for machine-local data. Under Remote-SSH that resolves on the remote
+machine, which is where the extension host runs and therefore where the venv has to be.
+
+The version in the directory name is the whole of the update story: after an extension
+update the path for the newly bundled wheel does not exist yet, so the install runs again,
+and reinstalling an older `.vsix` finds its own venv still beside it. Nothing is upgraded in
+place. The version comes from the wheel's filename, so there is no second record of what is
+installed, and an extension-only patch release — `0.31.1` against backend `0.31` — reuses
+the venv it already has.
+
+Each backend version therefore keeps its own environment, at roughly 50 MB apiece, mostly
+lxml. They stay where they are for the life of the extension, which is what lets a window
+still running an older sidecar carry on with it; removing the extension's global storage
+directory clears the lot.
+
+### Platforms
+
+Only two things here depend on the platform: the candidate list above, and the path to the
+interpreter inside a venv — `Scripts\python.exe` on Windows, `bin/python` elsewhere.
+`venvInterpreter()` in `backendInstall.js` is the only copy of that rule; the install goes
+through it for pip, and the sidecar is spawned with it afterwards.
+
+Linux and macOS share every path here, and pip finds a wheel for each of the compiled
+dependencies on both. Windows reaches its interpreter through the `py` launcher, keeps the
+venv's interpreter in `Scripts`, and wants long paths enabled where a global storage path
+plus a venv plus `site-packages` runs close to 260 characters.
+
+`scripts/build_release.sh` is bash, so releases are built on Linux or macOS. The
+`plantumlJar` fallback is an internal Linux path; elsewhere that setting names the jar.
+
+### Atomicity
+
+`install()` builds into `<target>.tmp-<pid>` and renames the finished result into
+place. Two properties come out of that:
+
+- **A half-built venv is never visible.** The extension decides the backend is installed by
+  looking for the interpreter inside the target. Building there directly would mean an
+  install interrupted between `-m venv` and pip leaves that interpreter present but
+  unable to import `plantuml_gui` — forever, since the directory exists.
+- **Two windows racing cannot corrupt each other.** Each extension host is its own process,
+  so no in-process guard can help. Both build, both rename, and the filesystem settles it:
+  the loser finds the target already a directory, discards its own build, and uses the
+  winner's. Safe precisely because of the previous point.
+
+Renaming a venv is sound for the two ways this one is used, though the instinct is that it
+cannot be: `pyvenv.cfg` records the *base* interpreter's location, not the venv's own, and
+`sys.prefix` is derived at run time from the path the interpreter was invoked by. What a
+move breaks is the absolute shebang in `bin/pip` and other console scripts, and neither side
+ever runs one — it is `python -m pip` here and `python -m plantuml_gui.serve` there, and
+this package installs no console scripts of its own.
+
+Within one window, `installBackendOnce()` in `extension.js` latches the install behind a
+promise, the same way `ensureSidecar()` does, so two commands in quick succession raise one
+progress notification rather than two.
+
+### Recovery
+
+**PlantUML: Reinstall Backend** deletes the virtual environment and builds it again, for the
+state nothing else recovers from: a venv that exists — and is therefore used — but does not
+work. It stops the sidecar first, that being the process living in the directory about to be
+deleted. Because `install()` leaves an existing target alone, a surviving directory
+means an install that does nothing, so the command refuses to run while an install is in
+flight, waits for the sidecar to actually exit (awaiting a start still in flight, which owns
+no handle to stop yet), and reports a venv it could not remove instead of installing over it.
+
+## Version compatibility
+
+Once a fresh sidecar has answered `/health` (between steps 8 and 9 above),
+`warnOnBackendVersionMismatch()` in `extension.js` compares `Sidecar.backendVersion` against
+`EXPECTED_BACKEND_VERSION` in `src/sidecar.js` — this extension's own `major.minor`, the same
+rule as the `scripts/check_app_versions.py` pre-commit hook applies at build time. It is
+non-blocking (the panel still opens), and runs once per sidecar start rather than once per
+panel, since every panel in the window shares one sidecar.
+
+A managed backend cannot drift: the only wheel available is the one inside the `.vsix` asking
+for it, and the pre-commit hook pairs their versions. So a mismatch means the backend came
+from somewhere else: a `pythonPath` pointed at an environment holding an older wheel. The
+message says so, and offers the two ways out — update that environment, or clear the setting
+and let the extension install its own.
+
+## The sidecar
+
+### Why `serve.py` and not `__main__.py`
+
+`python -m plantuml_gui` runs `app.run(debug=True)` on port 5000. That is wrong for a child
+process on three counts: the fixed port may be taken and we want one server per editor
+window; the debug reloader forks a second process the parent cannot cleanly kill; and there
+is no way to report the bound port back. `serve.py` is a second entry point onto the *same*
+Flask `app` object. Running the web app normally is unaffected.
+
+### Port handshake
+
+The child binds port `0` — "any free port" — via `make_server`, which binds immediately, so
+the port is known rather than guessed at or raced for.
+
+Two details in `readPortLine()` are not incidental. It keeps only complete lines, because a
+pipe chunk boundary can fall mid-number; and it scans for the prefix rather than reading the
+first line, because anything printed during import would otherwise be mistaken for the port.
+
+### Readiness
+
+A bound socket is not a serving one, which is why the parent polls `/health` instead of
+trusting the port line — no caller ever sends a real request to a socket that is bound but
+not yet answering. `/health` is registered by the sidecar only, so the web app's route table
+is unchanged.
+
+### Token authentication
+
+Loopback is not a trust boundary: any local process can reach the server, and every route
+rewrites the user's source. `startSidecar()` generates 24 random bytes per launch and passes
+them as `PLANTUML_GUI_TOKEN`; `install_token_auth()` rejects any request without a matching
+`X-PlantUML-Token` header. No token configured means no check installed, so normal web use
+is unaffected.
+
+Two exemptions:
+
+- **`OPTIONS`** — browsers strip custom headers from CORS preflights by design, so a
+  preflight cannot carry the token. Rejecting it would fail the preflight and the real
+  request would never happen. The preflight response carries no data, and the real request
+  that follows is still checked.
+- **`GET`/`HEAD` on the `static` endpoint** — `<script src>` and `<link href>` cannot send
+  headers, so authenticating them would mean putting the secret in a query string, where it
+  would land in werkzeug's request log. These are non-secret read-only files any process
+  able to reach loopback could already read off disk. Every source-rewriting route is a POST
+  and stays checked. The exemption is matched by *endpoint name*, not URL prefix, so a route
+  mounted under `/static` later cannot silently inherit it.
+
+### CORS
+
+The webview's page origin is `vscode-webview://<uuid>`, so every request from it is
+cross-origin — unlike the web app, where page and Flask share an origin. The client sends
+`Content-Type: application/json` and a token header, neither CORS-safelisted, so the browser
+preflights and blocks the real request unless the response permits it.
+
+The allowed origin is `*`, because the webview's uuid changes per panel. That is not a hole:
+it grants any page permission to *attempt* a request, while the token check still rejects
+anything that cannot produce the secret. `*` also bars the browser from sending cookies, and
+this server has no cookie or session state.
+
+### Jar override
+
+`shared/render.py` calls `load_dotenv(..., override=True)` at import time, so a repo-root
+`.env` beats the environment the process was launched with. Passing `PLANTUML_JAR` directly
+would therefore be silently ignored. Instead the extension passes
+`PLANTUML_GUI_JAR_OVERRIDE`, and `apply_jar_override()` assigns `PLANTUML_JAR` itself, after
+`.app` has been imported and therefore after `load_dotenv` has run. It works because
+`render.py` reads the variable per call rather than at import.
+
+Consequence: the jar enters the child's environment at spawn time, so changing the setting
+takes effect on the next backend start, not the next render.
+
+### Failure reporting
+
+The child's stderr is streamed to the output channel and kept in a rolling 8 KB buffer
+(capped because werkzeug logs every request there for the life of the process).
+`describeStartFailure()` turns it into actionable text: `ENOENT` names the `pythonPath`
+setting, `No module named plantuml_gui` says to install the package into that interpreter,
+and anything else is reported with the traceback.
+
+That covers startup. A backend that dies later is reported by both runtimes, because neither
+can see what the other sees: only the host holds the `ChildProcess`, and only the page knows a
+request went nowhere — the webview's traffic does not pass through the host, so werkzeug's
+request log just stops, and the frontend's `fetch()` call sites do not handle a rejection.
+
+| Signal | Seen by | Reported as |
+| --- | --- | --- |
+| The child's `exit` event | `reportBackendExit()` | Output line with the exit code or signal, plus, while a panel is open, one notification: *The PlantUML backend stopped. Run "PlantUML: Open Interactive Diagram" again to restart it.* |
+| A rejected `fetch()` | `fetchShim.js` posts `backendUnreachable`, the host logs it | Output line naming the route and the error. No notification — one gesture fires several requests. |
+
+Three details decide the shape of that:
+
+- **`Sidecar.disposing`**, set by `dispose()` *before* `process.kill()`. The `exit` event is
+  identical whoever caused it, and `deactivate()` must not report its own shutdown.
+- **The panel gate.** The sidecar outlives panels, so a death with none open is logged and
+  nothing more.
+- **`reportFailuresTo(post)`.** `fetchShim.js` cannot call `acquireVsCodeApi()` — once per
+  page, and `webviewInit.js` has it — so the host's `post` is handed in at boot. The rejection
+  is rethrown regardless: the shim changes where requests go, not what callers observe.
+
+Recovery is a new panel: the handle is dropped on `exit`, so the next command spawns a fresh
+child, and the old page holds the dead child's port and token.
+
+## The webview page
+
+A webview is a sandboxed frame whose HTML you supply as a **string**, so the page has an
+artificial origin and relative URLs resolve to nothing. Local files must be converted with
+`webview.asWebviewUri()` and their directory listed in `localResourceRoots`. A strict CSP
+applies. The only channel to the extension host is `postMessage`.
+
+### Why Flask renders it
+
+The page's content *is* the web app's frontend — its markup, its CSS, its context-menu
+partials — and the sidecar is already a server that has all of it plus the Jinja to render
+it. So `install_webview_route()` renders `templates/webview.html` and `fetchWebviewPage()`
+asks for it over HTTP.
+
+The result: no HTML in the extension, no copy of the frontend, no build or sync step, and no
+way for the webview to run a stale copy of a file edited in `src/plantuml_gui/`.
+
+### Why the parameters are validated, not escaped
+
+The four query parameters themselves are listed under *Host → sidecar: HTTP* in
+[Interfaces](#interfaces). What matters here is that all of them are reflected into the
+document, so `serve.py` validates rather than escapes them. Jinja escapes quotes, but that does not help here: a semicolon inside a CSP source
+starts a new directive of the caller's choosing, and whitespace splits one value into
+several. `csp_source` gets a laxer rule than the rest — spaces and single quotes are
+legitimate CSP grammar, and a compound `cspSource` is what VS Code Remote-SSH produces.
+
+### CSP
+
+```
+default-src 'none';
+img-src     {csp_source} {origin} data:;
+style-src   {csp_source} {origin} 'unsafe-inline';
+script-src  {csp_source} {origin};
+font-src    {csp_source} {origin};
+connect-src {origin}
+```
+
+Two sources and nothing else: the sidecar, for the frontend, and the webview's own source,
+for the browser libraries. This is what makes it safe to `innerHTML` PlantUML-rendered SVG
+from an untrusted `.puml` file — injected markup can carry neither origin, so an inline
+`<script>` or an SVG `onload` handler is blocked. `'unsafe-inline'` is style-only; there is
+no script equivalent and no nonce, because the page has no inline script at all. What the
+shims need is on `<body data-*>` instead.
+
+### Browser libraries
+
+`index.html` loads jQuery, Bootstrap, panzoom and jsdiff from CDNs, which the CSP blocks. The
+extension declares them as npm **runtime** dependencies (so `vsce` packages them into the
+VSIX), lists `node_modules` as the single `localResourceRoots` entry, and passes their
+webview URIs in `VENDOR_SCRIPTS` / `VENDOR_STYLES`. The order matters: jQuery before
+Bootstrap, and jQuery pinned to 3.x because Bootstrap 4 requires <4.
+
+Three libraries `index.html` loads are deliberately absent:
+
+- **Ace** — `editorShim.js` replaces it.
+- **Popper** — Bootstrap 4 needs it only for dropdowns, tooltips and popovers instantiated
+  through Bootstrap's own JS. The page uses Bootstrap for modals, which do not need it, and
+  the context menus are `.dropdown-menu` markup positioned and toggled by the app's own code
+  rather than by `data-toggle="dropdown"`. The one `data-toggle="dropdown"` in the codebase
+  is on `index.html`'s global bar, which this page does not have.
+- **tippy.js** — only ever bound to `[data-tippy-content]`. This page shares its toolbar markup
+  with `index.html`, so the shared macro takes the attribute name as an argument: the buttons
+  carry plain `title` tooltips here, and a test asserts the page requests no tooltip it cannot
+  show.
+
+### DOM the app assumes
+
+`webview.html` contains `#popup`, `#editor`, `#version` and `#version-panel`, all hidden by
+`webview.css`. They exist because the app's code dereferences those ids without null checks;
+one missing id throws during setup and kills every interaction while the diagram still
+renders.
+
+The toolbar's four ids — `#zoom-in`, `#zoom-out`, `#zoom-fit`, `#png` — look like more of the
+same but are not. The app's `buttonEventListeners()` binds `#png` too, and this page never
+calls it (see [`webviewInit.js`](#webviewinitjs)); these are the page's own ids, bound by
+`webviewInit.js` to its own handlers. They are dereferenced without a null check for the same
+reason, so the same failure mode applies.
+
+### The toolbar
+
+Shared with `index.html`, not copied from it, in both halves: the markup is the
+`diagram_toolbar` macro in `partials/diagram_toolbar.html`, and the three zoom buttons are
+wired by `static/diagram-toolbar.js`, which both pages load. That code used to be inline in
+`index.html`; it moved into a file precisely because this page cannot run an inline script.
+It is not in `app_scripts.html` with the rest of the frontend, because unlike those it reads
+the DOM as it runs and so has to load at the end of `<body>` rather than from `<head>`.
+
+The macro takes the two arguments the pages differ on. `tooltip_attr` is an attribute *name*:
+`data-tippy-content` for `index.html`, `title` here, for the reason under
+[Browser libraries](#browser-libraries). `png_tooltip` differs because `#png` is the one
+button whose behaviour is not shared at all — see [Saving a PNG](#saving-a-png) — so each page
+wires it separately, `index.html` through `buttonEventListeners()` and this page through
+`webviewInit.js`.
+
+What is genuinely webview-only is the CSS. `webview.css` changes two things: `body` becomes a
+flex column with the diagram as the growing item — replacing `#colb-container`'s
+`position: absolute; inset: 0`, which assumed the diagram was the whole panel — and the
+palette tokens are redefined *on the toolbar* in terms of `--vscode-*`. Scoped there rather
+than on `:root` because `tokens.css` is a fixed light theme that the context menus read too;
+overriding globally would repaint them.
+
+## The shims
+
+### `fetchShim.js`
+
+The app calls `fetch("editText", ...)`, `fetch("render", ...)` and so on with relative URLs,
+which in a browser resolve against the Flask origin and in a webview resolve to nonsense.
+The shim wraps `window.fetch`: relative URLs get the `base` prefix, absolute ones are left
+alone, and every request gets the token header. It reads the base, token and header name
+from `document.body.dataset`, which is what keeps it a static file rather than a template.
+
+Must load before any app script. Rewriting the URLs here is the only change the app's 75
+`fetch()` call sites need — 42 of them in `activity.js` alone.
+
+### `editorShim.js`
+
+The app reaches the source through exactly one object — Ace's `editor` — and through a small
+slice of its API: 58 `session.getValue()` calls, two `session.setValue()`, a few markers and
+a cursor read. This file supplies an object of that shape backed by the VS Code document.
+
+The single most important method is `session.setValue()`. Every diagram operation ends by
+calling `setPuml()` — 43 call sites across the frontend — and `setPuml()` calls
+`setValue()`. Instead of mutating an Ace buffer, the shim posts `applyPuml` to the host and
+fires the `change` handlers so the app re-renders as it expects to. Pointing that one method
+at the document is what routes all 56 source-rewriting routes into the file.
+
+It also provides:
+
+- a `window.ace` global with a four-number `Range`, which must exist before `script.js` is
+  even parsed, because that file runs `ace.require("ace/range").Range` at load time;
+- an Ace-shaped marker table, whose shape matters because `clearMarkers()` iterates it and
+  filters on `marker.clazz == "hover"`; markers classed `hover` are pushed to the host as
+  `setHighlight`;
+- `applyDocumentText`, `primeDocumentText` and `applyCursor`, which the host drives;
+- no-ops for `setMode`, `setOption`, `setTheme`, `resize` and `on`;
+- a stubbed `history.replaceState`, because `renderPlantUml()` mirrors the diagram into the
+  page URL as a shareable hash and a webview has no address bar.
+
+### `webviewInit.js`
+
+Loaded last, because `script.js` declares `let editor;` at top level — a lexical binding, not
+a property of `window` — and only another classic script sharing that global scope can
+assign it.
+
+It deliberately does not call the web app's own bootstrap:
+
+- `initeditor()` builds an Ace instance and, finding no `?hash` in the URL, calls
+  `setDemo()`, which would overwrite the user's file with the demo diagram.
+- `addUtilEventListeners()` calls `buttonEventListeners()`, which binds the web app's global
+  bar (New/Undo/Save/PNG). Most of those buttons do not exist here, and `addEventListener` on
+  `null` throws. `#png` is the exception and still must not go through it: that handler
+  downloads through an `<a download>`, which a webview blocks. See [Saving a PNG](#saving-a-png).
+
+So the listeners `initeditor()` would have registered are re-registered explicitly —
+`session.on('change')` and `selection.on('changeCursor')` — without which the diagram would
+render once at boot and never again. It then calls `titleEventListeners()`, binds Ctrl+Enter
+for modal submit (Ctrl+Z is deliberately *not* rebound, since every edit is a `WorkspaceEdit`
+and already on VS Code's undo stack), binds `#png`, and posts `ready`.
+
+`#png` is the one line here that adds behaviour rather than restoring it, and the only part of
+the toolbar this file owns: panning and the zoom buttons are already set up by
+`static/diagram-toolbar.js`, loaded just before it. All it does is post `savePng`.
+
+The context menus need no attention here: they are wired by `checkDiagramType()` during
+`renderPlantUml()`.
+
+## Message protocol
+
+The six message types, their payloads and the guarantees the channel does and does not give
+are specified under *Host ↔ webview* in [Interfaces](#interfaces). What follows is the part
+that the message list does not show: why the two directions do not chase each other forever.
+
+### Why the write-back loop terminates
+
+A diagram edit posts `applyPuml`; the host writes the document; the write fires
+`onDidChangeTextDocument`; the host posts `documentChanged`; the webview receives its own
+change back. The loop is broken by **value comparison on both sides**:
+
+- `applyPuml()` returns early when the text equals `document.getText()`.
+- `applyDocumentText()` returns `false` when the text equals what the shim already has, so
+  no `change` fires and no re-render happens.
+
+The `applyingEdit` flag in `extension.js` is only a reentrancy guard around `applyEdit`.
+Comparing values rather than tracking whose turn it is means a genuine edit can never be
+swallowed, which a turn-based flag would eventually do.
+
+`webviewInit.js` treats the first `documentChanged` specially: it primes the text without
+firing `change`, then calls `renderPlantUml()` once explicitly, so the initial render does
+not go through the debounce and race the handler setup.
+
+## Worked example: renaming an activity box
+
+```
+webview   click handler (activity.js, bound by checkDiagramType) captures
+          lastclickedsvgelement.outerHTML, shows the modal, reads the new text
+          fetch("editText", {plantuml, svg, svgelement, newname})
+            ↳ fetchShim → http://127.0.0.1:<port>/editText + token header
+sidecar   token check → activity_bp route → PyQuery finds this is the Nth rect,
+          finds the Nth activity line, rewrites it → returns the full puml text
+webview   setPuml(text) → indentPuml → editor.session.setValue(text)
+            → postMessage {applyPuml, text}
+            → fire change → debouncedRenderPlantUml()
+host      applyPuml(): text differs, so a WorkspaceEdit replacing the full range
+          → the file is dirty in VS Code, as one undo step
+          → onDidChangeTextDocument → 300 ms → postMessage {documentChanged}
+webview   applyDocumentText(text) → identical → returns false. Loop ends.
+          Meanwhile the debounced render POSTed /render and swapped in the new SVG.
+```
+
+Typing directly in the VS Code editor enters the same flow at
+`onDidChangeTextDocument`, where `applyDocumentText` returns `true` and a re-render follows.
+
+## Saving a PNG
+
+The one feature that runs backwards through the architecture. Everywhere else the webview
+talks to the sidecar and the host only owns the document; here the host does both.
+
+```
+webview   #png clicked → post {savePng}          no payload
+host      POST /renderPNG {plantuml: document.getText()}
+sidecar   routes.py renderpng() → render.py → java -pipe -tpng -Sdpi=300
+sidecar   send_file(image/png) → response.arrayBuffer()
+host      showSaveDialog → workspace.fs.writeFile
+```
+
+Three things about it are deliberate:
+
+- **The message carries no source.** The document is the authority — every diagram edit
+  reaches it through `applyPuml` before a render can be asked for — and the webview's copy is
+  a shim's cache of the same text. Reading it here removes the question of which is newer.
+  It also means the PNG ignores the panel's pan and zoom, and comes out identical to the one
+  the web app's button produces.
+- **An empty body is a failure.** `_create_png_from_uml` runs java with `check=False` and
+  returns its stdout whatever happened, so a jar that could not run arrives as `200` with
+  nothing in it. Writing that leaves a zero-byte `.png` that looks like a save that worked, so
+  the host checks the length before opening the dialog.
+- **A cancelled dialog is not an error.** `showSaveDialog` resolves to `undefined`, and the
+  handler returns without a notification.
+
+The web app's own `#png` handler in `script.js` is never reached: it is registered by
+`buttonEventListeners()`, which `webviewInit.js` does not call. Its approach — a temporary
+`<a download>` — cannot work in a webview at all.
+
+## Highlighting
+
+**Diagram → editor** works fully. Hovering a diagram element makes the app call
+`session.addMarker(range, "hover", ...)`; the shim collects the marked rows and posts
+`setHighlight`; `applyHighlight()` filters out-of-range rows and calls `setDecorations` on
+every visible editor showing the document. The decoration type is created once at module
+level, since each one is a resource VS Code tracks.
+
+**Editor → diagram** is degraded by design. VS Code exposes no per-line mouse-hover event
+for text editors, so the shim's `editor.on()` is a no-op and
+`initEditorHoverHighlighting()` binds to nothing. It is still called so the wiring is
+complete if that ever changes. The feature instead follows the caret:
+`onDidChangeTextEditorSelection` → `cursorMoved` → `applyCursor` → the app's
+`cursorChangeListener` → `highlightEditorRow()`, which uses the row tables fetched once per
+render from `/getActivityPositions` and `/getSequencePositions`.
+
+## Configuration
+
+| Setting | Meaning |
+| --- | --- |
+| `plantumlInteractive.pythonPath` | Absolute path to a Python interpreter that has `plantuml-gui` installed. Optional: the extension installs one for itself. |
+| `plantumlInteractive.plantumlJar` | Absolute path to `plantuml.jar`. Optional where the shared internal install exists. |
+
+Both are declared `machine-overridable`: they are absolute paths to things installed on one
+machine, so they should neither ride Settings Sync to another nor be committed to a
+repository's `.vscode/settings.json`.
+
+Each has an environment-variable equivalent — `PLANTUML_GUI_PYTHON` and `PLANTUML_JAR`, the
+latter being the same variable the web app reads, so a repo `.env` configures both.
+
+The interpreter has three sources, `resolvePythonPath()` in `sidecar.js` taking them in this
+order:
+
+1. the `plantumlInteractive.pythonPath` setting
+2. the `PLANTUML_GUI_PYTHON` environment variable
+3. the managed venv, passed in by `ensureBackendPython()` — see
+   [The managed backend](#the-managed-backend)
+
+The managed venv comes last so that anyone naming their own environment keeps it. Nothing is
+searched for on `PATH`: the backend is a package no machine has by default, so an interpreter
+found that way almost certainly cannot import it, and spawning it would blame the wrong thing.
+
+Exhausting all three throws `BackendMissingError`, a subclass of `PythonConfigError`. That
+distinction is what makes the install possible: it is the one resolution failure with an
+automatic answer, and `ensureBackendPython()` acts on it while treating every other failure
+as the user's to fix. The jar has three sources, most explicit first: the setting, then
+`PLANTUML_JAR`, then the shared internal install path.
+
+`src/settings.js` holds only what more than one file needs: the section name, `normalizePath()`
+and `isFile()`. It requires nothing from `vscode`, which is what makes it testable in plain
+Node. Each setting's own vocabulary — its key, its dotted id, its environment variable, and
+for the jar its fallback path — lives with the code that resolves it, so that reading
+`plantumlJar.js` or `sidecar.js` tells the whole story of where that value comes from without
+a detour. Each resolver also owns its error type. The ids the tests assert against are
+imported from the module that owns them rather than spelled out again.
+
+The two shared functions are shared because they are rules that have to agree across both
+settings: what counts as a pasteable path, and what counts as a usable file. Duplicating them
+would allow the jar and the interpreter to disagree about a quoted path, silently.
+
+Two properties of the resolution are worth stating because the alternatives are tempting:
+
+- **A source that is set but unusable stops resolution.** It does not fall through to the
+  next one. Falling through is how configuration comes to look ignored: the user fixes a
+  setting, mistypes it, and the extension renders from something they did not choose. The
+  error names the source that supplied the bad path, since the same path means "fix your
+  settings" or "fix your `.env`" depending on where it came from.
+- **The jar setting's default is empty**, and the shared install path is a constant in
+  `plantumlJar.js` instead. `get()` answers with the manifest default whenever a setting is
+  untouched, so a path declared there would rank ahead of `PLANTUML_JAR` for everyone who
+  never opens Settings.
+
+Values are trimmed, and one matching pair of surrounding quotes is removed, so a path pasted
+out of a terminal works. `~`, `${workspaceFolder}` and `${env:...}` are *not* expanded: VS
+Code does not expand them in values read with `get()`, and supporting them halfway is worse
+than not at all.
+
+Both paths are validated with `statSync().isFile()` — a file, not merely something that
+exists, matching `check_jar()` in `serve.py` — before the backend is spawned. For the jar
+that avoids a 500 on the first render; for the interpreter it avoids launching a process
+just to learn its path was wrong.
+
+## Development
+
+Backend or frontend changes:
+
+1. Edit `src/plantuml_gui/` — templates, `static/`, `static/vscode/`, routes.
+2. Reopen the diagram panel. The page is fetched fresh on every open, so there is no build
+   or sync step.
+
+Cache busting is handled by `generate_static_js_hash()` in `shared/routes.py`, which hashes
+every `.js` under `static/` (including subdirectories, for the shims) and appends
+`?v=<hash>` to every script tag. It is cached for the life of the process.
+
+Extension changes:
+
+1. `npm install` in `plantuml-extension/`.
+2. Press F5 to launch the Extension Development Host.
+3. `npm test` runs the Mocha suite via `@vscode/test-cli`.
+
+The Extension Development Host launches **without a workspace folder**, so workspace-scoped
+settings are not read there at all. `.vscode/launch.json` sets `PLANTUML_GUI_PYTHON` in its
+`env` block instead, which `resolvePythonPath()` accepts as a second source. That also means
+F5 never exercises the managed backend: the environment variable outranks it. To work on the
+install itself, run `scripts/build_release.sh` with no destination — which builds
+`backend/` and stops before publishing — then unset the variable in `launch.json`.
+
+`npm test` launches a real editor and needs a display; under a headless shell, `xvfb-run`.
+Two of the suites can also be run directly, which is quicker and needs no display:
+`test/backendInstall.test.js` requires nothing from `vscode`, and `test/sidecar.test.js`
+touches three members of it (`workspace.getConfiguration`, its `get` and `update`, and
+`ConfigurationTarget.Global`), so a few lines of stub injected with `mocha --require` covers
+it.
+
+## Cross-runtime contracts
+
+There is no shared schema, so these values are duplicated and must be kept in step by hand.
+Each site carries a comment naming the other.
+
+| Value | Node | Python |
+| --- | --- | --- |
+| `PLANTUML_GUI_PORT=` | `src/sidecar.js` (`PORT_LINE_PREFIX`) | `serve.py` (`PORT_LINE_PREFIX`) |
+| `X-PlantUML-Token` | `src/sidecar.js` (`TOKEN_HEADER`) | `serve.py` (`TOKEN_HEADER`) |
+| `/webview` | `src/webviewPage.js` (`WEBVIEW_PATH`) | `serve.py` (`WEBVIEW_ROUTE`) |
+| `/renderPNG` | `extension.js` (`savePng`) | `shared/routes.py` (`renderpng`) |
+| `PLANTUML_GUI_TOKEN`, `PLANTUML_GUI_JAR_OVERRIDE` | `src/sidecar.js` (`buildEnv`) | `serve.py` (`TOKEN_ENV`, `JAR_ENV`) |
+| The six message types | `extension.js` | `static/vscode/` shims |
+| `major.minor` version compatibility rule | `src/sidecar.js` (`EXPECTED_BACKEND_VERSION`) | `scripts/check_app_versions.py` (`_major_minor`) |
+| Python 3.10 as the floor | `src/backendInstall.js` (`MIN_PYTHON`) | `pyproject.toml` (`requires-python`) |
+
+The floor is asserted by a test: `test/backendInstall.test.js` reads `requires-python` out of
+`pyproject.toml` and compares. pip enforces it a second time, refusing the wheel on an
+interpreter below `requires-python`; the check in `MIN_PYTHON` is what turns that into "try the
+next candidate".
+
+One more invariant lives entirely in the page: the script load order in `webview.html` —
+vendor, then shims, then app, then boot. Every step of it is justified in that file.
+
+## Troubleshooting
+
+| Symptom | Where to look |
+| --- | --- |
+| Notification on opening the panel | The message names the setting to change. |
+| "The PlantUML backend needs Python 3.10 or newer to install itself" | No candidate interpreter qualified; the message lists each and why. Install one, or set `pythonPath`. |
+| "cannot create a virtual environment with pip in it" | `ensurepip` is missing — the `python3-venv` package on Debian and Ubuntu. |
+| "Could not install the PlantUML backend" | pip failed; usually no route to the index. Its output is in the `PlantUML Interactive` output channel. |
+| A backend that used to start now fails | Run **PlantUML: Reinstall Backend**. See [Recovery](#recovery). |
+| "PlantUML backend X does not match this extension" | Non-blocking warning; the backend came from somewhere other than the bundled wheel. See [Version compatibility](#version-compatibility). |
+| Diagram never renders, menus work | Jar problem. Check the `PlantUML Interactive` output channel for `check_jar`'s warning. |
+| Nothing is interactive but the diagram renders | Likely a missing DOM id throwing during setup. Open the webview devtools: *Developer: Open Webview Developer Tools*. |
+| Python traceback | The `PlantUML Interactive` output channel, which receives the sidecar's stderr. |
+| Frontend change not visible | Reopen the panel; the page is only fetched on open. |
+| Windows: a candidate reported as "not a Python" | What the Store alias looks like; the message lists every candidate tried. Install Python from python.org for the `py` launcher. |
+| Global storage growing | One `venv-<version>` per backend version installed, ~50 MB each. See [Where it goes, and updates](#where-it-goes-and-updates). |
