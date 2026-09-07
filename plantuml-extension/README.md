@@ -84,6 +84,11 @@ opened or switched to — so the command is needed once per window, and the tab
 names the file on show. A `.txt` counts when it starts with a `@startuml` block;
 a file that is not a diagram leaves the panel as it was.
 
+### Diagrams in Markdown
+
+A `.md` file works too, for diagrams in a ` ```plantuml ` fenced code block. Put
+the caret in the block to show it in the panel; a file can hold several.
+
 ## Development
 
 `F5` runs the Extension Development Host from `.vscode/launch.json`. That host
