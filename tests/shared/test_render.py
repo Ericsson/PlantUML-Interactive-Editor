@@ -25,6 +25,7 @@
 """Tests for SVG/PNG rendering and PlantUML URL encoding/decoding."""
 
 import re
+import struct
 
 from flask import json
 
@@ -34,6 +35,12 @@ def extract_g_element(svg_string):
     if match:
         return f"<g>{match.group(1)}</g>"
     return None
+
+
+def _png_size(png_bytes):
+    """Read the pixel width/height from a PNG's IHDR chunk."""
+    width, height = struct.unpack(">II", png_bytes[16:24])
+    return width, height
 
 
 class TestRender:
@@ -70,6 +77,13 @@ class TestRender:
 
             # Assert the Content-Type header is "image/png"
             assert response.content_type == "image/png"
+
+            # Assert the PNG is rendered at a higher resolution than
+            # PlantUML's low-res default (84x54 for this diagram at the
+            # default 96 DPI), so downloaded diagrams aren't blurry.
+            width, height = _png_size(response.data)
+            assert width > 150
+            assert height > 100
 
 
 class TestAppRouteEncodeDecode:

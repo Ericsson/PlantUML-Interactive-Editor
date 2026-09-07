@@ -1,0 +1,9 @@
+.vscode/**
+.vscode-test/**
+test/**
+.gitignore
+.yarnrc
+**/jsconfig.json
+**/*.map
+**/eslint.config.mjs
+**/.vscode-test.*

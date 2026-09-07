@@ -120,33 +120,6 @@ stop
 @enduml"""
             assert response.data.decode("utf-8") == expected_result
 
-    def test_get_while_line(self, client):
-        test_data = {
-            "plantuml": """@startuml
-while (ST_ONGOING) is (Yes)
-    :hello;
-endwhile (No);
-:hello again;
-stop
-@enduml""",
-            "svg": """<rect fill="#F1F1F1" height="33.9688" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="50" x="61" y="67.6094"></rect><text fill="#000000" font-family="sans-serif" font-size="12" lengthAdjust="spacing" textLength="30" x="71" y="88.5781" style="pointer-events: none;">hello</text><polygon fill="#F1F1F1" points="48,12.0547,124,12.0547,136,24.0547,124,36.0547,48,36.0547,36,24.0547,48,12.0547" style="stroke:#181818;stroke-width:0.5;"></polygon><text fill="#000000" font-family="sans-serif" font-size="11" lengthAdjust="spacing" textLength="21" x="90" y="46.1094" style="pointer-events: none;">Yes</text><text fill="#000000" font-family="sans-serif" font-size="11" lengthAdjust="spacing" textLength="76" x="48" y="27.707" style="pointer-events: none;">ST_ONGOING</text><text fill="#000000" font-family="sans-serif" font-size="11" lengthAdjust="spacing" textLength="15" x="21" y="21.3047" style="pointer-events: none;">No</text><rect fill="#F1F1F1" height="33.9688" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="89" x="41.5" y="143.5781"></rect><text fill="#000000" font-family="sans-serif" font-size="12" lengthAdjust="spacing" textLength="69" x="51.5" y="164.5469" style="pointer-events: none;">hello again</text><ellipse cx="86" cy="208.5469" fill="transparent" rx="11" ry="11" style="stroke:#222222;stroke-width:1.0;"></ellipse><ellipse cx="86" cy="208.5469" fill="#222222" rx="6" ry="6" style="stroke:#111111;stroke-width:1.0;"></ellipse><line style="stroke: rgb(24, 24, 24); stroke-width: 1; pointer-events: none;" x1="86" x2="86" y1="36.0547" y2="67.6094"></line><polygon fill="#181818" points="82,57.6094,86,67.6094,90,57.6094,86,61.6094" style="stroke:#181818;stroke-width:1.0;"></polygon><line style="stroke: rgb(24, 24, 24); stroke-width: 1; pointer-events: none;" x1="86" x2="86" y1="101.5781" y2="111.5781"></line><line style="stroke: rgb(24, 24, 24); stroke-width: 1; pointer-events: none;" x1="86" x2="148" y1="111.5781" y2="111.5781"></line><polygon fill="#181818" points="144,76.1914,148,66.1914,152,76.1914,148,72.1914" style="stroke:#181818;stroke-width:1.0;"></polygon><line style="stroke: rgb(24, 24, 24); stroke-width: 1; pointer-events: none;" x1="148" x2="148" y1="24.0547" y2="111.5781"></line><line style="stroke: rgb(24, 24, 24); stroke-width: 1; pointer-events: none;" x1="148" x2="136" y1="24.0547" y2="24.0547"></line><polygon fill="#181818" points="146,20.0547,136,24.0547,146,28.0547,142,24.0547" style="stroke:#181818;stroke-width:1.0;"></polygon><line style="stroke: rgb(24, 24, 24); stroke-width: 1; pointer-events: none;" x1="36" x2="24" y1="24.0547" y2="24.0547"></line><polygon fill="#181818" points="20,62.1914,24,72.1914,28,62.1914,24,66.1914" style="stroke:#181818;stroke-width:1.0;"></polygon><line style="stroke: rgb(24, 24, 24); stroke-width: 1; pointer-events: none;" x1="24" x2="24" y1="24.0547" y2="123.5781"></line><line style="stroke: rgb(24, 24, 24); stroke-width: 1; pointer-events: none;" x1="24" x2="86" y1="123.5781" y2="123.5781"></line><line style="stroke: rgb(24, 24, 24); stroke-width: 1; pointer-events: none;" x1="86" x2="86" y1="123.5781" y2="143.5781"></line><polygon fill="#181818" points="82,133.5781,86,143.5781,90,133.5781,86,137.5781" style="stroke:#181818;stroke-width:1.0;"></polygon><line style="stroke: rgb(24, 24, 24); stroke-width: 1; pointer-events: none;" x1="86" x2="86" y1="177.5469" y2="197.5469"></line><polygon fill="#181818" points="82,187.5469,86,197.5469,90,187.5469,86,191.5469" style="stroke:#181818;stroke-width:1.0;"></polygon>""",
-            "svgelement": """<polygon fill="#F1F1F1" points="48,12.0547,124,12.0547,136,24.0547,124,36.0547,48,36.0547,36,24.0547,48,12.0547" style="stroke:#181818;stroke-width:0.5;"></polygon>""",
-        }
-        with client:
-            response = client.post(
-                "/getWhileLine",
-                data=json.dumps(test_data),
-                content_type="application/json",
-            )
-            response_json = json.loads(response.data.decode("utf-8"))
-            result_value = response_json.get("result")
-
-            # Expected value
-            expected_puml = [1, 3]
-
-            # Assert the result value is as expected
-            assert result_value == expected_puml
-
     def test_editwhilemultiplenests(self, client):
         test_data = {
             "plantuml": """@startuml

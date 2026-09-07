@@ -24,14 +24,23 @@
 
 from flask import Blueprint, jsonify, request
 
-from .message import add_message, delete_message, edit_message_text, get_message_text
+from .activation import add_activation, delete_activation
+from .box import add_box, delete_box, edit_box, get_box_label
+from .group import add_group, delete_group, get_group_label, rename_group
+from .message import (
+    add_message,
+    delete_message,
+    edit_message_text,
+    get_message_label,
+)
+from .note import add_note, delete_note, edit_note, get_note_text_and_type
 from .participant import (
     add_participant,
     delete_participant,
     edit_participant_name,
     get_participant_name,
-    get_participant_positions,
 )
+from .positions import get_sequence_positions
 
 sequence_bp = Blueprint("sequence", __name__)
 
@@ -64,6 +73,32 @@ def addmessage():
     )
 
 
+@sequence_bp.route("/addActivation", methods=["POST"])
+def addactivation():
+    data = request.get_json()
+    puml = data["plantuml"]
+    participant = data["participant"]
+    start_index = data["startMessageIndex"]
+    end_index = data["endMessageIndex"]
+    end_type = data["endType"]
+    return jsonify(
+        {
+            "plantuml": add_activation(
+                puml, participant, start_index, end_index, end_type
+            )
+        }
+    )
+
+
+@sequence_bp.route("/deleteActivation", methods=["POST"])
+def deleteactivation():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    return jsonify({"plantuml": delete_activation(puml, svg, svgelement)})
+
+
 @sequence_bp.route("/getParticipantName", methods=["POST"])
 def getparticipantname():
     data = request.get_json()
@@ -92,12 +127,12 @@ def deleteparticipant():
     return jsonify({"plantuml": delete_participant(puml, svg, svgelement)})
 
 
-@sequence_bp.route("/getParticipantPositions", methods=["POST"])
-def getparticipantpositions():
+@sequence_bp.route("/getSequencePositions", methods=["POST"])
+def getsequencepositions():
     data = request.get_json()
     puml = data["plantuml"]
     svg = data["svg"]
-    return jsonify({"positions": get_participant_positions(puml, svg)})
+    return jsonify(get_sequence_positions(puml, svg))
 
 
 @sequence_bp.route("/getMessageText", methods=["POST"])
@@ -106,7 +141,8 @@ def getmessagetext():
     puml = data["plantuml"]
     svg = data["svg"]
     svgelement = data["svgelement"]
-    return jsonify({"text": get_message_text(puml, svg, svgelement)})
+    text, color = get_message_label(puml, svg, svgelement)
+    return jsonify({"text": text, "color": color})
 
 
 @sequence_bp.route("/editMessageText", methods=["POST"])
@@ -116,7 +152,8 @@ def editmessagetext():
     svg = data["svg"]
     svgelement = data["svgelement"]
     text = data["text"]
-    return jsonify({"plantuml": edit_message_text(puml, svg, svgelement, text)})
+    color = data.get("color")
+    return jsonify({"plantuml": edit_message_text(puml, svg, svgelement, text, color)})
 
 
 @sequence_bp.route("/deleteMessage", methods=["POST"])
@@ -126,3 +163,161 @@ def deletemessage():
     svg = data["svg"]
     svgelement = data["svgelement"]
     return jsonify({"plantuml": delete_message(puml, svg, svgelement)})
+
+
+@sequence_bp.route("/addNote", methods=["POST"])
+def addnote():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    participant = data["participant"]
+    placement = data["placement"]
+    text = data["text"]
+    y_position = data["yPosition"]
+    x_position = data.get("xPosition")
+    second_participant = data.get("secondParticipant")
+    note_type = data.get("noteType")
+    return jsonify(
+        {
+            "plantuml": add_note(
+                puml,
+                svg,
+                participant,
+                placement,
+                text,
+                y_position,
+                second_participant,
+                x_position,
+                note_type,
+            )
+        }
+    )
+
+
+@sequence_bp.route("/getSeqNoteText", methods=["POST"])
+def getseqnotetext():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    text, note_type, color = get_note_text_and_type(puml, svg, svgelement)
+    return jsonify(
+        {
+            "text": text,
+            "noteType": note_type,
+            "color": color,
+        }
+    )
+
+
+@sequence_bp.route("/editSeqNote", methods=["POST"])
+def editseqnote():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    text = data["text"]
+    note_type = data.get("noteType")
+    color = data.get("color")
+    return jsonify(
+        {"plantuml": edit_note(puml, svg, svgelement, text, note_type, color)}
+    )
+
+
+@sequence_bp.route("/deleteSeqNote", methods=["POST"])
+def deleteseqnote():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    return jsonify({"plantuml": delete_note(puml, svg, svgelement)})
+
+
+@sequence_bp.route("/addGroup", methods=["POST"])
+def addgroup():
+    data = request.get_json()
+    puml = data["plantuml"]
+    group_type = data["groupType"]
+    label = data["label"]
+    start_message_index = data["startMessageIndex"]
+    end_message_index = data["endMessageIndex"]
+    try:
+        result = add_group(
+            puml, group_type, label, start_message_index, end_message_index
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"plantuml": result})
+
+
+@sequence_bp.route("/getSeqGroupLabel", methods=["POST"])
+def getseqgrouplabel():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    return jsonify(get_group_label(puml, svg, svgelement))
+
+
+@sequence_bp.route("/renameSeqGroup", methods=["POST"])
+def renameseqgroup():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    label = data["label"]
+    return jsonify({"plantuml": rename_group(puml, svg, svgelement, label)})
+
+
+@sequence_bp.route("/deleteSeqGroup", methods=["POST"])
+def deleteseqgroup():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    return jsonify({"plantuml": delete_group(puml, svg, svgelement)})
+
+
+@sequence_bp.route("/addBox", methods=["POST"])
+def addbox():
+    data = request.get_json()
+    puml = data["plantuml"]
+    # Title and color are optional; the current UI creates a bare box.
+    title = data.get("title", "")
+    color = data.get("color", "none")
+    start_index = data["startParticipantIndex"]
+    end_index = data["endParticipantIndex"]
+    try:
+        result = add_box(puml, title, color, start_index, end_index)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"plantuml": result})
+
+
+@sequence_bp.route("/deleteSeqBox", methods=["POST"])
+def deleteseqbox():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    return jsonify({"plantuml": delete_box(puml, svg, svgelement)})
+
+
+@sequence_bp.route("/getSeqBoxLabel", methods=["POST"])
+def getseqboxlabel():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    return jsonify(get_box_label(puml, svg, svgelement))
+
+
+@sequence_bp.route("/editSeqBox", methods=["POST"])
+def editseqbox():
+    data = request.get_json()
+    puml = data["plantuml"]
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    title = data.get("title", "")
+    color = data.get("color", "none")
+    return jsonify({"plantuml": edit_box(puml, svg, svgelement, title, color)})

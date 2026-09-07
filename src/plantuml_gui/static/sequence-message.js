@@ -135,7 +135,55 @@ function cancelMessageAddMode() {
     hideGhostArrow();
 }
 
+function isSequenceAddMode() {
+    return isAddMessageActive ||
+        (typeof isActivationAddMode === 'function' && isActivationAddMode()) ||
+        (typeof isGroupAddMode === 'function' && isGroupAddMode()) ||
+        (typeof isBoxAddMode === 'function' && isBoxAddMode()) ||
+        (typeof isNoteAddMode === 'function' && isNoteAddMode());
+}
+
 // --- Background context menu (right-click on diagram) ---
+
+// Lifeline-only actions (add message/activation/note/group) require a lifeline
+// under the cursor; hide them when the right-click is inside a box but not on a
+// lifeline, leaving only the Edit Box / Delete Box items.
+function toggleLifelineMenuItems(hasLifeline) {
+    ['addMessageSolid', 'addMessageDashed', 'seq-addActivation',
+     'seq-addNote', 'seq-addGroup'].forEach((id) => {
+        const li = document.getElementById(id).closest('li');
+        if (li) li.style.display = hasLifeline ? '' : 'none';
+    });
+}
+
+// Show the "Delete activation bar" item if the right-clicked target is an
+// activation bar (rect with stroke-width:1.0; headers use 0.5, the background a
+// transparent stroke), and remember the bar for the delete request.
+function toggleActivationDeleteItem(target) {
+    const onBar = target && target.tagName &&
+        target.tagName.toLowerCase() === 'rect' &&
+        (target.getAttribute('style') || '').includes('stroke:#181818;stroke-width:1.0');
+    const item = document.getElementById('seq-deleteActivation-item');
+    const divider = document.getElementById('seq-deleteActivation-divider');
+    if (onBar) lastclickedsvgelement = target;
+    item.style.display = onBar ? '' : 'none';
+    divider.style.display = onBar ? '' : 'none';
+}
+
+// Show Edit Box / Delete Box when the right-click is inside a box, recording the
+// box in contextBoxRect. The divider only shows when lifeline items precede it.
+// The box rect has no context-menu handler of its own -- it covers the lifeline
+// area, so one would hijack the lifeline right-click -- so the box is detected
+// here by hit-testing the recorded box bounds (findEnclosingBox).
+function toggleBoxMenuItems(enclosingBox, hasLifeline) {
+    const divider = document.getElementById('seq-box-divider');
+    const editItem = document.getElementById('seq-editBox-item');
+    const deleteItem = document.getElementById('seq-deleteBox-item');
+    contextBoxRect = enclosingBox || null;
+    divider.style.display = enclosingBox && hasLifeline ? '' : 'none';
+    editItem.style.display = enclosingBox ? '' : 'none';
+    deleteItem.style.display = enclosingBox ? '' : 'none';
+}
 
 function backgroundContextMenu(e, svgElement) {
     e.preventDefault();
@@ -144,14 +192,23 @@ function backgroundContextMenu(e, svgElement) {
     const cx = transformed.x;
     const cy = transformed.y;
 
-    if (isAddMessageActive) return;
+    if (isSequenceAddMode()) return;
 
     const lifeline = findNearestLifeline(cx, cy, participantLifelines);
+    const enclosingBox =
+        typeof findEnclosingBox === 'function' ? findEnclosingBox(cx, cy) : null;
 
-    if (!lifeline) return;
+    // Show the menu if the click is on a lifeline or inside a box. Right-
+    // clicking empty space that is neither shows nothing.
+    if (!lifeline && !enclosingBox) return;
 
-    firstClickCoordinates = [lifeline.cx, cy];
-    messageOrigin = {cx: lifeline.cx, y: cy, name: lifeline.name};
+    toggleLifelineMenuItems(!!lifeline);
+    if (lifeline) {
+        firstClickCoordinates = [lifeline.cx, cy];
+        messageOrigin = {cx: lifeline.cx, y: cy, name: lifeline.name};
+    }
+    toggleActivationDeleteItem(e.target);
+    toggleBoxMenuItems(enclosingBox, !!lifeline);
 
     var contextMenu = document.getElementById('sequence-menu');
     contextMenu.style.display = 'block';
@@ -161,11 +218,26 @@ function backgroundContextMenu(e, svgElement) {
 
 // --- Mouse interaction handlers ---
 
-function setupLifelineInteraction(svgContainer) {
+// Guards against attaching the container listeners more than once. The
+// listeners read the live svg on each event, so they survive re-renders and
+// must NOT be re-added per render (doing so stacked stale-closure handlers
+// that computed conflicting coordinates).
+let lifelineInteractionAttached = false;
+
+// Returns the current diagram svg element (replaced on every render).
+function getLiveSequenceSvg() {
+    const colb = document.getElementById('colb');
+    return colb ? colb.querySelector('svg') : null;
+}
+
+function setupLifelineInteraction() {
+    if (lifelineInteractionAttached) return;
+    lifelineInteractionAttached = true;
     const container = document.getElementById('colb-container');
 
     // Mousemove: show indicator in normal mode, ghost arrow in message-add mode
     container.addEventListener('mousemove', (e) => {
+        const svgContainer = getLiveSequenceSvg();
         if (!svgContainer || !svgContainer.getScreenCTM()) return;
         const transformed = svgPointFromEvent(e, svgContainer);
         const x = transformed.x;
@@ -178,6 +250,15 @@ function setupLifelineInteraction(svgContainer) {
             } else {
                 hideGhostArrow();
             }
+            hideIndicatorCircle();
+        } else if (isActivationAddMode()) {
+            handleActivationMouseMove(svgContainer, y);
+            hideIndicatorCircle();
+        } else if (isGroupAddMode()) {
+            handleGroupMouseMove(svgContainer, y);
+            hideIndicatorCircle();
+        } else if (typeof isBoxAddMode === 'function' && isBoxAddMode()) {
+            handleBoxMouseMove(svgContainer, x);
             hideIndicatorCircle();
         } else {
             hideGhostArrow();
@@ -192,8 +273,36 @@ function setupLifelineInteraction(svgContainer) {
 
     // Click: confirm destination and open label dialog
     container.addEventListener('click', (e) => {
-        if (!isAddMessageActive || !messageOrigin) return;
+        const svgContainer = getLiveSequenceSvg();
         if (!svgContainer || !svgContainer.getScreenCTM()) return;
+
+        // Activation-add mode: confirm the bar end and open the end-type chooser.
+        if (isActivationAddMode()) {
+            const transformed = svgPointFromEvent(e, svgContainer);
+            // Stop propagation so the global menu-dismiss handler does not
+            // immediately hide the chooser we are about to show.
+            e.stopPropagation();
+            handleActivationClick(e, transformed.y);
+            return;
+        }
+
+        // Group-add mode: click confirms the range from the locked right-click Y.
+        if (isGroupAddMode()) {
+            const transformed = svgPointFromEvent(e, svgContainer);
+            e.stopPropagation();
+            handleGroupClick(e, transformed.y);
+            return;
+        }
+
+        // Box-add mode: click confirms the participant range (by center-x).
+        if (typeof isBoxAddMode === 'function' && isBoxAddMode()) {
+            const transformed = svgPointFromEvent(e, svgContainer);
+            e.stopPropagation();
+            handleBoxClick(e, transformed.x);
+            return;
+        }
+
+        if (!isAddMessageActive || !messageOrigin) return;
 
         const transformed = svgPointFromEvent(e, svgContainer);
         const x = transformed.x;
@@ -208,9 +317,11 @@ function setupLifelineInteraction(svgContainer) {
 
         cancelMessageAddMode();
 
+        messageEditMode = false;
         $('#participant-modalForm .modal-title').text(
             'Add message from ' + originName + ' to ' + dest.name);
         $('#participant-message-text').val("");
+        document.getElementById('participant-message-color-group').style.display = 'none';
         $('#participant-modalForm').modal('show');
         $('#participant-modalForm').on('shown.bs.modal', function() {
             $('#participant-message-text').trigger('focus');
@@ -254,7 +365,8 @@ function messageEventListeners() {
                         'plantuml': plantuml,
                         'svg': svg.innerHTML,
                         'svgelement': lastclickedsvgelement.outerHTML,
-                        'text': newmessage
+                        'text': newmessage,
+                        'color': document.getElementById('participant-message-color-select').value
                     }),
                 });
             } else {

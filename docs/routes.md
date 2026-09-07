@@ -27,7 +27,7 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /detachActivity** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
 - **POST /breakActivity** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
 - **POST /checkBackward** — Input: `plantuml`, `svg`, `svgelement`. Returns: result text.
-- **POST /getActivityLine** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": [start, end]}`.
+- **POST /getActivityPositions** — Input: `plantuml`, `svg`. Returns: JSON with per-type row lists (`activities`, `polys`, `whiles`, `notes`, `groups`, `ellipses`, `connectors`, `merges`, `arrows` — each a list of row-index lists in SVG document order — plus `title`, a single row list). Called once per render so the frontend can highlight the matching diagram element when the editor cursor/hover lands on a line.
 - **POST /addArrowLabel** — Input: `plantuml`, `svg`, `where`, `svgelement`. Returns: modified puml.
 
 ## If Statements
@@ -39,7 +39,6 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /getTextPoly** — Input: `plantuml`, `svg`, `svgelement`. Returns: polygon text content.
 - **POST /delIf** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
 - **POST /switchAgain** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
-- **POST /getIfLine** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": int}`.
 - **POST /addToIf** — Input: `plantuml`, `svg`, `svgelement`, `where`, `type`. Returns: modified puml.
 - **POST /detachIf** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
 
@@ -47,14 +46,12 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 
 - **POST /addToEllipse** — Input: `plantuml`, `svg`, `where`, `type`, `svgelement`. Returns: modified puml.
 - **POST /deleteEllipse** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
-- **POST /getEllipseLine** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": int}`.
 
 ## Title
 
 - **POST /addTitle** — Input: `plantuml`. Returns: modified puml.
 - **POST /getTextTitle** — Input: `plantuml`. Returns: title text.
 - **POST /editTitle** — Input: `plantuml`, `title`. Returns: modified puml.
-- **POST /getTitleLine** — Input: `plantuml`. Returns: JSON `{"result": [start, end]}`.
 - **POST /deleteTitle** — Input: `plantuml`. Returns: modified puml.
 
 ## Fork
@@ -72,18 +69,15 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /editNote** — Input: `plantuml`, `svg`, `text`, `svgelement`. Returns: modified puml.
 - **POST /deleteNote** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
 - **POST /noteToggle** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
-- **POST /getNoteLine** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": int}`.
 
 ## Group
 
 - **POST /getGroupText** — Input: `plantuml`, `svg`, `svgelement`. Returns: group text.
-- **POST /getGroupLine** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": int}`.
 - **POST /editGroup** — Input: `plantuml`, `svg`, `svgelement`, `text`. Returns: modified puml.
 - **POST /deleteGroup** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
 
 ## Merge
 
-- **POST /getMergeLine** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": int}`.
 - **POST /addToMerge** — Input: `plantuml`, `svg`, `svgelement`, `type`. Returns: modified puml.
 
 ## While
@@ -92,14 +86,12 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /editTextWhile** — Input: `plantuml`, `svg`, `svgelement`, `whilestatement`, `break`, `loop`. Returns: modified puml.
 - **POST /delWhile** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
 - **POST /addToWhile** — Input: `plantuml`, `svg`, `svgelement`, `type`, `where`. Returns: modified puml.
-- **POST /getWhileLine** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": int}`.
 
 ## Connector
 
 - **POST /editCharConnector** — Input: `plantuml`, `svg`, `text`, `svgelement`. Returns: modified puml.
 - **POST /getCharConnector** — Input: `plantuml`, `svg`, `svgelement`. Returns: connector character.
 - **POST /connectorDelete** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
-- **POST /getConnectorLine** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": int}`.
 - **POST /detachConnector** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
 - **POST /addToConnector** — Input: `plantuml`, `svg`, `svgelement`, `where`, `type`. Returns: modified puml.
 
@@ -109,19 +101,48 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 - **POST /checkDuplicateArrow** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": bool, "type": str}`.
 - **POST /getArrowText** — Input: `svg`, `svgelement`. Returns: arrow text.
 - **POST /editArrow** — Input: `plantuml`, `svg`, `text`, `svgelement`. Returns: modified puml.
-- **POST /getArrowLine** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"result": int}`.
 
 ## Sequence Diagram (Participants)
 
 - **POST /addParticipant** — Input: `plantuml`, `svg`, `svgelement`, `direction` ('left'/'right'). Returns: modified puml.
 - **POST /addMessage** — Input: `plantuml`, `svg`, `message`, `firstcoordinates` ([x,y]), `secondcoordinates` ([x,y]). Returns: modified puml. Y-coordinate determines insertion position between existing messages.
-- **POST /getParticipantPositions** — Input: `plantuml`, `svg`. Returns: JSON `{"positions": [{name, cx, yTop, yBottom}, ...]}`. Called once per render for hover detection.
+- **POST /getSequencePositions** — Input: `plantuml`, `svg`. Returns: JSON `{"participants": [{name, cx, yTop, yBottom, index}, ...], "messages": [{cy, index, text}, ...], "notes": [{cy, index}, ...], "groups": [{headerIndex, endIndex}, ...]}`. Called once per render: bundles every sequence element type's position table into a single response so a render costs one round-trip instead of one per type. Each sub-table keeps its own shape (participants carry lifeline bounds, messages/notes carry SVG Y-coordinates) because sequence elements are matched spatially. Powers hover highlighting and the activation/group gestures (which snap to the nearest message and send its line index).
 - **POST /getParticipantName** — Input: `plantuml`, `svg`, `svgelement`. Returns: participant name string.
 - **POST /editParticipantName** — Input: `plantuml`, `svg`, `name`, `svgelement`. Returns: modified puml.
 - **POST /deleteParticipant** — Input: `plantuml`, `svg`, `svgelement`. Returns: modified puml.
 
 ## Sequence Diagram (Messages)
 
-- **POST /getMessageText** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"text": message_label}`.
-- **POST /editMessageText** — Input: `plantuml`, `svg`, `svgelement`, `text`. Returns: JSON `{"plantuml": modified_puml}`.
+- **POST /getMessageText** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"text": message_label, "color": arrow_color}`. `color` is the message arrow's color with the leading `#` stripped (matching the palette option values), `""` when the arrow is uncolored.
+- **POST /editMessageText** — Input: `plantuml`, `svg`, `svgelement`, `text`, optional `color`. Returns: JSON `{"plantuml": modified_puml}`. `color` sets the arrow color as a `[#color]` token (e.g. `A -[#red]> B`); omitting it (or `null`) leaves any existing arrow color unchanged, while `""`/`"none"` removes it.
 - **POST /deleteMessage** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"plantuml": modified_puml}`.
+
+`message`/`text` may contain real newlines (multi-line textarea input); since a message is a single-line puml statement, `addMessage`/`editMessageText` escape newlines to a literal `\n`, and `getMessageText`/`getMessagePositions` unescape `\n` back to real newlines.
+
+## Sequence Diagram (Activation Bars)
+
+- **POST /addActivation** — Input: `plantuml`, `participant`, `startMessageIndex` (int), `endMessageIndex` (int), `endType` ('deactivate'/'destroy'). Returns: JSON `{"plantuml": modified_puml}`. Inserts a matched `activate <participant>` line just after the message at `startMessageIndex` and a closing `deactivate <participant>` (or `destroy <participant>`) line just after the message at `endMessageIndex`. The indexes are puml line numbers; the frontend obtains them from the `messages` table of `/getSequencePositions`. `endType` defaults to 'deactivate' for any value other than 'destroy'.
+- **POST /deleteActivation** — Input: `plantuml`, `svg`, `svgelement` (the clicked activation-bar rect). Returns: JSON `{"plantuml": modified_puml}`. Matches the clicked bar to its `activate`/`deactivate`(or `destroy`) pair — by participant, the message above the `activate` line, and nesting level — and removes both lines, leaving nested or sibling bars intact.
+
+## Sequence Diagram (Notes)
+
+- **POST /addNote** — Input: `plantuml`, `svg`, `participant`, `placement` ('over'/'left'/'right'/'spanning'), `text`, `yPosition`, optional `secondParticipant`, optional `noteType` ('note'/'hnote'/'rnote', defaults to 'note' if missing or unrecognized). Returns: JSON `{"plantuml": modified_puml}`. Y-coordinate determines insertion position. All three note types support the same placement grammar identically.
+- **POST /getSeqNoteText** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"text": note_text, "noteType": "note"|"hnote"|"rnote", "color": note_color}`. `noteType` is the detected keyword of the clicked note, falling back to `"note"` if detection fails. `color` is the note's background color with the leading `#` stripped (matching the palette option values), `""` when uncolored. Handles both note forms: single-line (`note over A : text`) and block (`note over A` ... `end note`); for a block note the body lines are returned joined by real newlines and the type/color come from the opening line.
+- **POST /editSeqNote** — Input: `plantuml`, `svg`, `svgelement`, `text`, optional `noteType` ('note'/'hnote'/'rnote'), optional `color`. Returns: JSON `{"plantuml": modified_puml}`. If `noteType` is omitted or unrecognized, only the text is changed and the note's existing keyword is left as-is. `color` sets the note background color as a `#color` token placed at the end of the placement clause (e.g. `note over A #LightBlue : text`); omitting it (or `null`) leaves any existing color unchanged, while `""`/`"none"` removes it. Works on both single-line and block (`note over A` ... `end note`) notes: for a block note the type/color are applied to the opening line and the incoming (possibly multi-line) text replaces the body, keeping the block form and its `end note` line.
+- **POST /deleteSeqNote** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"plantuml": modified_puml}`. For a block note the whole `note` ... `end note` region is removed, not just the opening line.
+
+Notes are located by shape (see the note-detection notes above) to a 1-based ordinal, then mapped to the nth note in the puml scanned as line ranges, so single-line and block (`note` ... `end note`) notes are both supported and a body line that happens to start with `note ` is not miscounted. `text` may contain real newlines (multi-line textarea input): a single-line note stores them escaped as a literal `\n` (`addNote`/`editSeqNote` escape on write, `getSeqNoteText` unescapes on read), while a block note keeps them as separate body lines.
+
+## Sequence Diagram (Groups)
+
+- **POST /addGroup** — Input: `plantuml`, `groupType` ('group'/'alt'/'opt'/'loop'), `label`, `startMessageIndex` (int), `endMessageIndex` (int). Returns: JSON `{"plantuml": modified_puml}`. Inserts a `<groupType> <label>` line before the message at the earlier index and an `end` line after the message at the later index. Indexes are puml line numbers obtained from the `messages` table of `/getSequencePositions`. The range is normalized so the order of start/end does not matter. Returns 400 with `{"error": message}` if the group type is invalid.
+- **POST /getSeqGroupLabel** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"type": keyword, "label": label_text}`. `svgelement` is the clicked group's box rect (`fill="none"`); named with a `Seq` prefix to avoid colliding with the activity diagram's `/getGroupText`-style routes.
+- **POST /renameSeqGroup** — Input: `plantuml`, `svg`, `svgelement`, `label`. Returns: JSON `{"plantuml": modified_puml}`. Replaces only the text after the keyword on the header line; the keyword itself is never changed.
+- **POST /deleteSeqGroup** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"plantuml": modified_puml}`. Unwraps the block: removes the header line and its matching `end` line (nesting-depth tracked), leaving the block's contents in place.
+
+## Sequence Diagram (Participant Boxes)
+
+- **POST /addBox** — Input: `plantuml`, `startParticipantIndex` (int), `endParticipantIndex` (int), optional `title` (default `""`), optional `color` (default `"none"`). Returns: JSON `{"plantuml": modified_puml}`. Wraps the contiguous participant declarations between the two line indexes in a `box ... end box` block (indexes come from the `participants` table of `/getSequencePositions`; order is normalized). Title/color are optional — the current UI sends neither, producing a bare `box`. If the range nests with an existing box, `!pragma teoz true` is inserted once so PlantUML renders the nesting. Returns 400 with `{"error": message}` if the range crosses (partially overlaps) an existing box.
+- **POST /deleteSeqBox** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"plantuml": modified_puml}`. `svgelement` is the clicked box rect (shares the participant-header style but has no `rx`/`ry` and a solid fill, and encloses a participant header — this enclosure is what distinguishes it from an rnote). Unwraps the box: removes the `box` header line and its matching `end box` line (nesting-depth tracked), leaving the participants in place. The teoz pragma, if present, is left untouched.
+- **POST /getSeqBoxLabel** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"title": title_text, "color": color}` for the clicked box, for the Edit Box modal. The title is HTML-unescaped for display and `color` has its leading `#` stripped (so it matches the palette option values); both are `""` when absent.
+- **POST /editSeqBox** — Input: `plantuml`, `svg`, `svgelement`, optional `title` (default `""`), optional `color` (default `"none"`). Returns: JSON `{"plantuml": modified_puml}`. Rewrites the clicked box's header line with the new title (HTML-escaped, quoted; empty → bare `box`) and color (`#`-prefixed; `""`/`"none"` → omitted). Contents and nesting are untouched.

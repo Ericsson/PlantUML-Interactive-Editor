@@ -72,6 +72,41 @@ class TestNextParticipantNumber:
         assert _next_participant_number(puml) == 2
 
 
+class TestParticipantParsingIgnoresRnote:
+    """Regression: an rnote's <rect> shares the exact same
+    stroke-width:0.5 style as a participant header rect, but participant
+    headers always have rounded corners (rx/ry) and rnote never does.
+    Without excluding rnote, Diagram.from_svg would misparse it (and its
+    text) as an extra phantom participant.
+
+    Uses short note text deliberately: PlantUML's layout can otherwise
+    make the phantom rnote "participant" coincidentally land at the same
+    cx as a real participant, silently hiding the bug in the results
+    (both collapse into the same dict slot) without actually fixing it.
+    """
+
+    def test_rnote_is_not_parsed_as_a_participant(self):
+        from plantuml_gui.sequence.classes import Diagram
+
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nrnote over Alice : x\n@enduml"
+        svg = extract_g_element(_create_svg_from_uml(puml))
+        diagram = Diagram.from_svg(svg, puml)
+        assert [p.name for p in diagram.participants] == ["Alice", "Bob"]
+
+    def test_multiple_rnotes_do_not_add_phantom_participants(self):
+        from plantuml_gui.sequence.classes import Diagram
+
+        puml = (
+            "@startuml\nparticipant Alice\nparticipant Bob\n"
+            "rnote over Alice : x\n"
+            "rnote over Bob : y\n"
+            "@enduml"
+        )
+        svg = extract_g_element(_create_svg_from_uml(puml))
+        diagram = Diagram.from_svg(svg, puml)
+        assert [p.name for p in diagram.participants] == ["Alice", "Bob"]
+
+
 class TestAppRoutesParticipant:
     def test_add_participant_right(self, client):
         test_data = {
@@ -199,6 +234,30 @@ participant fred
 participant bob
 participant fred
 bob -> fred: hello fred
+@enduml"""
+            assert response.get_json()["plantuml"] == expected_puml
+
+    def test_add_message_multiline_text_is_escaped(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant bob
+participant fred
+@enduml""",
+            "svg": """<g><line style="stroke:#181818;stroke-width:0.5;stroke-dasharray:5.0,5.0;" x1="25" x2="25" y1="36.2969" y2="56.2969"></line><line style="stroke:#181818;stroke-width:0.5;stroke-dasharray:5.0,5.0;" x1="76" x2="76" y1="36.2969" y2="56.2969"></line><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="41" x="5" y="5"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="27" x="12" y="24.9951">bob</text><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="41" x="5" y="55.2969"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="27" x="12" y="75.292">bob</text><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="41" x="56" y="5"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="27" x="63" y="24.9951">fred</text><rect fill="#E2E2F0" height="30.2969" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="41" x="56" y="55.2969"></rect><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="27" x="63" y="75.292">fred</text></g>""",
+            "message": "Line1\nLine2",
+            "firstcoordinates": [34, 43],
+            "secondcoordinates": [71, 39],
+        }
+        with client:
+            response = client.post(
+                "/addMessage",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant bob
+participant fred
+bob -> fred: Line1\\nLine2
 @enduml"""
             assert response.get_json()["plantuml"] == expected_puml
 
@@ -344,6 +403,76 @@ participant Bob
 @enduml"""
             assert response.get_json()["plantuml"] == expected_puml
 
+    def test_delete_participant_cascades_hnote(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant Alice
+participant Bob
+hnote over Alice : hex note
+@enduml""",
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        test_data["svgelement"] = extract_participant_rect(test_data["svg"], 0)
+        with client:
+            response = client.post(
+                "/deleteParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant Bob
+@enduml"""
+            assert response.get_json()["plantuml"] == expected_puml
+
+    def test_delete_participant_cascades_rnote(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant Alice
+participant Bob
+rnote over Alice : rect note
+@enduml""",
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        test_data["svgelement"] = extract_participant_rect(test_data["svg"], 0)
+        with client:
+            response = client.post(
+                "/deleteParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant Bob
+@enduml"""
+            assert response.get_json()["plantuml"] == expected_puml
+
+    def test_delete_participant_keeps_hnote_of_other_participant(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant Alice
+participant Bob
+hnote over Bob : keep me
+@enduml""",
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        test_data["svgelement"] = extract_participant_rect(test_data["svg"], 0)
+        with client:
+            response = client.post(
+                "/deleteParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant Bob
+hnote over Bob : keep me
+@enduml"""
+            assert response.get_json()["plantuml"] == expected_puml
+
     def test_delete_last_participant(self, client):
         test_data = {
             "plantuml": """@startuml
@@ -361,6 +490,79 @@ participant Alice
                 content_type="application/json",
             )
             expected_puml = """@startuml
+@enduml"""
+            assert response.get_json()["plantuml"] == expected_puml
+
+    def test_delete_participant_with_note_over(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hello
+note over Alice : think
+@enduml""",
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        test_data["svgelement"] = extract_participant_rect(test_data["svg"], 0)
+        with client:
+            response = client.post(
+                "/deleteParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant Bob
+@enduml"""
+            assert response.get_json()["plantuml"] == expected_puml
+
+    def test_delete_participant_with_note_left(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hello
+note left of Alice : think
+@enduml""",
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        test_data["svgelement"] = extract_participant_rect(test_data["svg"], 0)
+        with client:
+            response = client.post(
+                "/deleteParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant Bob
+@enduml"""
+            assert response.get_json()["plantuml"] == expected_puml
+
+    def test_delete_participant_keeps_unrelated_note(self, client):
+        test_data = {
+            "plantuml": """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hello
+note over Bob : think
+@enduml""",
+        }
+        test_data["svg"] = extract_g_element(
+            _create_svg_from_uml(test_data["plantuml"])
+        )
+        test_data["svgelement"] = extract_participant_rect(test_data["svg"], 0)
+        with client:
+            response = client.post(
+                "/deleteParticipant",
+                data=json.dumps(test_data),
+                content_type="application/json",
+            )
+            expected_puml = """@startuml
+participant Bob
+note over Bob : think
 @enduml"""
             assert response.get_json()["plantuml"] == expected_puml
 
@@ -522,3 +724,42 @@ participant Bob
 Alice -> Alice: think
 @enduml"""
             assert response.get_json()["plantuml"] == expected
+
+
+class TestGetParticipantPositions:
+    PUML = """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: Hello
+@enduml"""
+
+    def test_positions_include_line_index(self):
+        from plantuml_gui.sequence.participant import get_participant_positions
+
+        svg = extract_g_element(_create_svg_from_uml(self.PUML))
+        positions = get_participant_positions(self.PUML, svg)
+        assert [p["name"] for p in positions] == ["Alice", "Bob"]
+        assert [p["index"] for p in positions] == [1, 2]
+
+    def test_implicit_participant_has_negative_index(self):
+        from plantuml_gui.sequence.participant import get_participant_positions
+
+        puml = """@startuml
+Alice -> Bob: Hello
+@enduml"""
+        svg = extract_g_element(_create_svg_from_uml(puml))
+        positions = get_participant_positions(puml, svg)
+        assert len(positions) == 2
+        assert all(p["index"] == -1 for p in positions)
+
+    def test_route_returns_index(self, client):
+        svg = extract_g_element(_create_svg_from_uml(self.PUML))
+        with client:
+            response = client.post(
+                "/getSequencePositions",
+                data=json.dumps({"plantuml": self.PUML, "svg": svg}),
+                content_type="application/json",
+            )
+            assert response.status_code == 200
+            positions = response.get_json()["participants"]
+            assert [p["index"] for p in positions] == [1, 2]

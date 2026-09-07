@@ -25,6 +25,7 @@
 import hashlib
 import io
 import os
+from functools import lru_cache
 
 from flask import Blueprint, jsonify, render_template, request, send_file
 
@@ -32,6 +33,7 @@ from ..__about__ import __version__
 from .parse_changelog import parse_changelog
 from .puml_encoder import plantuml_decode, plantuml_encode
 from .render import _create_png_from_uml, _create_svg_from_uml
+from .title import add_title, delete_title, edit_title_text, get_title_text
 
 shared_bp = Blueprint(
     "shared",
@@ -41,19 +43,35 @@ shared_bp = Blueprint(
 )
 
 
-def generate_file_hash(file_path):
-    with open(file_path, "rb") as file:
-        file_content = file.read()
-        return hashlib.sha256(file_content).hexdigest()[:8]
+@lru_cache(maxsize=1)
+def generate_static_js_hash():
+    """Hash all static JS files so editing any of them busts the browser cache.
 
-
-SCRIPT_PATH = os.path.join(shared_bp.static_folder, "script.js")
+    The template applies a single ?v=<hash> query string to every script tag,
+    so the hash must cover every served JS file (not just script.js) to avoid
+    browsers serving a stale module after it changes. Walks subdirectories too,
+    because static/vscode/ holds the shims the sidecar's page loads. Cached
+    for the life of the process: static files don't change without a restart,
+    so re-reading and re-hashing every JS file on every request to / is wasted
+    work.
+    """
+    static_dir = shared_bp.static_folder
+    hasher = hashlib.sha256()
+    for dirpath, dirnames, filenames in os.walk(static_dir):
+        # Sorted in place so os.walk descends in a stable order; without it the
+        # hash would depend on the filesystem's directory ordering.
+        dirnames.sort()
+        for name in sorted(filenames):
+            if name.endswith(".js"):
+                with open(os.path.join(dirpath, name), "rb") as file:
+                    hasher.update(file.read())
+    return hasher.hexdigest()[:8]
 
 
 @shared_bp.route("/")
 def home():
-    # generate hash for script.js
-    file_hash = generate_file_hash(SCRIPT_PATH)
+    # Cache-busting hash covering all static JS files.
+    file_hash = generate_static_js_hash()
     # pass hash to the template
     return render_template(
         "index.html", script_hash=file_hash, version=__version__
@@ -104,3 +122,36 @@ def decode():
 @shared_bp.route("/changelog")
 def changelog():
     return jsonify(parse_changelog())
+
+
+# Diagram title routes. The title block (title ... endtitle) is diagram-agnostic
+# puml, edited the same way for activity and sequence diagrams, so these live in
+# the shared blueprint. URLs are unchanged from when they lived on activity_bp
+# (no blueprint carries a url_prefix).
+@shared_bp.route("/addTitle", methods=["POST"])
+def addtitle():
+    data = request.get_json()
+    puml = data["plantuml"]
+    return add_title(puml)
+
+
+@shared_bp.route("/getTextTitle", methods=["POST"])
+def gettexttile():
+    data = request.get_json()
+    puml = data["plantuml"]
+    return get_title_text(puml)
+
+
+@shared_bp.route("/editTitle", methods=["POST"])
+def edittitle():
+    data = request.get_json()
+    puml = data["plantuml"]
+    title = data["title"]
+    return edit_title_text(puml, title)
+
+
+@shared_bp.route("/deleteTitle", methods=["POST"])
+def deletetitle():
+    data = request.get_json()
+    puml = data["plantuml"]
+    return delete_title(puml)

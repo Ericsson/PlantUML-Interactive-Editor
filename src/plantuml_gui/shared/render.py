@@ -69,6 +69,7 @@ def _create_png_from_uml(uml):
         os.environ["PLANTUML_JAR"],
         "-pipe",
         "-tpng",  # output in png format
+        "-Sdpi=300",  # render at higher resolution for crisper downloaded images
     ]
     process = run(
         base_command,

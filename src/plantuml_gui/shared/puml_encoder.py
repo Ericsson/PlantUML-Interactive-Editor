@@ -53,9 +53,3 @@ def plantuml_decode(plantuml_url):
     dec = zlib.decompressobj()  # without check the crc.
     header = b"x\x9c"
     return dec.decompress(header + data).decode("utf-8")
-
-
-url = "SyfFKj2rKt3CoKnELR1Io4ZDoSa700=="
-
-print(plantuml_decode(url))
-print(plantuml_encode(plantuml_decode(url)))

@@ -18,9 +18,9 @@ classifiers = [
 ]
 dependencies = [
   "flask==3.1.3",
-  "python-dotenv==1.2.2",
+  "python-dotenv==1.2.3",
   "loguru==0.7.3",
-  "pyquery==2.0.1",
+  "pyquery==2.1.0",
 ]
 description = ''
 keywords = []
@@ -50,6 +50,14 @@ path = "src/plantuml_gui/__about__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/plantuml_gui"]
+
+# A whitelist, because the repository root holds things far larger than the
+# package: the extension's node_modules, a downloaded VS Code under
+# plantuml-extension/.vscode-test, and dist itself. Hatchling's default sweep
+# picks those up, so the sdist is told exactly what a source release needs.
+# pyproject.toml, the readme and the licence are added by hatchling.
+[tool.hatch.build.targets.sdist]
+only-include = ["src/plantuml_gui"]
 
 [tool.coverage.run]
 branch = false

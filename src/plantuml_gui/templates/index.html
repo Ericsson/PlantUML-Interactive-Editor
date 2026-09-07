@@ -25,36 +25,36 @@ SOFTWARE.
 -->
 
 
+{% from "partials/app_scripts.html" import app_scripts %}
+{% from "partials/diagram_toolbar.html" import diagram_toolbar %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <title>PlantUML Interactive Editor</title>
-    <link rel="icon" type="image/x-icon" href="static/favicon-32x32.png">
+    <link rel="icon" type="image/svg+xml" href="static/favicon.svg">
+    <link rel="alternate icon" type="image/png" href="static/favicon-32x32.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- Bootstrap CSS (legacy: modals and context menus only) -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css"
-        integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
-    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
-        integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css"
+        integrity="sha384-xOolHFLEh07PJGoPkLv1IbcEPTNtaed2xpHsD9ESMhqIYd0nLMwNLD69Npy4HI+N" crossorigin="anonymous">
+    <script src="https://code.jquery.com/jquery-3.7.1.slim.min.js"
+        integrity="sha384-5AkRS45j4ukf+JbWAfHL8P4onPA9p0KwwP7pUdjSQA3ss9edbJUJc/XcYAiheSSz"
         crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js"
         integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
         crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/js/bootstrap.min.js"
-        integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.min.js"
+        integrity="sha384-+sLIOodYLS7CIrQpBjl+C7nPvqq+FbNUBDunl/OZv93DB7Ln/533i8e/mZXLi/P+"
         crossorigin="anonymous"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsdiff/7.0.0/diff.min.js" integrity="sha512-immo//J6lKoR+nRIFDPxoxfL2nd/0N3w8l4LwH4HSSVovtUjab5kbh4AhixLH5z9mIv37llY9Q2i8AfEDXyYjw=="
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsdiff/8.0.3/diff.min.js" integrity="sha512-pAw3vU/GmcbuRcI4/QImW0rmmoKWXxHsE2MHl2VjgGxe+K5hN2RwpgZvHp8DQQcfp4h7iMUJMathBCL4dVcXaQ=="
         crossorigin="anonymous"
         referrerpolicy="no-referrer"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.9.6/ace.js" integrity="sha512-czfWedq9cnMibaqVP2Sw5Aw1PTTabHxMuTOkYkL15cbCYiatPIbxdV0zwhfBZKNODg0zFqmbz8f7rKmd6tfR/Q==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script src='https://unpkg.com/panzoom@9.4.0/dist/panzoom.min.js'></script>
     <script src="https://unpkg.com/@popperjs/core@2"></script>
     <script src="https://unpkg.com/tippy.js@6"></script>
-    <script src="static/script.js?v={{ script_hash }}"></script>
-    <script src="static/sequence-message.js?v={{ script_hash }}"></script>
-    <script src="static/sequence-operations.js?v={{ script_hash }}"></script>
-    <script src="static/activity.js?v={{ script_hash }}"></script>
+    {{ app_scripts('', script_hash) }}
     <link rel="stylesheet" href="static/styles.css">
 </head>
 
@@ -64,6 +64,7 @@ SOFTWARE.
   <div class="app-shell">
     <!-- Global Bar -->
     <div class="global-bar">
+      <img src="static/favicon.svg" alt="" class="app-icon">
       <span class="app-name">PlantUML Interactive Editor</span>
       <span class="toolbar-sep"></span>
       <div class="btn-group" role="group">
@@ -91,7 +92,7 @@ SOFTWARE.
       <span class="toolbar-sep"></span>
       <span class="toolbar-spacer"></span>
       <div class="dropdown-wrapper" style="position:relative">
-        <span class="version-badge" id="version" onclick="toggleVersionPanel()" data-tippy-content="Version History">v{{version}}</span>
+        <span class="version-badge" id="version" data-tippy-content="Version History">v{{version}}</span>
         <div class="dropdown-panel version-panel" id="version-panel"></div>
       </div>
       <button type="button" class="toolbar-btn" data-toggle="modal" data-target="#usageModal" data-tippy-content="Help">
@@ -112,36 +113,28 @@ SOFTWARE.
           </button>
           <span class="toolbar-sep"></span>
           <span class="toolbar-spacer"></span>
-          <button type="button" id="save" class="toolbar-btn toolbar-btn--accent" data-tippy-content="Download .puml">
+          <button type="button" id="load" class="toolbar-btn" data-tippy-content="Import .puml">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 11V2M5 5l3-3 3 3"/><path d="M3 12v2h10v-2"/></svg>
+          </button>
+          <span class="toolbar-sep"></span>
+          <button type="button" id="save" class="toolbar-btn" data-tippy-content="Download .puml">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2v9M5 8l3 3 3-3"/><path d="M3 12v2h10v-2"/></svg>
           </button>
         </div>
         <div id="editor"></div>
-        <button type="button" id="load" hidden></button>
         <input type="file" id="file-input" style="display: none;">
       </div>
 
       <!-- Resizable Divider -->
-      <div class="divider" id="pane-divider"></div>
+      <div class="divider" id="pane-divider">
+        <button type="button" class="divider-toggle" id="divider-toggle" aria-label="Collapse code editor">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 3L6 8l3.5 5"/></svg>
+        </button>
+      </div>
 
       <!-- Right Pane: Diagram -->
       <div class="right-pane">
-        <div class="diagram-toolbar">
-          <button type="button" id="zoom-out" class="toolbar-btn" data-tippy-content="Zoom out">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5" stroke-linecap="round"/><path d="M5 7h4"/></svg>
-          </button>
-          <button type="button" id="zoom-in" class="toolbar-btn" data-tippy-content="Zoom in">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5" stroke-linecap="round"/><path d="M5 7h4M7 5v4"/></svg>
-          </button>
-          <button type="button" id="zoom-fit" class="toolbar-btn" data-tippy-content="Reset zoom">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 5V2h3M11 2h3v3M14 11v3h-3M5 14H2v-3"/></svg>
-          </button>
-          <span class="toolbar-spacer"></span>
-          <button type="button" id="png" class="toolbar-btn toolbar-btn--accent" data-tippy-content="Download diagram as PNG">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2v9M5 8l3 3 3-3"/><path d="M3 12v2h10v-2"/></svg>
-            PNG
-          </button>
-        </div>
+        {{ diagram_toolbar('data-tippy-content', 'Download diagram as PNG') }}
         <div id="colb-container">
           <div id="colb">
             <div id="init-text">
@@ -166,56 +159,74 @@ SOFTWARE.
       await initeditor();
       initialize();
     })();
-    var element = document.getElementById('colb');
-
-    const panzoomInstance = panzoom(element, {
-      maxZoom: 3,
-      minZoom: 0.25,
-      bounds: true,
-    });
-
-    element.addEventListener('dblclick', (event) => {
-      event.stopImmediatePropagation();
-    });
-
-    // Zoom controls
-    document.getElementById('zoom-in').addEventListener('click', () => {
-      const t = panzoomInstance.getTransform();
-      const newScale = Math.min(t.scale * 1.1, 3);
-      panzoomInstance.zoomAbs(t.x, t.y, newScale);
-    });
-    document.getElementById('zoom-out').addEventListener('click', () => {
-      const t = panzoomInstance.getTransform();
-      const newScale = Math.max(t.scale / 1.1, 0.25);
-      panzoomInstance.zoomAbs(t.x, t.y, newScale);
-    });
-    document.getElementById('zoom-fit').addEventListener('click', () => {
-      panzoomInstance.moveTo(0, 0);
-      panzoomInstance.zoomAbs(0, 0, 1);
-    });
+    // Panning and the three zoom buttons live in static/diagram-toolbar.js,
+    // loaded at the foot of this page and shared with the extension's webview.
 
     // Resizable divider
     (function() {
       const divider = document.getElementById('pane-divider');
+      const toggle = document.getElementById('divider-toggle');
       const left = document.querySelector('.left-pane');
       const right = document.querySelector('.right-pane');
       const container = document.querySelector('.split-container');
       let dragging = false;
+      let collapsed = false;
+      let expandedWidth = null;
+      const collapsedWidth = 24;
+      const minWidth = 200;
+      const collapseThreshold = minWidth - 40;
+
+      let dragMoved = false;
+
+      function expand() {
+        left.style.flex = 'none';
+        left.style.width = (expandedWidth || left.getBoundingClientRect().width) + 'px';
+        left.classList.remove('collapsed');
+        divider.classList.remove('collapsed');
+        toggle.setAttribute('aria-label', 'Collapse code editor');
+        right.style.flex = '1';
+        collapsed = false;
+        editor.resize();
+      }
+
+      function collapse() {
+        expandedWidth = left.getBoundingClientRect().width;
+        if (expandedWidth < minWidth) expandedWidth = null;
+        left.style.flex = 'none';
+        left.style.width = collapsedWidth + 'px';
+        left.classList.add('collapsed');
+        divider.classList.add('collapsed');
+        toggle.setAttribute('aria-label', 'Expand code editor');
+        right.style.flex = '1';
+        collapsed = true;
+        editor.resize();
+      }
 
       divider.addEventListener('mousedown', (e) => {
         e.preventDefault();
         dragging = true;
+        dragMoved = false;
         divider.classList.add('dragging');
         document.body.style.cursor = 'col-resize';
       });
 
       document.addEventListener('mousemove', (e) => {
         if (!dragging) return;
+        dragMoved = true;
         const rect = container.getBoundingClientRect();
         const x = e.clientX - rect.left;
-        const min = 200;
-        const max = rect.width - 200 - 4;
-        const clamped = Math.min(Math.max(x, min), max);
+        if (x < collapseThreshold) {
+          if (!collapsed) collapse();
+          return;
+        }
+        const max = rect.width - minWidth - 4;
+        const clamped = Math.min(Math.max(x, minWidth), max);
+        if (collapsed) {
+          left.classList.remove('collapsed');
+          divider.classList.remove('collapsed');
+          toggle.setAttribute('aria-label', 'Collapse code editor');
+          collapsed = false;
+        }
         left.style.flex = 'none';
         left.style.width = clamped + 'px';
         right.style.flex = '1';
@@ -228,6 +239,19 @@ SOFTWARE.
         divider.classList.remove('dragging');
         document.body.style.cursor = '';
       });
+
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (dragMoved) {
+          dragMoved = false;
+          return;
+        }
+        if (collapsed) {
+          expand();
+        } else {
+          collapse();
+        }
+      });
     })();
 
     // Initialize tooltips
@@ -237,6 +261,10 @@ SOFTWARE.
       duration: [150, 100],
     });
 </script>
+
+<!-- Shared with the extension's webview.html. Loads here, at the foot of the
+     page, because it reads #colb and the toolbar as it runs. -->
+<script src="static/diagram-toolbar.js?v={{ script_hash }}"></script>
 
 </body>
 </html>

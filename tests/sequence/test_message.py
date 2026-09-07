@@ -28,8 +28,11 @@ import re
 
 from flask import json
 from plantuml_gui.sequence.message import (
+    _apply_arrow_color,
+    _arrow_color_from_line,
     delete_message,
     edit_message_text,
+    get_message_color,
     get_message_text,
     index_of_clicked_message,
 )
@@ -150,6 +153,12 @@ class TestGetMessageText:
         svgelement = extract_message_element(svg, 0, "polygon")
         assert get_message_text(puml, svg, svgelement) == "Think"
 
+    def test_message_unescapes_newlines(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Line1\\nLine2\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_message_element(svg, 0, "polygon")
+        assert get_message_text(puml, svg, svgelement) == "Line1\nLine2"
+
 
 class TestEditMessageText:
     def test_edit_normal_message(self):
@@ -182,6 +191,14 @@ class TestEditMessageText:
         svgelement = extract_message_element(svg, 0, "polygon")
         result = edit_message_text(puml, svg, svgelement, "Still dashed")
         expected = "@startuml\nparticipant Alice\nparticipant Bob\nAlice --> Bob: Still dashed\n@enduml"
+        assert result == expected
+
+    def test_edit_message_multiline_text_is_escaped(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_message_element(svg, 0, "polygon")
+        result = edit_message_text(puml, svg, svgelement, "Line1\nLine2")
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Line1\\nLine2\n@enduml"
         assert result == expected
 
 
@@ -254,6 +271,25 @@ class TestMessageRoutes:
         expected = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Goodbye\n@enduml"
         assert response.get_json()["plantuml"] == expected
 
+    def test_edit_message_multiline_text(self, client):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml"
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        svgelement = extract_message_element(svg, 0, "polygon")
+        response = client.post(
+            "/editMessageText",
+            data=json.dumps(
+                {
+                    "plantuml": puml,
+                    "svg": svg,
+                    "svgelement": svgelement,
+                    "text": "Line1\nLine2",
+                }
+            ),
+            content_type="application/json",
+        )
+        expected = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Line1\\nLine2\n@enduml"
+        assert response.get_json()["plantuml"] == expected
+
     def test_delete_message(self, client):
         puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\nBob -> Alice: Bye\n@enduml"
         svg = extract_g_inner(_create_svg_from_uml(puml))
@@ -279,3 +315,79 @@ class TestMessageRoutes:
         )
         expected = "@startuml\nparticipant Alice\nparticipant Bob\n@enduml"
         assert response.get_json()["plantuml"] == expected
+
+
+class TestArrowColorHelpers:
+    """Pure-string tests for arrow-color parsing and rewriting."""
+
+    def test_apply_color_solid_arrow(self):
+        assert _apply_arrow_color("->", "red") == "-[#red]>"
+
+    def test_apply_color_dashed_arrow(self):
+        assert _apply_arrow_color("-->", "LightBlue") == "-[#LightBlue]->"
+
+    def test_apply_color_reverse_arrow(self):
+        assert _apply_arrow_color("<-", "red") == "<-[#red]"
+
+    def test_apply_color_bidirectional_arrow(self):
+        assert _apply_arrow_color("<->", "red") == "<-[#red]>"
+
+    def test_apply_color_lost_message_arrow(self):
+        # ->x keeps its trailing head; color goes after the first dash.
+        assert _apply_arrow_color("->x", "red") == "-[#red]>x"
+
+    def test_apply_color_replaces_existing(self):
+        assert _apply_arrow_color("-[#blue]>", "red") == "-[#red]>"
+
+    def test_apply_empty_color_removes(self):
+        assert _apply_arrow_color("-[#blue]>", "") == "->"
+
+    def test_read_color_present(self):
+        assert _arrow_color_from_line("Alice -[#red]> Bob: hi") == "red"
+
+    def test_read_color_absent(self):
+        assert _arrow_color_from_line("Alice -> Bob: hi") == ""
+
+    def test_read_color_ignores_hyphen_in_name(self):
+        # A dash inside a participant name must not be read as the arrow.
+        assert _arrow_color_from_line("Web-Server -[#Orange]> DB: q") == "Orange"
+
+
+class TestMessageColorRoundTrip:
+    """Render-based tests that color survives read/edit through the SVG."""
+
+    def _first_polygon(self, puml):
+        svg = extract_g_inner(_create_svg_from_uml(puml))
+        return svg, extract_message_element(svg, 0, "polygon")
+
+    def test_get_color_uncolored(self):
+        puml = (
+            "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hi\n@enduml"
+        )
+        svg, svgelement = self._first_polygon(puml)
+        assert get_message_color(puml, svg, svgelement) == ""
+
+    def test_get_color_colored(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -[#LightBlue]> Bob: Hi\n@enduml"
+        svg, svgelement = self._first_polygon(puml)
+        assert get_message_color(puml, svg, svgelement) == "LightBlue"
+
+    def test_edit_adds_color(self):
+        puml = (
+            "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hi\n@enduml"
+        )
+        svg, svgelement = self._first_polygon(puml)
+        result = edit_message_text(puml, svg, svgelement, "Hi", "LightGreen")
+        assert "Alice -[#LightGreen]> Bob: Hi" in result
+
+    def test_edit_removes_color_with_none(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -[#LightBlue]> Bob: Hi\n@enduml"
+        svg, svgelement = self._first_polygon(puml)
+        result = edit_message_text(puml, svg, svgelement, "Hi", "none")
+        assert "Alice -> Bob: Hi" in result
+
+    def test_edit_none_color_param_keeps_existing(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -[#LightBlue]> Bob: Hi\n@enduml"
+        svg, svgelement = self._first_polygon(puml)
+        result = edit_message_text(puml, svg, svgelement, "Bye")
+        assert "Alice -[#LightBlue]> Bob: Bye" in result
