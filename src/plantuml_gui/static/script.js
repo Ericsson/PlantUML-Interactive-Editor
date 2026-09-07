@@ -260,7 +260,7 @@ function buttonEventListeners() {
     });
 
     document.getElementById('clear').addEventListener('click', function() {
-        puml = "@startuml\nstart\n@enduml"
+        puml = "@startuml\n' Add your PlantUML code here\n@enduml"
         setPuml(puml)
     });
 
