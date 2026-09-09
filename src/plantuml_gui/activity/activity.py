@@ -76,7 +76,11 @@ def _activity_indices(lines, i) -> tuple[list[int], int]:
         if clean_line.startswith("repeat while") or clean_line.startswith(
             "repeatwhile"
         ):
-            indices.append(backward)
+            # A backward box rect only exists in the SVG when a backward line
+            # exists in the puml; a placeholder for a repeat without one would
+            # shift every later activity's index by one.
+            if backward != -1:
+                indices.append(backward)
             return indices, index
         index += 1
     return indices, index

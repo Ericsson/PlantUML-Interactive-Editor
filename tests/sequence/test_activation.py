@@ -190,12 +190,12 @@ alice -> bob: m3
 
     def test_get_message_positions_route_with_bar(self, client):
         response = client.post(
-            "/getMessagePositions",
+            "/getSequencePositions",
             data=json.dumps({"plantuml": self.PUML_WITH_BAR, "svg": self._svg()}),
             content_type="application/json",
         )
         assert response.status_code == 200
-        assert len(response.get_json()["positions"]) == 3
+        assert len(response.get_json()["messages"]) == 3
 
 
 class TestDeleteActivation:

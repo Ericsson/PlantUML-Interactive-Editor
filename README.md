@@ -1,6 +1,19 @@
 # PlantUML Interactive Editor
 
+<table>
+<tr>
+<td>
+
 Welcome to PlantUML Interactive Editor! This application is designed to provide an intuitive and interactive environment for editing PlantUML code and generating diagrams in real-time. Whether you're creating a huge activity diagram or a single while loop, our tool streamlines the process, allowing you to focus on design rather than syntax.
+
+</td>
+<td width="96">
+
+<img src="src/plantuml_gui/static/favicon.svg" alt="PlantUML Interactive Editor icon" width="96" height="96">
+
+</td>
+</tr>
+</table>
 
 ![Screenshot](images/screenshot.png)
 
@@ -21,7 +34,8 @@ With PlantUML Interactive Editor, you can:
 - Delete the text of a title, note or group/partition to delete the element
 - To share a diagram, just copy the URL in the address bar
 - Hover over elements to see the corresponding line highlighted in the editor
-- Clicking on a line with an activity in the editor highlights the corresponding activity in the diagram
+- Clicking on, or hovering over, a line in the editor highlights the corresponding element in the diagram — all element types in both activity and sequence diagrams
+- Collapse the code editor pane by clicking the chevron on the pane divider (or dragging the divider past its minimum width) to give the diagram more space; expand it again the same way
 
 ## Detailed list of supported and unsupported features
 

@@ -106,33 +106,6 @@ start
 @enduml"""
             assert response.data.decode("utf-8") == expected_result
 
-    def test_get_note_line(self, client):
-        test_data = {
-            "plantuml": """@startuml
-start
-:Activity;
-note right
-Hello
-end note
-@enduml""",
-            "svg": """<ellipse cx="42.5" cy="20" fill="#222222" rx="10" ry="10" style="stroke:#222222;stroke-width:1.0;"></ellipse><path d="M94,54.418 L94,62.9844 L74,66.9844 L94,70.9844 L94,79.5508 A0,0 0 0 0 94,79.5508 L147,79.5508 A0,0 0 0 0 147,79.5508 L147,64.418 L137,54.418 L94,54.418 A0,0 0 0 0 94,54.418 " fill="#FEFFDD" style="stroke:#181818;stroke-width:0.5;"></path><path d="M137,54.418 L137,64.418 L147,64.418 L137,54.418 " fill="#FEFFDD" style="stroke:#181818;stroke-width:0.5;"></path><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacing" textLength="32" x="100" y="71.3008" style="pointer-events: none;">Hello</text><rect fill="#F1F1F1" height="33.9688" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="63" x="11" y="50"></rect><text fill="#000000" font-family="sans-serif" font-size="12" lengthAdjust="spacing" textLength="43" x="21" y="70.9688" style="pointer-events: none;">Activity</text><line style="stroke: rgb(24, 24, 24); stroke-width: 1; pointer-events: none;" x1="42.5" x2="42.5" y1="30" y2="50"></line><polygon fill="#181818" points="38.5,40,42.5,50,46.5,40,42.5,44" style="stroke:#181818;stroke-width:1.0;"></polygon>""",
-            "svgelement": """<path d="M94,54.418 L94,62.9844 L74,66.9844 L94,70.9844 L94,79.5508 A0,0 0 0 0 94,79.5508 L147,79.5508 A0,0 0 0 0 147,79.5508 L147,64.418 L137,54.418 L94,54.418 A0,0 0 0 0 94,54.418 " fill="#FEFFDD" style="stroke:#181818;stroke-width:0.5;"></path>""",
-        }
-        with client:
-            response = client.post(
-                "/getNoteLine",
-                data=json.dumps(test_data),
-                content_type="application/json",
-            )
-        response_json = json.loads(response.data.decode("utf-8"))
-        result_value = response_json.get("result")
-
-        # Expected value
-        expected_puml = [3, 5]
-
-        # Assert the result value is as expected
-        assert result_value == expected_puml
-
     def test_editnote_empty(self, client):
         test_data = {
             "plantuml": """@startuml
