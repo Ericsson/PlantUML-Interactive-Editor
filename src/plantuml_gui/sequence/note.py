@@ -27,7 +27,7 @@ from typing import Dict, List
 
 from pyquery import PyQuery as Pq
 
-from .classes import Diagram, Message
+from .classes import Diagram, Message, reference_name_for
 from .util import (
     NOTE_KEYWORDS,
     escape_multiline_text,
@@ -134,8 +134,18 @@ def add_note(
             return "\n".join(lines)
 
     insert_at = find_insertion_index(diagram.messages, svg, puml, y_position, lines)
+    # The frontend only knows displayed names; note placement must name the
+    # alias when the participant has one, or a name with spaces breaks the line.
     note_line = _build_note_line(
-        participant, placement, text, second_participant, note_type
+        reference_name_for(puml, participant),
+        placement,
+        text,
+        (
+            None
+            if second_participant is None
+            else reference_name_for(puml, second_participant)
+        ),
+        note_type,
     )
     lines.insert(insert_at, note_line)
     return "\n".join(lines)

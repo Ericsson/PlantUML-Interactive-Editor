@@ -22,13 +22,13 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import html
 import re
 from typing import Dict, List
 
 from pyquery import PyQuery as Pq
 
 from .classes import Diagram, is_participant_rect
+from .rename import rename_participant
 from .util import note_regions
 
 
@@ -92,12 +92,16 @@ def get_participant_name(puml: str, svg: str, svgelement: str) -> str:
 
 
 def edit_participant_name(puml: str, svg: str, newname: str, svgelement: str) -> str:
-    """Edit participant name by matching the clicked SVG element."""
+    """Edit participant name by matching the clicked SVG element.
+
+    Resolves the click to a participant and hands the rename itself to
+    :func:`rename.rename_participant`, which owns the puml surgery: whether the
+    new name needs an alias, and which references have to follow.
+    """
     diagram = Diagram.from_svg(svg, puml)
     count = index_of_clicked_participant(svg, svgelement)
     participant = diagram.participants[count - 1]
-    safe_newname = html.escape(newname, quote=True)
-    return puml.replace(participant.name, safe_newname)
+    return rename_participant(puml, participant, newname)
 
 
 def delete_participant(puml: str, svg: str, svgelement: str) -> str:
@@ -113,10 +117,12 @@ def delete_participant(puml: str, svg: str, svgelement: str) -> str:
             lines_to_remove.add(msg.index)
     # Remove notes that reference the participant. For block notes (note ...
     # end note) the whole region must go, not just the opening line, or the
-    # orphaned body and "end note" break the diagram.
+    # orphaned body and "end note" break the diagram. Matched on the reference
+    # name, because that (the alias, when there is one) is what a note header
+    # names -- never the displayed name.
     for start, end in note_regions(puml):
         header = lines[start].strip().split(" : ", 1)[0]
-        if participant.name in header:
+        if participant.reference_name in header:
             lines_to_remove.update(range(start, end + 1))
 
     lines = [line for i, line in enumerate(lines) if i not in lines_to_remove]
