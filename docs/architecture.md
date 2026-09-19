@@ -12,7 +12,7 @@ The Flask app is stateless. There is no database or session storage. Diagram sta
 ## Layer 2: Data Models
 
 - `classes.py` — Shared data classes for activity diagrams: `RectElement`, `PolyElement`, `Ellipse`, `TextElement`, `SvgChunk`, and the `TreeNode` hierarchy (`IfElseNode`, `RepeatSwitchNode`). Also contains helper functions for navigating nested if/else/repeat structures in puml lines.
-- `sequence_classes.py` — Data classes for sequence diagrams: `Participant`, `Message`, `Diagram`. The `Diagram` class parses SVG to extract participants and messages, and assigns source line indexes from the puml text.
+- `sequence_classes.py` — Data classes for sequence diagrams: `Participant`, `Message`, `Diagram`, `ParticipantDeclaration`. The `Diagram` class parses SVG to extract participants and messages, and assigns source line indexes from the puml text. Declaration parsing (`parse_participant_declaration`, `participant_declarations`, `reference_name_for`) joins what the SVG shows (the displayed name) to what the puml body refers to (the alias), which only the source knows.
 
 ## Layer 3: Rendering Pipeline
 

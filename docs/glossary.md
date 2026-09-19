@@ -6,7 +6,13 @@
 
 **Lifeline** — The vertical dashed line extending below a participant in a sequence diagram, representing the participant's existence over time.
 
-**Participant** — A named entity in a sequence diagram (rendered as a box at the top). In the code, represented by the `Participant` class with position and puml line index.
+**Participant** — A named entity in a sequence diagram (rendered as a box at the top). In the code, represented by the `Participant` class with position and puml line index. Only the `participant` keyword renders the rounded header rect the editor detects; `actor`, `database`, `queue` and the other lifeline keywords draw different shapes and are not clickable.
+
+**Displayed name** — The participant label PlantUML draws, and therefore the only name readable from the SVG: the quoted text in `participant "Space Room" as SpaceRoom`, or the bare token in `participant Alice`. It is what a click resolves to and what the frontend sends back.
+
+**Alias** — The `as X` token of a participant declaration. May not contain spaces, because the diagram body refers to the participant by it.
+
+**Reference name** — The token the diagram body must use for a participant: its alias when the declaration has one, otherwise its displayed name. Exposed as `Participant.reference_name` and, for callers that have only puml, `reference_name_for(puml, display_name)`. Lines that name a participant (messages, `activate`, note placement) must be built from this, never from the displayed name — `Space Room -> Bob` is invalid PlantUML.
 
 **puml text** — The raw PlantUML source code that defines a diagram. Starts with `@startuml` and ends with `@enduml`. This is what the user edits in the Ace editor and what the backend manipulates.
 
