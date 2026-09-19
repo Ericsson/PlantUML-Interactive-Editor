@@ -136,6 +136,45 @@ class TestRenameParticipant:
         }""")
         assert result == "Rename Alice"
 
+    def test_enter_does_not_insert_a_newline(self, app_url, page):
+        """A participant name lives on one puml line, so a newline in the field
+        splits the declaration and the diagram fails to render. The field is a
+        <textarea>, where Enter would otherwise add one."""
+        page.evaluate("""() => {
+            editor.session.setValue("@startuml\\nparticipant Alice\\nparticipant Bob\\n@enduml");
+        }""")
+        page.wait_for_timeout(3000)
+
+        field = page.locator("#participant-name-text")
+        page.evaluate("""() => {
+            $('#participant-name-text').val('New');
+            $('#participant-name-modalForm').modal('show');
+        }""")
+        field.click()
+        # Put the caret at the end, then press Enter.
+        page.keyboard.press("End")
+        page.keyboard.press("Enter")
+
+        assert "\n" not in field.input_value()
+
+    def test_enter_submits_the_rename(self, app_url, page):
+        """Enter is the expected submit gesture for a one-line name field."""
+        page.evaluate("""() => {
+            editor.session.setValue("@startuml\\nparticipant Alice\\nparticipant Bob\\nAlice -> Bob: hi\\n@enduml");
+            window.__submitted = false;
+            $('#submit-participant-name').on('click', () => { window.__submitted = true; });
+        }""")
+        page.wait_for_timeout(3000)
+
+        page.evaluate("""() => {
+            $('#participant-name-text').val('Carol');
+            $('#participant-name-modalForm').modal('show');
+        }""")
+        page.locator("#participant-name-text").click()
+        page.keyboard.press("Enter")
+
+        assert page.evaluate("() => window.__submitted") is True
+
 
 class TestLifelineExtraction:
     def test_extract_lifeline_positions(self, app_url, page):

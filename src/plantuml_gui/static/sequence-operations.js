@@ -127,6 +127,17 @@ function handleContextMenuBackground(svgElement) {
 // --- Participant operation event listeners (rename, add, delete) ---
 
 function participantEventListeners() {
+    // A participant name occupies a single puml line, so a newline in this
+    // field would split the declaration and break the diagram. The field is a
+    // <textarea> (for layout consistency with the other modals), so Enter would
+    // otherwise insert one: submit instead, which is what a one-line name field
+    // is expected to do. Ctrl+Enter already submits, handled globally.
+    $('#participant-name-text').on('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        $('#submit-participant-name').trigger('click');
+    });
+
     // Submit renamed participant name
     $('#submit-participant-name').on('click', async () => {
         const element = document.getElementById('colb');
