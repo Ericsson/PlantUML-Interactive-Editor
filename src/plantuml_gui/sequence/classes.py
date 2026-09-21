@@ -49,35 +49,19 @@ ARROW_RE = re.compile(
     r"|[-\\/]+(?:\[#[^\]]*\])?[-\\/]*(?:>{1,2}|[xo])"  # ends with a head
 )
 
-# The keywords that declare a lifeline in a sequence diagram. PlantUML draws a
-# different icon for each, but they are structurally identical: one lifeline,
-# an optional alias, optional modifiers. Renaming has to handle all of them,
-# because the SVG gives no hint which keyword produced a header rect.
-PARTICIPANT_KEYWORDS = (
-    "participant",
-    "actor",
-    "boundary",
-    "control",
-    "entity",
-    "database",
-    "collections",
-    "queue",
-)
-
 # A participant declaration, split into the parts a rename must treat
 # differently:
-#   keyword -- ``participant``, ``actor``, ...
-#   name    -- the displayed name, which is what the SVG gives us to match on:
-#              the quoted text when present (``participant "Long name" as A``),
-#              otherwise the bare token (``participant Alice``)
-#   alias   -- the ``as X`` token when present; this, not the displayed name, is
-#              what the diagram body refers to
-#   rest    -- everything after the name and alias (``order 10``, ``#lightblue``,
-#              ``<<stereotype>>``), captured verbatim so a rewrite never drops a
-#              modifier it does not understand
+#   name  -- the displayed name, which is what the SVG gives us to match on:
+#            the quoted text when present (``participant "Long name" as A``),
+#            otherwise the bare token (``participant Alice``)
+#   alias -- the ``as X`` token when present; this, not the displayed name, is
+#            what the diagram body refers to
+#   rest  -- everything after the name and alias (``order 10``, ``#lightblue``,
+#            ``<<stereotype>>``), captured verbatim so a rewrite never drops a
+#            modifier it does not understand
+
 PARTICIPANT_DECLARATION_RE = re.compile(
-    r"^(?P<keyword>" + "|".join(PARTICIPANT_KEYWORDS) + r")"
-    r'\s+(?:"(?P<quoted>[^"]*)"|(?P<bare>[^\s#]+))'
+    r'^participant\s+(?:"(?P<quoted>[^"]*)"|(?P<bare>[^\s#]+))'
     r'(?:\s+as\s+(?:"(?P<quoted_alias>[^"]*)"|(?P<bare_alias>[^\s#]+)))?'
     r"(?P<rest>.*)$"
 )
@@ -87,7 +71,6 @@ PARTICIPANT_DECLARATION_RE = re.compile(
 class ParticipantDeclaration:
     """The structural parts of a single participant declaration line."""
 
-    keyword: str
     name: str
     alias: str | None
     rest: str
@@ -112,7 +95,6 @@ def parse_participant_declaration(line: str) -> ParticipantDeclaration | None:
     if alias is None:
         alias = match.group("bare_alias")
     return ParticipantDeclaration(
-        keyword=match.group("keyword"),
         name=quoted if quoted is not None else match.group("bare"),
         alias=alias,
         rest=match.group("rest"),

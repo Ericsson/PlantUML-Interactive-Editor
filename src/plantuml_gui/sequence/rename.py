@@ -260,7 +260,6 @@ def _indentation(line: str) -> str:
 
 def _declaration_line(
     indentation: str,
-    keyword: str,
     display_name: str,
     alias: str | None,
     rest: str,
@@ -268,12 +267,15 @@ def _declaration_line(
 ) -> str:
     """Assemble a declaration line from its parts.
 
+    The keyword is always ``participant``: it is the only one the editor parses
+    as a declaration, so it is the only one a rename can be looking at.
+
     ``rest`` carries the modifiers the rename does not understand (``order 10``,
     a color, a stereotype) straight through.
     """
     displayed = f'"{display_name}"' if quote_name else display_name
     alias_part = f" as {alias}" if alias is not None else ""
-    return f"{indentation}{keyword} {displayed}{alias_part}{rest}"
+    return f"{indentation}participant {displayed}{alias_part}{rest}"
 
 
 def _needs_alias(new_name: str) -> bool:
@@ -321,7 +323,6 @@ def rename_participant(puml: str, participant: Participant, new_name: str) -> st
     if declaration is not None and declaration.alias is not None:
         lines[participant.index] = _declaration_line(
             _indentation(lines[participant.index]),
-            declaration.keyword,
             display_name,
             declaration.alias,
             declaration.rest,
@@ -337,7 +338,6 @@ def rename_participant(puml: str, participant: Participant, new_name: str) -> st
         if declaration is not None:
             lines[participant.index] = _declaration_line(
                 _indentation(lines[participant.index]),
-                declaration.keyword,
                 display_name,
                 None,
                 declaration.rest,
@@ -352,7 +352,6 @@ def rename_participant(puml: str, participant: Participant, new_name: str) -> st
     if declaration is not None:
         lines[participant.index] = _declaration_line(
             _indentation(lines[participant.index]),
-            declaration.keyword,
             display_name,
             alias,
             declaration.rest,
@@ -392,7 +391,6 @@ def _insert_declaration_for_implicit(
             line_index,
             _declaration_line(
                 _indentation(line),
-                "participant",
                 display_name,
                 alias,
                 "",

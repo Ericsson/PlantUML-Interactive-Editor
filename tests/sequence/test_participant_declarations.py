@@ -32,7 +32,6 @@ that split down for each declaration form PlantUML accepts.
 
 import pytest
 from plantuml_gui.sequence.classes import (
-    PARTICIPANT_KEYWORDS,
     parse_participant_declaration,
     participant_declarations,
     reference_name_for,
@@ -43,7 +42,6 @@ class TestParseParticipantDeclaration:
     def test_bare_name(self):
         declaration = parse_participant_declaration("participant Alice")
         assert declaration is not None
-        assert declaration.keyword == "participant"
         assert declaration.name == "Alice"
         assert declaration.alias is None
         assert declaration.rest == ""
@@ -100,13 +98,15 @@ class TestParseParticipantDeclaration:
         assert declaration is not None
         assert declaration.rest == expected_rest
 
-    @pytest.mark.parametrize("keyword", PARTICIPANT_KEYWORDS)
-    def test_every_participant_keyword_is_recognized(self, keyword):
-        declaration = parse_participant_declaration(f'{keyword} "Long Name" as L')
-        assert declaration is not None
-        assert declaration.keyword == keyword
-        assert declaration.name == "Long Name"
-        assert declaration.alias == "L"
+    @pytest.mark.parametrize(
+        "keyword",
+        ["actor", "boundary", "control", "entity", "database", "collections", "queue"],
+    )
+    def test_other_lifeline_keywords_are_not_declarations(self, keyword):
+        """Only `participant` draws the rounded header rect the editor detects,
+        so the other lifeline keywords can be neither clicked nor renamed and
+        are deliberately not parsed."""
+        assert parse_participant_declaration(f'{keyword} "Long Name" as L') is None
 
     def test_indentation_is_tolerated(self):
         """Declarations inside a box are indented."""
@@ -122,9 +122,8 @@ class TestParseParticipantDeclaration:
             "activate Alice",
             "@startuml",
             "",
-            # A word merely starting with a keyword is not a declaration.
+            # A word merely starting with the keyword is not a declaration.
             "participants Alice",
-            "actors Alice",
         ],
     )
     def test_non_declarations_return_none(self, line):
@@ -137,7 +136,7 @@ class TestParticipantDeclarations:
             "@startuml\n"  # 0
             "participant Alice\n"  # 1
             "Alice -> Bob: hi\n"  # 2
-            'actor "Long Name" as L\n'  # 3
+            'participant "Long Name" as L\n'  # 3
             "@enduml"  # 4
         )
         assert [
@@ -148,6 +147,25 @@ class TestParticipantDeclarations:
     def test_implicit_participant_has_no_declaration(self):
         puml = "@startuml\nAlice -> Bob: hi\n@enduml"
         assert participant_declarations(puml) == []
+
+    def test_a_non_participant_cannot_claim_a_participant_line(self):
+        """Two lifelines may share a displayed name when their identifiers
+        differ. Were `actor` parsed as a declaration, its line would be handed to
+        the separate `participant Alice`, which would also inherit the actor's
+        alias -- so a rename would rewrite the actor and leave the participant
+        alone."""
+        puml = (
+            "@startuml\n"  # 0
+            'actor "Alice" as A\n'  # 1
+            "participant Alice\n"  # 2
+            "A -> Alice: hi\n"  # 3
+            "@enduml"  # 4
+        )
+
+        assert [
+            (index, declaration.name, declaration.alias)
+            for index, declaration in participant_declarations(puml)
+        ] == [(2, "Alice", None)]
 
 
 class TestReferenceNameFor:

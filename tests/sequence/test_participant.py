@@ -972,6 +972,28 @@ note over NewName: text
         )
         self.assert_renders(result, "New Name")
 
+    def test_a_shared_display_name_does_not_rename_the_actor(self, client):
+        """Two lifelines may share a displayed name when their identifiers
+        differ. The clickable one is the `participant`; renaming it must not
+        rewrite the `actor` line that happens to carry the same label."""
+        puml = """@startuml
+actor "Alice" as A
+participant Alice
+A -> Alice: hi
+@enduml"""
+
+        result = self.rename(client, puml, "Space Room")
+
+        assert (
+            result
+            == """@startuml
+actor "Alice" as A
+participant "Space Room" as SpaceRoom
+A -> SpaceRoom: hi
+@enduml"""
+        )
+        self.assert_renders(result, "Space Room")
+
     # --- Case 3 with no declaration to rewrite ---
 
     def test_implicit_participant_gets_a_declaration(self, client):

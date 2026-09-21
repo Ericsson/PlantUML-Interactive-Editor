@@ -29,10 +29,7 @@ collide with an identifier another participant already answers to.
 """
 
 import pytest
-from plantuml_gui.sequence.rename import (
-    generate_alias,
-    taken_identifiers,
-)
+from plantuml_gui.sequence.rename import generate_alias, taken_identifiers
 
 
 class TestGenerateAlias:
@@ -95,5 +92,15 @@ class TestTakenIdentifiers:
 
     def test_ignores_non_declaration_lines(self):
         puml = "@startuml\nAlice -> Bob: hi\nnote over Alice: text\n@enduml"
+
+        assert taken_identifiers(puml, exclude_line=-1) == set()
+
+    def test_non_participant_lifelines_are_not_seen(self):
+        """The accepted limitation: an alias duplicating an actor's identifier
+        slips through, and PlantUML then merges the two lifelines. Preventing it
+        would need a second, wider scan of the source for a collision that
+        requires the new name's PascalCase to match an aliased non-participant
+        exactly."""
+        puml = "@startuml\nactor Customer as SpaceRoom\n@enduml"
 
         assert taken_identifiers(puml, exclude_line=-1) == set()
