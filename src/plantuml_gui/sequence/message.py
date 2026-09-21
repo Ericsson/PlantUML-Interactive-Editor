@@ -71,8 +71,7 @@ def add_message(
     lines = puml.splitlines()
     insert_at = find_insertion_index(diagram.messages, svg, puml, first_y, lines)
     message = escape_multiline_text(message)
-    # Built from reference_name, not name: an aliased participant's displayed
-    # name may contain spaces, which is invalid in a message endpoint.
+    # Built from reference_name, name may contain spaces, which is invalid in a message endpoint.
     lines.insert(
         insert_at,
         f"{sender.reference_name} {arrow_type} {reciever.reference_name}: {message}",
