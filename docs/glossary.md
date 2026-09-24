@@ -8,7 +8,7 @@
 
 **Participant** — A named entity in a sequence diagram (rendered as a box at the top). In the code, represented by the `Participant` class with position and puml line index. Only the `participant` keyword renders the rounded header rect the editor detects; `actor`, `database`, `queue` and the other lifeline keywords draw different shapes and are not clickable.
 
-**Displayed name** — The participant label PlantUML draws, and therefore the only name readable from the SVG: the quoted text in `participant "Space Room" as SpaceRoom`, or the bare token in `participant Alice`. It is what a click resolves to and what the frontend sends back.
+**Displayed name** — The participant label PlantUML draws, and therefore the only name readable from the SVG: the quoted text in `participant "Space Room" as SpaceRoom`, or the bare token in `participant Alice`. It is what a click resolves to and what the frontend sends back. A label broken over several lines (`participant "a\nb" as ab`) is drawn as one `<text>` element per line; `participant_label` rejoins them, and `display_names_match` compares the result to a declaration, normalizing PlantUML's interchangeable break escapes (`\n`, `\r`, `\l`).
 
 **Alias** — The `as X` token of a participant declaration. May not contain spaces, because the diagram body refers to the participant by it.
 

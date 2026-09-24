@@ -1064,9 +1064,10 @@ Alice -> Bob: hi
         assert "<script>" not in result
         assert "&lt;script&gt;" in result
 
-    def test_newline_in_the_name_does_not_split_the_declaration(self, client):
-        """A declaration is one line. A pasted newline used to break the diagram,
-        so whitespace is collapsed and the name needs an alias like any other."""
+    def test_newline_in_the_name_becomes_a_line_break_escape(self, client):
+        """A declaration is one line, so a real newline in the incoming name is
+        folded into the literal \\n escape PlantUML draws as a line break. The
+        name then needs a quoted declaration and an alias like any other."""
         puml = """@startuml
 participant Alice
 participant Bob
@@ -1078,12 +1079,15 @@ Alice -> Bob: hi
         assert (
             result
             == """@startuml
-participant "New Name" as NewName
+participant "New\\nName" as NewnName
 participant Bob
-NewName -> Bob: hi
+NewnName -> Bob: hi
 @enduml"""
         )
-        self.assert_renders(result, "New Name")
+        # PlantUML draws each line of the name as its own <text>, so check the
+        # two lines separately rather than the joined form.
+        self.assert_renders(result, "New")
+        self.assert_renders(result, "Name")
 
     def test_surrounding_whitespace_is_trimmed(self, client):
         puml = """@startuml

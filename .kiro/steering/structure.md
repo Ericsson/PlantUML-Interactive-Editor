@@ -17,7 +17,7 @@
 │   │   └── parse_changelog.py # CHANGELOG.md parser for version history
 │   ├── sequence/           # Sequence diagram package
 │   │   ├── routes.py       # Sequence routes (/addParticipant, /addMessage, etc.)
-│   │   ├── classes.py      # Diagram, Participant, Message, ParticipantDeclaration data classes; declaration parsing (displayed name vs alias, reference_name_for); shared participant-rect helpers (is_participant_rect, participant_header_bounds, rect_encloses)
+│   │   ├── classes.py      # Diagram, Participant, Message, ParticipantDeclaration data classes; declaration parsing (displayed name vs alias, reference_name_for); displayed-name reading and matching (participant_label, display_names_match); shared participant-rect helpers (is_participant_rect, participant_header_bounds, rect_encloses)
 │   │   ├── participant.py  # Participant logic (add, rename entry point, delete, positions)
 │   │   ├── rename.py       # Participant rename logic (pure puml surgery: alias generation, token-aware reference rewriting, the three declaration cases)
 │   │   ├── message.py      # Message logic (add message, y-based insertion)
@@ -91,6 +91,7 @@
 │   │   ├── test_participant_declarations.py # Declaration parsing: keyword/displayed name/alias/modifiers
 │   │   ├── test_participant_rename_alias.py # Generated-alias shape, sanitizing and collisions
 │   │   ├── test_participant_rename_references.py # Token-aware reference rewriting (free text must survive)
+│   │   ├── test_participant_multiline_name.py # Displayed names broken over lines (`participant "a\nb" as ab`)
 │   │   ├── test_aliased_participant_operations.py # Message/activation/note/delete on an aliased participant
 │   │   ├── test_message.py
 │   │   ├── test_activation.py

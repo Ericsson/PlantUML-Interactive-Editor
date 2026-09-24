@@ -136,10 +136,10 @@ class TestRenameParticipant:
         }""")
         assert result == "Rename Alice"
 
-    def test_enter_does_not_insert_a_newline(self, app_url, page):
-        """A participant name lives on one puml line, so a newline in the field
-        splits the declaration and the diagram fails to render. The field is a
-        <textarea>, where Enter would otherwise add one."""
+    def test_enter_inserts_a_newline(self, app_url, page):
+        """The rename field is a <textarea>: a name can span several lines, and
+        the backend folds the newline into the literal \\n escape. Pressing Enter
+        inserts a real newline rather than submitting."""
         page.evaluate("""() => {
             editor.session.setValue("@startuml\\nparticipant Alice\\nparticipant Bob\\n@enduml");
         }""")
@@ -155,10 +155,11 @@ class TestRenameParticipant:
         page.keyboard.press("End")
         page.keyboard.press("Enter")
 
-        assert "\n" not in field.input_value()
+        assert "\n" in field.input_value()
 
-    def test_enter_submits_the_rename(self, app_url, page):
-        """Enter is the expected submit gesture for a one-line name field."""
+    def test_enter_does_not_submit_the_rename(self, app_url, page):
+        """Enter now inserts a newline, so it must not trigger a submit. Only
+        Ctrl+Enter submits (handled globally, like the other modals)."""
         page.evaluate("""() => {
             editor.session.setValue("@startuml\\nparticipant Alice\\nparticipant Bob\\nAlice -> Bob: hi\\n@enduml");
             window.__submitted = false;
@@ -173,7 +174,7 @@ class TestRenameParticipant:
         page.locator("#participant-name-text").click()
         page.keyboard.press("Enter")
 
-        assert page.evaluate("() => window.__submitted") is True
+        assert page.evaluate("() => window.__submitted") is False
 
 
 class TestLifelineExtraction:

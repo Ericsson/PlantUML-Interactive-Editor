@@ -111,20 +111,45 @@ def participant_declarations(puml: str) -> List[tuple[int, ParticipantDeclaratio
     ]
 
 
+# Escapes PlantUML breaks a label on. They differ only in line alignment.
+_LINE_BREAK_ESCAPE_RE = re.compile(r"\\[nrl]")
+
+
+def normalized_display_name(name: str) -> str:
+    """A displayed name reduced to the form two spellings of it share.
+
+    A name reaches us two ways that render alike but are written differently: the
+    puml declaration spells a break as ``\\n``, ``\\r`` or ``\\l``, while the SVG
+    records only that a break happened (so it comes back ``\\n``-joined, and a
+    source-empty line comes back as a single space). Unifying the escapes and
+    trimming each line makes the two comparable. For comparison only -- writers
+    keep the original spelling, since that goes back into the puml.
+    """
+    lines = _LINE_BREAK_ESCAPE_RE.split(name)
+    return "\\n".join(line.strip() for line in lines)
+
+
+def display_names_match(left: str, right: str) -> bool:
+    """Whether two spellings of a displayed name denote the same label."""
+    return normalized_display_name(left) == normalized_display_name(right)
+
+
+def contains_line_break(name: str) -> bool:
+    """Whether a displayed name carries a PlantUML line-break escape."""
+    return _LINE_BREAK_ESCAPE_RE.search(name) is not None
+
+
 def reference_name_for(puml: str, display_name: str) -> str:
     """The token the diagram body uses for the participant shown as ``display_name``.
 
-    Writers only ever learn a participant's *displayed* name -- it is what the
-    SVG renders and what the frontend sends back -- but the body must refer to
-    the alias whenever the declaration has one. Resolving here, from the puml
-    alone, keeps that translation in one place and lets callers without an SVG
-    (``/addActivation``) use it too.
-
-    Falls back to the displayed name when the participant has no declaration or
-    no alias, which is then the correct reference token anyway.
+    The frontend only knows a participant's *displayed* name, but the body must
+    refer to the alias when the declaration has one. Resolving here from the puml
+    alone keeps that translation in one place, usable without an SVG. Falls back
+    to the displayed name when there is no declaration or alias -- which is then
+    the correct token anyway.
     """
     for _line_index, declaration in participant_declarations(puml):
-        if declaration.name == display_name:
+        if display_names_match(declaration.name, display_name):
             return declaration.reference_name
     return display_name
 
@@ -158,6 +183,43 @@ def is_participant_rect(rect: Pq) -> bool:
     if (rect.attr("style") or "") != PARTICIPANT_RECT_STYLE:
         return False
     return rect.attr("rx") is not None and rect.attr("ry") is not None
+
+
+# Participant labels are drawn at font-size 14. Message and box-title text use
+# 13, and the one other thing drawn at 14 -- the diagram title -- is bold.
+_PARTICIPANT_LABEL_FONT_SIZE = "14"
+
+
+def _is_participant_label_text(element: Pq) -> bool:
+    """Whether an SVG element is one line of a participant header's label."""
+    if not element or element[0].tag != "text":
+        return False
+    return (
+        element.attr("font-size") == _PARTICIPANT_LABEL_FONT_SIZE
+        and element.attr("font-weight") != "bold"
+    )
+
+
+def participant_label(rect: Pq) -> str:
+    """The displayed name drawn inside a participant header rect.
+
+    PlantUML renders a name containing a line break (``participant "a\\nb" as
+    ab``) as one ``<text>`` sibling per line, so reading only the rect's
+    immediate next sibling would see just the first line -- leaving the
+    participant unmatchable against its declaration, and every operation on it
+    (rename, delete, add beside, hover) pointed at the wrong line or none.
+
+    The lines are rejoined with a literal ``\\n`` so the result is the same
+    escaped, single-line form the puml declaration uses. Which of PlantUML's
+    break escapes produced the break is not recoverable from the SVG; see
+    :func:`normalized_display_name` for how that is reconciled when matching.
+    """
+    lines: List[str] = []
+    sibling = rect.next()
+    while _is_participant_label_text(sibling):
+        lines.append(sibling.text() or "")
+        sibling = sibling.next()
+    return "\\n".join(lines)
 
 
 def participant_header_bounds(svg: Pq) -> List[Dict[str, float]]:
@@ -243,7 +305,7 @@ class Participant:
         return isinstance(other, Participant) and self.cx == other.cx
 
     @classmethod
-    def from_svg(cls, rect: Pq, text: Pq):
+    def from_svg(cls, rect: Pq):
         x = float(rect.attr("x"))
         y = float(rect.attr("y"))
         width = float(rect.attr("width"))
@@ -252,7 +314,7 @@ class Participant:
         cx = x + width / 2
         cy = y + height / 2
 
-        name = text.text()
+        name = participant_label(rect)
 
         return cls(name, cx, cy, x, width)
 
@@ -365,8 +427,7 @@ class Diagram:
         for rect in svg("rect").items():
             if not is_participant_rect(rect):
                 continue  # skip activation bars and other non-participant rects
-            text = rect.next()
-            participant = Participant.from_svg(rect, text)
+            participant = Participant.from_svg(rect)
 
             if participant.cx not in unique_participants:
                 unique_participants[participant.cx] = participant
@@ -402,7 +463,9 @@ class Diagram:
         claimed: set[int] = set()
         for participant in self.participants:
             for position, (line_index, declaration) in enumerate(declarations):
-                if position not in claimed and declaration.name == participant.name:
+                if position in claimed:
+                    continue
+                if display_names_match(declaration.name, participant.name):
                     participant.index = line_index
                     participant.alias = declaration.alias
                     claimed.add(position)

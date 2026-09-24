@@ -46,6 +46,7 @@ import re
 from .classes import (
     ARROW_RE,
     Participant,
+    contains_line_break,
     parse_participant_declaration,
     participant_declarations,
 )
@@ -278,14 +279,37 @@ def _declaration_line(
     return f"{indentation}participant {displayed}{alias_part}{rest}"
 
 
+def _normalize_incoming_name(new_name: str) -> str:
+    r"""Fold a raw rename value into a single-line displayed name.
+
+    Real newlines become the literal ``\n`` escape PlantUML draws as a break, so
+    a name typed over several lines survives on the one line a declaration may
+    occupy. Each line is trimmed and its inner whitespace collapsed, leading and
+    trailing blank lines are dropped, and an all-blank value collapses to ``""``.
+    """
+    lines = [" ".join(line.split()) for line in new_name.splitlines()]
+    while lines and not lines[-1]:
+        lines.pop()
+    while lines and not lines[0]:
+        lines.pop(0)
+    if not any(lines):
+        return ""
+    return "\\n".join(lines)
+
+
 def _needs_alias(new_name: str) -> bool:
     """Whether ``new_name`` cannot serve as a bare reference token.
 
     Whitespace is the motivating case (``Space Room``). ``#``, ``,`` and ``:``
     are included because PlantUML reads them as a color, a list separator and
     the start of note/message text respectively, so a bare token containing one
-    would be silently mis-parsed rather than rejected.
+    would be silently mis-parsed rather than rejected. A line-break escape
+    (``a\\nb``) is included because PlantUML rejects it outright in a bare token
+    -- such a name is only legal as a quoted displayed name, which in turn needs
+    an alias for the body to refer to.
     """
+    if contains_line_break(new_name):
+        return True
     return any(character.isspace() or character in "#,:" for character in new_name)
 
 
@@ -300,13 +324,12 @@ def rename_participant(puml: str, participant: Participant, new_name: str) -> st
     request and ends up as SVG text. The alias is derived from the raw name
     instead, since it is reduced to alphanumerics anyway.
 
-    Whitespace in the incoming name is collapsed to single spaces: a declaration
-    occupies one puml line, so an embedded newline (pasted into the rename field,
-    or sent by another client) would split it and break the diagram. A name with
-    nothing left after that leaves the diagram untouched, rather than producing
-    an empty label.
+    A declaration is one puml line, so a real newline in the incoming name is
+    folded into the literal ``\\n`` escape PlantUML draws as a break (each line
+    trimmed, its inner whitespace collapsed). A name blank on every line leaves
+    the diagram untouched, rather than producing an empty label.
     """
-    new_name = " ".join(new_name.split())
+    new_name = _normalize_incoming_name(new_name)
     if not new_name:
         return puml
 
