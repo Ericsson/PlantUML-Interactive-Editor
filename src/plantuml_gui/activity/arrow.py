@@ -115,11 +115,6 @@ def find_arrow_bounds(puml, svg, clickedelement) -> tuple[int, int]:
     return start, end
 
 
-def get_arrow_line(puml, svg, clickedelement):
-    start, end = find_arrow_bounds(puml, svg, clickedelement)
-    return start, end
-
-
 def get_arrow_type(puml, svg, clickedelement):
     lines = puml.splitlines()
     start, end = find_arrow_bounds(puml, svg, clickedelement)

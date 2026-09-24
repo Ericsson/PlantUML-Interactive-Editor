@@ -852,76 +852,6 @@ function bottomForkEventListeners() {
     });
 }
 
-function titleEventListeners() {
-    $('#submit-title').on('click', async () => {
-        var text = $('#title-text').val();
-        try {
-            const plantuml = trimlines(editor.session.getValue());
-            const response = await fetch("editTitle", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    'plantuml': plantuml,
-                    'title': text
-                }),
-            });
-            const pumlcontentcode = await response.text()
-            setPuml(pumlcontentcode)
-        } catch (error) {
-            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-        }
-    })
-
-    document.getElementById('editTitle').addEventListener('click', async () => {
-        try {
-            const plantuml = trimlines(editor.session.getValue());
-            const response = await fetch("getTextTitle", {
-
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    'plantuml': plantuml,
-                })
-            });
-            const text = await response.text();
-
-            $('#title-text').val(text);
-            $('#modalFormTitle').modal('show');
-            $('#modalFormTitle').on('shown.bs.modal', function() {
-                $('#title-text').trigger('focus')
-            })
-
-        } catch (error) {
-            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-        }
-
-    });
-
-    document.getElementById('deleteTitle').addEventListener('click', async () => {
-        try {
-            const plantuml = trimlines(editor.session.getValue());
-            const response = await fetch("deleteTitle", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    'plantuml': plantuml,
-                }),
-            });
-            const pumlcontentcode = await response.text()
-            setPuml(pumlcontentcode)
-        } catch (error) {
-            displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-        }
-    })
-
-}
-
 function noteEventListeners() {
     $('#submit-note').on('click', async () => {
         const element = document.getElementById('colb')
@@ -1676,16 +1606,117 @@ function arrowLabelEventListeners() {
 
 }
 
-async function setHandlersForActivityDiagram(pumlcontent, element) {
+// --- Editor -> diagram highlighting ---
+// Hover targets registered during the setHandlersForSvg walk, in SVG document
+// order per type. The backend's getActivityPositions counts elements of each
+// type in the same document order, so entries match by ordinal - the same
+// invariant the per-element get*Line endpoints rely on.
+let activityHoverTargets = null;
+let activityRowMap = new Map(); // editor row -> [{el, style}, ...] (see hover-highlight.js)
+let activityHighlighted = []; // [{el, style, token}, ...] active highlights to restore
+let activityElementRows = new Map(); // el -> [rows] for diagram->editor hover markers
+
+function newActivityHoverTargets() {
+    return {
+        activities: [],
+        polys: [],
+        whiles: [],
+        notes: [],
+        groups: [],
+        ellipses: [],
+        connectors: [],
+        merges: [],
+        arrows: [], // each entry is the array of label text elements of one arrow
+        forks: [], // each entry is {el, row}; rows come from labelForks, not the backend
+        title: []
+    };
+}
+
+async function fetchActivityPositions() {
+    const data = await fetchDiagramData("getActivityPositions");
+    activityRowMap = new Map();
+    if (data) buildActivityRowMap(data);
+}
+
+// Highlight treatments per element type (see hover-highlight.js). Fills match
+// what each type's diagram-side mouseover uses; label texts (groups, arrows)
+// turn bold like sequence messages do.
+const FILL_HIGHLIGHT = attributeHighlight('fill', '#d8d8d8');
+const BOLD_HIGHLIGHT = attributeHighlight('font-weight', 'bold');
+const ELLIPSE_HIGHLIGHT = attributeHighlight('fill', '#818181');
+const CONNECTOR_HIGHLIGHT = attributeHighlight('fill', '#c2c2c2');
+const TITLE_HIGHLIGHT = attributeHighlight('fill', '#e5e5e5');
+
+function buildActivityRowMap(positions) {
+    activityRowMap = new Map();
+    activityElementRows = new Map();
+    // An arrow's target is an array of its label text elements; register each
+    // element separately so the shared row map holds one element per entry.
+    const register = (row, target, style) => {
+        const els = Array.isArray(target) ? target : [target];
+        for (const el of els) {
+            registerHoverRow(activityRowMap, row, el, style);
+            registerElementRows(activityElementRows, el, row);
+        }
+    };
+    const add = (rowsPerElement, targets, style) => {
+        for (let i = 0; i < targets.length && i < rowsPerElement.length; i++) {
+            for (const row of rowsPerElement[i]) {
+                register(row, targets[i], style);
+            }
+        }
+    };
+    add(positions.activities, activityHoverTargets.activities, FILL_HIGHLIGHT);
+    add(positions.polys, activityHoverTargets.polys, FILL_HIGHLIGHT);
+    add(positions.whiles, activityHoverTargets.whiles, FILL_HIGHLIGHT);
+    add(positions.notes, activityHoverTargets.notes, FILL_HIGHLIGHT);
+    add(positions.merges, activityHoverTargets.merges, FILL_HIGHLIGHT);
+    add(positions.groups, activityHoverTargets.groups, BOLD_HIGHLIGHT);
+    add(positions.arrows, activityHoverTargets.arrows, BOLD_HIGHLIGHT);
+    add(positions.ellipses, activityHoverTargets.ellipses, ELLIPSE_HIGHLIGHT);
+    add(positions.connectors, activityHoverTargets.connectors, CONNECTOR_HIGHLIGHT);
+    if (activityHoverTargets.title.length > 0) {
+        add([positions.title], activityHoverTargets.title, TITLE_HIGHLIGHT);
+    }
+    for (const fork of activityHoverTargets.forks) {
+        register(fork.row, fork.el, FILL_HIGHLIGHT);
+    }
+}
+
+function highlightActivityForRow(row) {
+    highlightHoverRow(activityRowMap, row, activityHighlighted);
+}
+
+function resetActivityHighlight() {
+    activityHighlighted = clearHoverHighlight(activityHighlighted);
+}
+
+async function setHandlersForActivityDiagram(pumlcontent, element, renderId) {
     removeBackgroundMenuListener();
 
-    fetchSvgFromPlantUml().then((svgContent) => {
+    fetchSvgFromPlantUml().then(async (svgContent) => {
+        // A newer render started while this SVG was being fetched (e.g. the
+        // user switched diagrams); drop this result so it can't clobber the
+        // current diagram. Balance the loading overlay toggle that
+        // renderPlantUml did for this render before bailing.
+        if (renderId !== renderGeneration) {
+            hideLoadingOverlay();
+            return;
+        }
         element.innerHTML = svgContent;
+        activityHoverTargets = newActivityHoverTargets();
+        activityHighlighted = []; // old DOM discarded with innerHTML
+        activityRowMap = new Map();
         const svg = element.querySelector('g');
         if (!svg) {
-            toggleLoadingOverlay()
+            hideLoadingOverlay()
             return
         }
+        // Clear the editor hover marker when the pointer leaves a diagram
+        // element (mouseout bubbles from the elements up to this <g>), so the
+        // last hovered element's line doesn't stay highlighted in the editor.
+        // The <g> is recreated on every render, so this listener doesn't stack.
+        svg.addEventListener('mouseout', clearMarkers);
         const svgelements = svg.querySelectorAll('*');
 
         let onlytextelements = true
@@ -1700,6 +1731,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
                 svgelement.style.pointerEvents = 'none';
             }
             if (checkIfActivity(svgelements, index)) {
+                activityHoverTargets.activities.push(svgelement);
                 svgelement.addEventListener('dblclick', async () => {
                     lastclickedsvgelement = svgelement;
                     try {
@@ -1732,9 +1764,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
                 let rectcolor = ""
                 svgelement.addEventListener('mouseover', function() {
                     const svg = element.querySelector('g');
-                    resetHighlight(svg);
-
-                    processActivityLine(pumlcontent, svg, svgelement)
+                    markEditorForElement(activityElementRows, svgelement)
                     rectcolor = svgelement.getAttribute('fill')
                     svgelement.setAttribute('fill', '#d8d8d8')
                 });
@@ -1746,6 +1776,10 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
 
             if (checkIfFork(svgelements, index)) {
                 let forkobj = forkqueue.shift();
+                activityHoverTargets.forks.push({
+                    el: svgelement,
+                    row: forkobj.index
+                });
                 svgelement.setAttribute('fline', forkobj.index)
                 if (forkobj.line == "top") {
                     svgelement.addEventListener('contextmenu', function(e) {
@@ -1779,6 +1813,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
             }
 
             if (checkIfWhile(svgelements, index)) {
+                activityHoverTargets.whiles.push(svgelement);
                 svgelement.addEventListener('dblclick', async () => {
                     lastclickedsvgelement = svgelement;
                     try {
@@ -1822,7 +1857,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
 
                 let color = ""
                 svgelement.addEventListener('mouseover', function() {
-                    processWhileLine(pumlcontent, svg, svgelement)
+                    markEditorForElement(activityElementRows, svgelement)
                     color = svgelement.getAttribute('fill')
                     svgelement.setAttribute('fill', '#d8d8d8')
                 });
@@ -1834,6 +1869,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
             }
 
             if (checkIfCorrectPoly(svgelements, index) && !checkIfWhile(svgelements, index) && !checkIfMergePoly(svgelements, index)) { // checks if its an actual if polygon with text or and endif
+                activityHoverTargets.polys.push(svgelement);
                 svgelement.addEventListener('dblclick', async () => {
                     lastclickedsvgelement = svgelement;
                     try {
@@ -1877,7 +1913,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
 
                 let polycolor = ""
                 svgelement.addEventListener('mouseover', function() {
-                    processIfLine(pumlcontent, svg, svgelement)
+                    markEditorForElement(activityElementRows, svgelement)
                     polycolor = svgelement.getAttribute('fill')
                     svgelement.setAttribute('fill', '#d8d8d8')
                 });
@@ -1888,6 +1924,11 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
             }
 
             if (checkIfNote(svgelements, index)) {
+                // Mirror the backend's note_count skip rule: paths flagged
+                // pointer-events none (connector glyphs) are not notes
+                if (svgelement.style.pointerEvents !== 'none') {
+                    activityHoverTargets.notes.push(svgelement);
+                }
                 svgelement.addEventListener('dblclick', async () => {
                     lastclickedsvgelement = svgelement;
                     try {
@@ -1927,7 +1968,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
 
                 let rectcolor = ""
                 svgelement.addEventListener('mouseover', function() {
-                    processNoteLine(pumlcontent, svg, svgelement)
+                    markEditorForElement(activityElementRows, svgelement)
                     rectcolor = svgelement.getAttribute('fill')
                     svgelement.setAttribute('fill', '#d8d8d8')
                 });
@@ -1938,6 +1979,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
             }
 
             if (checkIfMergePoly(svgelements, index)) {
+                activityHoverTargets.merges.push(svgelement);
                 svgelement.addEventListener('contextmenu', function(e) {
                     lastclickedsvgelement = svgelement
                     e.preventDefault()
@@ -1949,7 +1991,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
 
                 let rectcolor = ""
                 svgelement.addEventListener('mouseover', function() {
-                    processMergeLine(pumlcontent, svg, svgelement)
+                    markEditorForElement(activityElementRows, svgelement)
                     rectcolor = svgelement.getAttribute('fill')
                     svgelement.setAttribute('fill', '#d8d8d8')
                 });
@@ -1961,6 +2003,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
             }
 
             if (checkIfGroup(svgelements, index)) {
+                activityHoverTargets.groups.push(svgelement);
                 //svgelement.setAttribute('fill', 'transparent') // on click works poorly if fill is 'none'
                 svgelement.addEventListener('dblclick', async () => {
                     lastclickedsvgelement = svgelements[index - 2];
@@ -2000,20 +2043,35 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
                     contextMenu.style.top = e.pageY + 'px';
                 });
 
-                let rectcolor = ""
+                let groupweight = null
                 svgelement.addEventListener('mouseenter', function() {
-                    processGroupLine(pumlcontent, svg, svgelements[index - 2])
-                    rectcolor = svgelement.getAttribute('fill')
-                    svgelement.setAttribute('fill', '#d8d8d8')
+                    markEditorForElement(activityElementRows, svgelement)
+                    groupweight = svgelement.getAttribute('font-weight')
+                    svgelement.setAttribute('font-weight', 'bold')
                 });
 
                 svgelement.addEventListener('mouseleave', function() {
-                    svgelement.setAttribute('fill', rectcolor)
+                    if (groupweight === null) {
+                        svgelement.removeAttribute('font-weight')
+                    } else {
+                        svgelement.setAttribute('font-weight', groupweight)
+                    }
                 });
             }
 
 
             if (checkIfEllipse(svgelements, index)) {
+                // Mirror svgtochunklistellipse: an "end" marker draws two
+                // concentric ellipses; the backend skips the first of the
+                // pair, so registration must too
+                const nextEllipse = svgelements[index + 1];
+                const isFirstOfEndPair = nextEllipse &&
+                    nextEllipse.tagName.toLowerCase() === 'ellipse' &&
+                    nextEllipse.getAttribute('cx') === svgelement.getAttribute('cx') &&
+                    nextEllipse.getAttribute('cy') === svgelement.getAttribute('cy');
+                if (!isFirstOfEndPair) {
+                    activityHoverTargets.ellipses.push(svgelement);
+                }
                 if (svgelement.getAttribute('fill') === 'none') {
                     svgelement.setAttribute('fill', 'transparent'); // changes background from none to make it clickable
                 }
@@ -2028,9 +2086,9 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
 
                 let ellipsecolor = ""
                 svgelement.addEventListener('mouseover', function() {
-                    processEllipseLine(pumlcontent, svg, svgelement)
+                    markEditorForElement(activityElementRows, svgelement)
                     ellipsecolor = svgelement.getAttribute('fill')
-                    svgelement.setAttribute('fill', '#818181 ')
+                    svgelement.setAttribute('fill', '#818181')
                 });
 
                 svgelement.addEventListener('mouseout', function() {
@@ -2040,6 +2098,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
             }
 
             if (checkIfConnector(svgelements, index)) {
+                activityHoverTargets.connectors.push(svgelement);
                 svgelement.addEventListener('dblclick', async () => {
                     lastclickedsvgelement = svgelement;
                     try {
@@ -2080,7 +2139,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
 
                 let ellipsecolor = ""
                 svgelement.addEventListener('mouseover', function() {
-                    processConnectorLine(pumlcontent, svg, svgelement)
+                    markEditorForElement(activityElementRows, svgelement)
                     ellipsecolor = svgelement.getAttribute('fill')
                     svgelement.setAttribute('fill', '#c2c2c2')
                 });
@@ -2093,7 +2152,10 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
 
             if (checkIfArrowLabel(svgelements, index)) {
                 let arrow = svgelements[index - 1]
+                let arrowLabelTexts = [];
+                activityHoverTargets.arrows.push(arrowLabelTexts);
                 while (index < svgelements.length && svgelements[index].tagName.toLowerCase() === 'text') {
+                    arrowLabelTexts.push(svgelements[index]);
                     svgelements[index].addEventListener('dblclick', async () => {
                         lastclickedsvgelement = arrow;
 
@@ -2157,16 +2219,20 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
                         contextMenu.style.top = e.pageY + 'px';
                     });
 
-                    let rectcolor = ""
+                    let arrowweight = null
                     let svgelement = svgelements[index]
                     svgelement.addEventListener('mouseenter', function() {
-                        processArrowLine(pumlcontent, svg, arrow)
-                        rectcolor = svgelement.getAttribute('fill')
-                        svgelement.setAttribute('fill', '#d8d8d8')
+                        markEditorForElement(activityElementRows, svgelement)
+                        arrowweight = svgelement.getAttribute('font-weight')
+                        svgelement.setAttribute('font-weight', 'bold')
                     });
 
                     svgelement.addEventListener('mouseleave', function() {
-                        svgelement.setAttribute('fill', rectcolor)
+                        if (arrowweight === null) {
+                            svgelement.removeAttribute('font-weight')
+                        } else {
+                            svgelement.setAttribute('font-weight', arrowweight)
+                        }
                     });
 
                     index++
@@ -2195,37 +2261,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
 
 
             if (checkIfTitleRect(svgelements, index)) {
-                svgelement.setAttribute('fill', 'transparent')
-                svgelement.setAttribute('style', '"stroke:#00000000;stroke-width:1.0;fill:transparent;"')
-
-                svgelement.addEventListener('dblclick', async () => {
-                    try {
-
-                        const response = await fetch("getTextTitle", {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                'plantuml': pumlcontent,
-                                'svg': svg.innerHTML,
-                                'svgelement': svgelement.outerHTML
-                            })
-                        });
-                        const text = await response.text();
-
-                        $('#title-text').val(text);
-                        $('#modalFormTitle').modal('show');
-                        $('#modalFormTitle').on('shown.bs.modal', function() {
-                            $('#title-text').trigger('focus')
-                        })
-
-                    } catch (error) {
-                        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-                    }
-
-
-                });
+                activityHoverTargets.title.push(svgelement);
 
                 svgelement.addEventListener('contextmenu', function(e) {
                     lastclickedsvgelement = svgelement
@@ -2239,7 +2275,7 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
 
                 let rectcolor = ""
                 svgelement.addEventListener('mouseenter', function() {
-                    processTitleLine(pumlcontent)
+                    markEditorForElement(activityElementRows, svgelement)
                     rectcolor = svgelement.getAttribute('fill')
                     svgelement.setAttribute('fill', '#e5e5e5')
                 });
@@ -2251,9 +2287,22 @@ async function setHandlersForActivityDiagram(pumlcontent, element) {
             }
             index++
         }
-        toggleLoadingOverlay()
+        // Make the diagram title double-click editable. Runs after the element
+        // walk so it can re-enable pointer events on the title text (the walk
+        // sets font-size text to pointer-events:none) and so it sees the final
+        // SVG. Handles both the old bounding-rect title and newer PlantUML's
+        // bold text-only title (see title.js).
+        setupTitleHandler(svgelements, svg, pumlcontent);
+        // After the walk so the svg sent reflects its mutations (e.g. the
+        // pointer-events flags note counting depends on)
+        await fetchActivityPositions();
+        hideLoadingOverlay()
 
     }).catch((error) => {
+        // Balance the showLoadingOverlay() from renderPlantUml on the error
+        // path too; otherwise the ref count leaks and wedges the overlay
+        // visible. Mutually exclusive with the success hide above.
+        hideLoadingOverlay();
         displayErrorMessage(`Error rendering SVG: ${error.message}`, error);
     });
 }
@@ -2324,13 +2373,6 @@ function checkIfMergePoly(svgelements, index) {
 function checkIfActivity(svgelements, index) {
     return (svgelements[index].tagName.toLowerCase() === 'rect') && parseFloat(svgelements[index].getAttribute('height')) > 6 &&
         (svgelements[index].getAttribute('style') == "stroke:#181818;stroke-width:0.5;")
-}
-
-function checkIfTitleRect(svgelements, index) {
-    if (svgelements[index]) {
-        return (svgelements[index].tagName.toLowerCase() === 'rect') && parseFloat(svgelements[index].getAttribute('height')) > 6 &&
-            (svgelements[index].getAttribute('style') == "stroke:#00000000;stroke-width:1.0;fill:none;")
-    }
 }
 
 function checkIfFork(svgelements, index) {
@@ -2641,287 +2683,4 @@ function labelForks(puml) {
 
     return queue;
 
-}
-
-async function processActivityLine(pumlcontent, svg, svgelement) {
-    try {
-        const response = await fetch("getActivityLine", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                'plantuml': pumlcontent,
-                'svg': svg.innerHTML,
-                'svgelement': svgelement.outerHTML
-            })
-        });
-        const data = await response.json();
-        number = data.result
-        getmarker(number)
-
-    } catch (error) {
-        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-    }
-
-
-}
-
-async function processNoteLine(pumlcontent, svg, svgelement) {
-    try {
-        const response = await fetch("getNoteLine", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                'plantuml': pumlcontent,
-                'svg': svg.innerHTML,
-                'svgelement': svgelement.outerHTML
-            })
-        });
-        const data = await response.json();
-        number = data.result
-        getmarker(number)
-
-    } catch (error) {
-        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-    }
-
-
-}
-
-async function processEllipseLine(pumlcontent, svg, svgelement) {
-    try {
-        const response = await fetch("getEllipseLine", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                'plantuml': pumlcontent,
-                'svg': svg.innerHTML,
-                'svgelement': svgelement.outerHTML
-            })
-        });
-
-        const data = await response.json();
-        number = data.result - 1
-        setEditorMarkers(number)
-
-    } catch (error) {
-        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-    }
-
-
-}
-
-async function processConnectorLine(pumlcontent, svg, svgelement) {
-    try {
-        const response = await fetch("getConnectorLine", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                'plantuml': pumlcontent,
-                'svg': svg.innerHTML,
-                'svgelement': svgelement.outerHTML
-            })
-        });
-
-        const data = await response.json();
-        number = data.result - 1
-        setEditorMarkers(number)
-
-    } catch (error) {
-        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-    }
-
-
-}
-
-async function processGroupLine(pumlcontent, svg, svgelement) {
-    try {
-        const response = await fetch("getGroupLine", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                'plantuml': pumlcontent,
-                'svg': svg.innerHTML,
-                'svgelement': svgelement.outerHTML
-            })
-        });
-
-        const data = await response.json();
-        number = data.result
-        setEditorMarkers(number)
-
-    } catch (error) {
-        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-    }
-
-
-}
-
-async function processIfLine(pumlcontent, svg, svgelement) {
-    try {
-        const response = await fetch("getIfLine", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                'plantuml': pumlcontent,
-                'svg': svg.innerHTML,
-                'svgelement': svgelement.outerHTML
-            })
-        });
-
-        const data = await response.json();
-        number = data.result
-        setEditorMarkers(number)
-
-    } catch (error) {
-        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-    }
-
-
-}
-
-async function processMergeLine(pumlcontent, svg, svgelement) {
-    try {
-        const response = await fetch("getMergeLine", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                'plantuml': pumlcontent,
-                'svg': svg.innerHTML,
-                'svgelement': svgelement.outerHTML
-            })
-        });
-
-        const data = await response.json();
-        number = data.result
-        setEditorMarkers(number)
-
-    } catch (error) {
-        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-    }
-
-
-}
-
-async function processWhileLine(pumlcontent, svg, svgelement) {
-    try {
-        const response = await fetch("getWhileLine", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                'plantuml': pumlcontent,
-                'svg': svg.innerHTML,
-                'svgelement': svgelement.outerHTML
-            })
-        });
-
-        const data = await response.json();
-        number = data.result
-        setEditorMarkers(number)
-
-    } catch (error) {
-        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-    }
-
-
-}
-
-async function processArrowLine(pumlcontent, svg, svgelement) {
-    try {
-        const response = await fetch("getArrowLine", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                'plantuml': pumlcontent,
-                'svg': svg.innerHTML,
-                'svgelement': svgelement.outerHTML
-            })
-        });
-
-        const data = await response.json();
-        number = data.result
-        setEditorMarkers(number)
-
-    } catch (error) {
-        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-    }
-
-}
-
-async function processTitleLine(pumlcontent) {
-    try {
-        const response = await fetch("getTitleLine", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                'plantuml': pumlcontent
-            })
-        });
-
-        const data = await response.json();
-        number = data.result
-        getmarker(number)
-
-    } catch (error) {
-        displayErrorMessage(`Error with fetch API: ${error.message}`, error);
-    }
-
-}
-
-function highlightActivity(svg, text) {
-    const rects = svg.getElementsByTagName("rect");
-
-    for (let i = 0; i < rects.length; i++) {
-        const rect = rects[i];
-
-        // Check if this is an "activity" rect using the check function
-        if (checkIfActivity(rects, i)) {
-            let combinedText = "";
-            let nextSibling = rect.nextElementSibling;
-
-            // Collect all subsequent nodes that are either <text> or <a> elements
-            while (nextSibling && (nextSibling.tagName === "text" || nextSibling.tagName === "a")) {
-                if (nextSibling.tagName === "text") {
-                    // If it's a text node, simply collect its text content
-                    combinedText += nextSibling.textContent + "\n";
-                } else if (nextSibling.tagName === "a") {
-                    // If it's an <a> tag, collect the link href and text content
-                    const href = nextSibling.getAttribute("href");
-                    const linkTextElement = nextSibling.querySelector("text");
-                    if (linkTextElement) {
-                        const linkText = linkTextElement.textContent;
-                        combinedText += `[[${href} ${linkText}]]`;
-                    }
-                }
-
-                // Move to the next sibling element
-                nextSibling = nextSibling.nextElementSibling;
-            }
-
-            // Compare the normalized text
-            if (combinedText.replace(/\s+/g, "") === text.replace(/\s+/g, "")) {
-                colorqueue.push(rect.getAttribute('fill'));
-                rect.setAttribute('fill', "#d8d8d8");
-            }
-        }
-    }
 }

@@ -28,6 +28,14 @@ Copyright (c) 2026 Ericsson
     gap: 2px;
 }
 
+/* ===== App Icon ===== */
+.app-icon {
+    width: 30px;
+    height: 30px;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
 /* ===== App Name ===== */
 .app-name {
     font-size: 16px;
