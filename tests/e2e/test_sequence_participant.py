@@ -136,6 +136,46 @@ class TestRenameParticipant:
         }""")
         assert result == "Rename Alice"
 
+    def test_enter_inserts_a_newline(self, app_url, page):
+        """The rename field is a <textarea>: a name can span several lines, and
+        the backend folds the newline into the literal \\n escape. Pressing Enter
+        inserts a real newline rather than submitting."""
+        page.evaluate("""() => {
+            editor.session.setValue("@startuml\\nparticipant Alice\\nparticipant Bob\\n@enduml");
+        }""")
+        page.wait_for_timeout(3000)
+
+        field = page.locator("#participant-name-text")
+        page.evaluate("""() => {
+            $('#participant-name-text').val('New');
+            $('#participant-name-modalForm').modal('show');
+        }""")
+        field.click()
+        # Put the caret at the end, then press Enter.
+        page.keyboard.press("End")
+        page.keyboard.press("Enter")
+
+        assert "\n" in field.input_value()
+
+    def test_enter_does_not_submit_the_rename(self, app_url, page):
+        """Enter now inserts a newline, so it must not trigger a submit. Only
+        Ctrl+Enter submits (handled globally, like the other modals)."""
+        page.evaluate("""() => {
+            editor.session.setValue("@startuml\\nparticipant Alice\\nparticipant Bob\\nAlice -> Bob: hi\\n@enduml");
+            window.__submitted = false;
+            $('#submit-participant-name').on('click', () => { window.__submitted = true; });
+        }""")
+        page.wait_for_timeout(3000)
+
+        page.evaluate("""() => {
+            $('#participant-name-text').val('Carol');
+            $('#participant-name-modalForm').modal('show');
+        }""")
+        page.locator("#participant-name-text").click()
+        page.keyboard.press("Enter")
+
+        assert page.evaluate("() => window.__submitted") is False
+
 
 class TestLifelineExtraction:
     def test_extract_lifeline_positions(self, app_url, page):

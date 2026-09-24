@@ -31,7 +31,7 @@ Enterprise developers and technical teams (primarily at Ericsson and similar com
 - Groups and partitions (partial support)
 
 ### Sequence Diagrams
-- Participants (add left/right, rename, delete with cascade)
+- **Participants** (add left/right, rename — including to a name with spaces, which generates an alias — delete with cascade)
 - Add messages between participants; edit message text and arrow color
 - Notes (add with a choice of type - Note, H Note, R Note; edit text, type, and background color; delete)
 - Activation bars (activate, deactivate, destroy participants)

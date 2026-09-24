@@ -49,23 +49,109 @@ ARROW_RE = re.compile(
     r"|[-\\/]+(?:\[#[^\]]*\])?[-\\/]*(?:>{1,2}|[xo])"  # ends with a head
 )
 
-# A participant declaration, capturing the name PlantUML renders in the SVG:
-# the quoted text when present (``participant "Long name" as A``), otherwise the
-# bare token (``participant Alice``). Trailing modifiers such as ``as A``,
-# ``order 10`` or a ``#color`` are left unmatched on purpose -- only the
-# displayed name is needed, because that is what the SVG gives us to match on.
+# A participant declaration, split into the parts a rename must treat
+# differently:
+#   name  -- the displayed name, which is what the SVG gives us to match on:
+#            the quoted text when present (``participant "Long name" as A``),
+#            otherwise the bare token (``participant Alice``)
+#   alias -- the ``as X`` token when present; this, not the displayed name, is
+#            what the diagram body refers to
+#   rest  -- everything after the name and alias (``order 10``, ``#lightblue``,
+#            ``<<stereotype>>``), captured verbatim so a rewrite never drops a
+#            modifier it does not understand
+
 PARTICIPANT_DECLARATION_RE = re.compile(
     r'^participant\s+(?:"(?P<quoted>[^"]*)"|(?P<bare>[^\s#]+))'
+    r'(?:\s+as\s+(?:"(?P<quoted_alias>[^"]*)"|(?P<bare_alias>[^\s#]+)))?'
+    r"(?P<rest>.*)$"
 )
 
 
-def _declared_participant_name(line: str) -> str | None:
-    """The displayed name a participant declaration introduces, if it is one."""
+@dataclass(frozen=True)
+class ParticipantDeclaration:
+    """The structural parts of a single participant declaration line."""
+
+    name: str
+    alias: str | None
+    rest: str
+    quoted: bool
+
+    @property
+    def reference_name(self) -> str:
+        """The token the diagram body uses to refer to this participant.
+
+        The alias when the declaration has one, otherwise the displayed name.
+        """
+        return self.alias or self.name
+
+
+def parse_participant_declaration(line: str) -> ParticipantDeclaration | None:
+    """Split a puml line into declaration parts, or None if it is not one."""
     match = PARTICIPANT_DECLARATION_RE.match(line.strip())
     if match is None:
         return None
     quoted = match.group("quoted")
-    return quoted if quoted is not None else match.group("bare")
+    alias = match.group("quoted_alias")
+    if alias is None:
+        alias = match.group("bare_alias")
+    return ParticipantDeclaration(
+        name=quoted if quoted is not None else match.group("bare"),
+        alias=alias,
+        rest=match.group("rest"),
+        quoted=quoted is not None,
+    )
+
+
+def participant_declarations(puml: str) -> List[tuple[int, ParticipantDeclaration]]:
+    """Every participant declaration in source order, with its line index."""
+    return [
+        (line_index, declaration)
+        for line_index, line in enumerate(puml.splitlines())
+        if (declaration := parse_participant_declaration(line)) is not None
+    ]
+
+
+# Escapes PlantUML breaks a label on. They differ only in line alignment.
+_LINE_BREAK_ESCAPE_RE = re.compile(r"\\[nrl]")
+
+
+def normalized_display_name(name: str) -> str:
+    """A displayed name reduced to the form two spellings of it share.
+
+    A name reaches us two ways that render alike but are written differently: the
+    puml declaration spells a break as ``\\n``, ``\\r`` or ``\\l``, while the SVG
+    records only that a break happened (so it comes back ``\\n``-joined, and a
+    source-empty line comes back as a single space). Unifying the escapes and
+    trimming each line makes the two comparable. For comparison only -- writers
+    keep the original spelling, since that goes back into the puml.
+    """
+    lines = _LINE_BREAK_ESCAPE_RE.split(name)
+    return "\\n".join(line.strip() for line in lines)
+
+
+def display_names_match(left: str, right: str) -> bool:
+    """Whether two spellings of a displayed name denote the same label."""
+    return normalized_display_name(left) == normalized_display_name(right)
+
+
+def contains_line_break(name: str) -> bool:
+    """Whether a displayed name carries a PlantUML line-break escape."""
+    return _LINE_BREAK_ESCAPE_RE.search(name) is not None
+
+
+def reference_name_for(puml: str, display_name: str) -> str:
+    """The token the diagram body uses for the participant shown as ``display_name``.
+
+    The frontend only knows a participant's *displayed* name, but the body must
+    refer to the alias when the declaration has one. Resolving here from the puml
+    alone keeps that translation in one place, usable without an SVG. Falls back
+    to the displayed name when there is no declaration or alias -- which is then
+    the correct token anyway.
+    """
+    for _line_index, declaration in participant_declarations(puml):
+        if display_names_match(declaration.name, display_name):
+            return declaration.reference_name
+    return display_name
 
 
 def is_message_line(line: str) -> bool:
@@ -97,6 +183,43 @@ def is_participant_rect(rect: Pq) -> bool:
     if (rect.attr("style") or "") != PARTICIPANT_RECT_STYLE:
         return False
     return rect.attr("rx") is not None and rect.attr("ry") is not None
+
+
+# Participant labels are drawn at font-size 14. Message and box-title text use
+# 13, and the one other thing drawn at 14 -- the diagram title -- is bold.
+_PARTICIPANT_LABEL_FONT_SIZE = "14"
+
+
+def _is_participant_label_text(element: Pq) -> bool:
+    """Whether an SVG element is one line of a participant header's label."""
+    if not element or element[0].tag != "text":
+        return False
+    return (
+        element.attr("font-size") == _PARTICIPANT_LABEL_FONT_SIZE
+        and element.attr("font-weight") != "bold"
+    )
+
+
+def participant_label(rect: Pq) -> str:
+    """The displayed name drawn inside a participant header rect.
+
+    PlantUML renders a name containing a line break (``participant "a\\nb" as
+    ab``) as one ``<text>`` sibling per line, so reading only the rect's
+    immediate next sibling would see just the first line -- leaving the
+    participant unmatchable against its declaration, and every operation on it
+    (rename, delete, add beside, hover) pointed at the wrong line or none.
+
+    The lines are rejoined with a literal ``\\n`` so the result is the same
+    escaped, single-line form the puml declaration uses. Which of PlantUML's
+    break escapes produced the break is not recoverable from the SVG; see
+    :func:`normalized_display_name` for how that is reconciled when matching.
+    """
+    lines: List[str] = []
+    sibling = rect.next()
+    while _is_participant_label_text(sibling):
+        lines.append(sibling.text() or "")
+        sibling = sibling.next()
+    return "\\n".join(lines)
 
 
 def participant_header_bounds(svg: Pq) -> List[Dict[str, float]]:
@@ -158,6 +281,22 @@ class Participant:
     x_origin: float = 0.0
     width: float = 0.0
     index: int = -1  # default
+    # The ``as X`` token of this participant's declaration, when it has one.
+    # Only ``name`` is readable from the SVG; the alias is filled in from the
+    # puml while attaching declaration lines (see _assign_participant_indexes).
+    alias: str | None = None
+
+    @property
+    def reference_name(self) -> str:
+        """The token the diagram body uses to refer to this participant.
+
+        Lines that mention a participant (messages, ``activate``, note
+        placement) must use the alias when the declaration has one, and the
+        displayed name otherwise. Writers should always build lines from this,
+        never from ``name``, or an aliased participant whose displayed name
+        contains spaces yields invalid puml.
+        """
+        return self.alias or self.name
 
     def contains_x(self, x_val: float) -> bool:
         return self.x_origin <= x_val <= self.x_origin + self.width
@@ -166,7 +305,7 @@ class Participant:
         return isinstance(other, Participant) and self.cx == other.cx
 
     @classmethod
-    def from_svg(cls, rect: Pq, text: Pq):
+    def from_svg(cls, rect: Pq):
         x = float(rect.attr("x"))
         y = float(rect.attr("y"))
         width = float(rect.attr("width"))
@@ -175,7 +314,7 @@ class Participant:
         cx = x + width / 2
         cy = y + height / 2
 
-        name = text.text()
+        name = participant_label(rect)
 
         return cls(name, cx, cy, x, width)
 
@@ -288,8 +427,7 @@ class Diagram:
         for rect in svg("rect").items():
             if not is_participant_rect(rect):
                 continue  # skip activation bars and other non-participant rects
-            text = rect.next()
-            participant = Participant.from_svg(rect, text)
+            participant = Participant.from_svg(rect)
 
             if participant.cx not in unique_participants:
                 unique_participants[participant.cx] = participant
@@ -299,6 +437,11 @@ class Diagram:
 
     def _assign_participant_indexes(self, puml: str):
         """Attach each participant to the puml line that declares it.
+
+        Also copies the declaration's alias onto the participant, so writers can
+        refer to it by ``reference_name``. The alias is not recoverable from the
+        SVG -- it renders the displayed name only -- so this is the one place the
+        two halves are joined.
 
         Matched by name, not by position. A participant can be introduced
         implicitly by a message (``Alice -> Bob: hi``) and then has no
@@ -313,19 +456,18 @@ class Diagram:
         there is no line to point at. Callers that need a real line must say so
         (see add_box).
         """
-        declarations = [
-            (line_index, name)
-            for line_index, line in enumerate(puml.splitlines())
-            if (name := _declared_participant_name(line)) is not None
-        ]
+        declarations = participant_declarations(puml)
 
         # Consume each declaration at most once, so repeated display names map
         # to distinct lines in diagram order rather than all to the first.
         claimed: set[int] = set()
         for participant in self.participants:
-            for position, (line_index, declared_name) in enumerate(declarations):
-                if position not in claimed and declared_name == participant.name:
+            for position, (line_index, declaration) in enumerate(declarations):
+                if position in claimed:
+                    continue
+                if display_names_match(declaration.name, participant.name):
                     participant.index = line_index
+                    participant.alias = declaration.alias
                     claimed.add(position)
                     break
 

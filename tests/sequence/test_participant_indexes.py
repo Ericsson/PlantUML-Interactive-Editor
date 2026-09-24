@@ -127,3 +127,66 @@ def test_participant_named_like_a_prefix_of_another():
 
     assert indexes["ab"] == 1
     assert indexes["a"] == 2
+
+
+def test_non_participant_keywords_are_not_rendered_as_participant_rects():
+    """`actor`, `database` and `queue` render as stick figures/cylinders, not the
+    rounded rect `is_participant_rect` looks for, so they never reach
+    `diagram.participants` and can never be clicked or renamed.
+
+    They are still parsed as *declarations* (see
+    test_participant_declarations.py), which is what keeps alias generation from
+    handing out an identifier one of them already owns.
+    """
+    puml = (
+        "@startuml\n"
+        "actor Customer\n"
+        "database Storage\n"
+        "queue Broker\n"
+        "participant Plain\n"
+        "Plain -> Plain: self\n"
+        "@enduml"
+    )
+
+    assert _participants(puml) == {"Plain": 4}
+
+
+def _aliases(puml):
+    """{name: alias} as reported for a real render of `puml`."""
+    svg = _create_svg_from_uml(puml)
+    inner = svg[svg.index(">", svg.index("<g")) + 1 : svg.rindex("</g>")]
+    diagram = Diagram.from_svg(inner, puml)
+    return {p.name: p.alias for p in diagram.participants}
+
+
+def test_alias_is_attached_from_the_declaration():
+    """The SVG renders the displayed name only, so the alias has to come from
+    the puml. Writers need it: a line built from the displayed name of an
+    aliased participant ("Long Name -> b") is invalid puml."""
+    puml = (
+        "@startuml\n"  # 0
+        'participant "Long Name" as L order 10 #red\n'  # 1
+        "participant b\n"  # 2
+        "L -> b: m\n"  # 3
+        "@enduml"  # 4
+    )
+
+    assert _aliases(puml) == {"Long Name": "L", "b": None}
+
+
+def test_reference_name_prefers_the_alias():
+    puml = (
+        "@startuml\n"
+        'participant "Long Name" as L\n'
+        "participant b\n"
+        "L -> b: m\n"
+        "@enduml"
+    )
+    svg = _create_svg_from_uml(puml)
+    inner = svg[svg.index(">", svg.index("<g")) + 1 : svg.rindex("</g>")]
+    diagram = Diagram.from_svg(inner, puml)
+
+    by_name = {p.name: p for p in diagram.participants}
+
+    assert by_name["Long Name"].reference_name == "L"
+    assert by_name["b"].reference_name == "b"

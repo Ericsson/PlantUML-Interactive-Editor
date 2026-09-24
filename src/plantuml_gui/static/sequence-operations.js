@@ -127,6 +127,9 @@ function handleContextMenuBackground(svgElement) {
 // --- Participant operation event listeners (rename, add, delete) ---
 
 function participantEventListeners() {
+    // The rename field is a <textarea>: Enter inserts a real newline (the
+    // backend folds it into the literal \n escape), Ctrl+Enter submits globally.
+
     // Submit renamed participant name
     $('#submit-participant-name').on('click', async () => {
         const element = document.getElementById('colb');
@@ -172,8 +175,10 @@ function participantEventListeners() {
                 })
             });
             const name = (await response.json()).name;
+            // Show the stored \n escape as a real newline for editing.
+            const displayName = name.replace(/\\n/g, '\n');
             $('#participant-name-modalForm .modal-title').text('Rename ' + name);
-            $('#participant-name-text').val(name);
+            $('#participant-name-text').val(displayName);
             $('#participant-name-modalForm').modal('show');
             $('#participant-name-modalForm').on('shown.bs.modal', function() {
                 $('#participant-name-text').trigger('focus');

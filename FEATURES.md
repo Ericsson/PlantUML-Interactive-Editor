@@ -64,7 +64,7 @@ but adding them to the PlantUML code should still work.
 
 - Participants
   - Add participant (left or right of existing)
-  - Rename participant
+  - Rename participant, including to a name containing spaces: the participant is given a short alias automatically (`participant "Space Room" as SpaceRoom`) and the messages, notes and activations that refer to it are updated to match. Renaming a participant that already has an alias changes only its label. Text that merely mentions the old name (message text, note bodies) is left untouched
   - Delete participant (cascades to messages)
 - Messages
   - Add message between participants (hover lifeline → right-click → ghost arrow → click destination)

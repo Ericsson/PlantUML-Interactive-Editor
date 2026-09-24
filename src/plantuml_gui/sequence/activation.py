@@ -35,7 +35,7 @@ from typing import List, Optional, Tuple
 
 from pyquery import PyQuery as Pq
 
-from .classes import Diagram, Message, Participant
+from .classes import Diagram, Message, Participant, reference_name_for
 
 
 def add_activation(
@@ -57,16 +57,21 @@ def add_activation(
 
     The closing line is inserted first (it sits at a greater-or-equal line
     index), then the ``activate`` line, so the start insertion index stays valid.
+
+    ``participant_name`` is the *displayed* name, which is all the frontend
+    knows; it is resolved to the alias the diagram body uses, since a displayed
+    name may contain spaces and would be invalid here.
     """
     keyword = "destroy" if end_type == "destroy" else "deactivate"
+    reference = reference_name_for(puml, participant_name)
 
     lines = puml.splitlines()
 
     # Insert the closing line after the end message, then the opening line after
     # the start message. Inserting the (lower) end line first keeps the start
     # insertion index valid.
-    lines.insert(end_index + 1, f"{keyword} {participant_name}")
-    lines.insert(start_index + 1, f"activate {participant_name}")
+    lines.insert(end_index + 1, f"{keyword} {reference}")
+    lines.insert(start_index + 1, f"activate {reference}")
     return "\n".join(lines)
 
 
@@ -134,7 +139,9 @@ def delete_activation(puml: str, svg: str, svgelement: str) -> str:
     lines = puml.splitlines()
     best: Optional[Tuple[int, int]] = None
     best_distance = float("inf")
-    for activate_line, close_line, level in _activation_pairs(lines, participant.name):
+    for activate_line, close_line, level in _activation_pairs(
+        lines, participant.reference_name
+    ):
         expected_top = _message_cy_above(diagram.messages, activate_line)
         if expected_top is None:
             continue
