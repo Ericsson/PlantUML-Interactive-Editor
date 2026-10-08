@@ -59,11 +59,18 @@ ARROW_RE = re.compile(
 #   rest  -- everything after the name and alias (``order 10``, ``#lightblue``,
 #            ``<<stereotype>>``), captured verbatim so a rewrite never drops a
 #            modifier it does not understand
+#
+# ``rest`` is deliberately left unanchored: a trailing ``$`` would be redundant
+# on the single lines this is fed (greedy ``.*`` already runs to the end), but it
+# would give the pattern a tail that can fail. On a name holding a newline the
+# engine would then retry ``.*`` at every position it can backtrack ``[^\s#]+``
+# to, which is quadratic in the name's length. Without the anchor the tail always
+# succeeds on first try, so no backtracking is possible.
 
 PARTICIPANT_DECLARATION_RE = re.compile(
     r'^participant\s+(?:"(?P<quoted>[^"]*)"|(?P<bare>[^\s#]+))'
     r'(?:\s+as\s+(?:"(?P<quoted_alias>[^"]*)"|(?P<bare_alias>[^\s#]+)))?'
-    r"(?P<rest>.*)$"
+    r"(?P<rest>.*)"
 )
 
 
