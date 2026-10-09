@@ -109,10 +109,3 @@ def delete_group(puml, svg, clickedelement):
     del lines[group_start]
     del lines[group_end - 1]
     return "\n".join(lines)
-
-
-def get_group_line(puml, svg, clickedelement):
-    lines = puml.splitlines()
-    count = group_count(svg, clickedelement)
-    group_start, group_end = find_group_bounds(lines, count)
-    return group_start, group_end

@@ -326,28 +326,3 @@ detach
 :Activity;
 @endumll"""
             assert response.data.decode("utf-8") == expected_puml
-
-    def test_get_connector_line(self, client):
-        test_data = {
-            "plantuml": """@startuml
-:Activity;
-(A)
-detach
-@endumll""",
-            "svg": """<rect fill="#F1F1F1" height="33.9688" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="63" x="11" y="11"></rect><text fill="#000000" font-family="sans-serif" font-size="12" lengthAdjust="spacing" textLength="43" x="21" y="31.9688" style="pointer-events: none;">Activity</text><ellipse cx="42.5" cy="74.9688" fill="#F1F1F1" rx="10" ry="10" style="stroke:#181818;stroke-width:0.5;"></ellipse><path d="M42.6094,71.1406 L41,75.4844 L44.2188,75.4844 L42.6094,71.1406 Z M41.9375,69.9688 L43.2813,69.9688 L46.6094,78.7188 L45.375,78.7188 L44.5781,76.4688 L40.6406,76.4688 L39.8438,78.7188 L38.5938,78.7188 L41.9375,69.9688 Z " fill="#000000" style="pointer-events: none;"></path><line style="stroke: rgb(24, 24, 24); stroke-width: 1; pointer-events: none;" x1="42.5" x2="42.5" y1="44.9688" y2="64.9688"></line><polygon fill="#181818" points="38.5,54.9688,42.5,64.9688,46.5,54.9688,42.5,58.9688" style="stroke:#181818;stroke-width:1.0;"></polygon>""",
-            "svgelement": """<ellipse cx="42.5" cy="74.9688" fill="#F1F1F1" rx="10" ry="10" style="stroke:#181818;stroke-width:0.5;"></ellipse>""",
-        }
-        with client:
-            response = client.post(
-                "/getConnectorLine",
-                data=json.dumps(test_data),
-                content_type="application/json",
-            )
-            response_json = json.loads(response.data.decode("utf-8"))
-            result_value = response_json.get("result")
-
-            # Expected value
-            expected_puml = 3
-
-            # Assert the result value is as expected
-            assert result_value == expected_puml

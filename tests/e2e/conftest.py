@@ -16,7 +16,12 @@ def live_server():
     port = _get_free_port()
     thread = threading.Thread(
         target=app.run,
-        kwargs={"host": "127.0.0.1", "port": port, "use_reloader": False},
+        kwargs={
+            "host": "127.0.0.1",
+            "port": port,
+            "use_reloader": False,
+            "threaded": True,
+        },
         daemon=True,
     )
     thread.start()

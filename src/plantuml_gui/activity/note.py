@@ -95,13 +95,6 @@ def delete_note(puml, svg, clickedelement):
     return "\n".join(lines)
 
 
-def get_note_line(puml, svg, clickedelement):
-    lines = puml.splitlines()
-    count = note_count(svg, clickedelement)
-    note_start, note_end = find_note_bounds(lines, count)
-    return note_start, note_end
-
-
 def note_toggle(puml, svg, clickedelement):
     lines = puml.splitlines()
     count = note_count(svg, clickedelement)
