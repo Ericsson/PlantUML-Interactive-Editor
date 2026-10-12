@@ -45,8 +45,8 @@ PARTICIPANT_RECT_STYLE = "stroke:#181818;stroke-width:0.5;"
 # cannot drift apart. classes.py imports nothing from the package, so message.py
 # importing this back is cycle-free.
 ARROW_RE = re.compile(
-    r"<{1,2}[-\\/]*(?:\[#[^\]]*\])?[-\\/]*(?:>{1,2}|[xo])?"  # starts with '<'
-    r"|[-\\/]+(?:\[#[^\]]*\])?[-\\/]*(?:>{1,2}|[xo])"  # ends with a head
+    r"<{1,2}[-\\/]*(?:\[#[^\[\]]*\][-\\/]*)?(?:>{1,2}|[xo])?"  # starts with '<'
+    r"|(?<![-\\/])[-\\/]+(?:\[#[^\[\]]*\][-\\/]*)?(?:>{1,2}|[xo])"  # ends with a head
 )
 
 # A participant declaration, split into the parts a rename must treat
