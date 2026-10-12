@@ -63,7 +63,7 @@ ARROW_RE = re.compile(
 PARTICIPANT_DECLARATION_RE = re.compile(
     r'^participant\s+(?:"(?P<quoted>[^"]*)"|(?P<bare>[^\s#]+))'
     r'(?:\s+as\s+(?:"(?P<quoted_alias>[^"]*)"|(?P<bare_alias>[^\s#]+)))?'
-    r"(?P<rest>.*)$"
+    r"(?P<rest>.*)"
 )
 
 

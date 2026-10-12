@@ -30,6 +30,8 @@ refers to), and must hand back every modifier it did not touch. These tests pin
 that split down for each declaration form PlantUML accepts.
 """
 
+import time
+
 import pytest
 from plantuml_gui.sequence.classes import (
     parse_participant_declaration,
@@ -128,6 +130,26 @@ class TestParseParticipantDeclaration:
     )
     def test_non_declarations_return_none(self, line):
         assert parse_participant_declaration(line) is None
+
+    def test_a_long_name_holding_a_newline_parses_in_linear_time(self):
+        """Regression: the pattern used to end in an anchored `.*$`, a tail that
+        can fail. A newline in the name made it fail, and the engine then retried
+        the tail at every position it could backtrack the name repetition to --
+        quadratic in the name's length (CodeQL py/polynomial-redos).
+
+        No caller can pass a newline today, since both split the puml into lines
+        first, so the timing here guards the pattern rather than a live path.
+        Doubling the length must not quadruple the work; the bound is loose
+        enough to survive a slow machine but far below the ~0.4s the anchored
+        pattern took at this size.
+        """
+        line = "participant " + "!" * 8000 + "\nx"
+
+        start = time.perf_counter()
+        parse_participant_declaration(line)
+        elapsed = time.perf_counter() - start
+
+        assert elapsed < 0.1
 
 
 class TestParticipantDeclarations:

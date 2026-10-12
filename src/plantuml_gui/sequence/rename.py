@@ -97,7 +97,7 @@ _REF_RE = re.compile(
 # PlantUML's inline activation shorthand on a message endpoint (``A -> B++``).
 # Stripped before comparing the endpoint, then put back, so the participant is
 # still recognized and the shorthand survives.
-_ENDPOINT_SHORTHAND_RE = re.compile(r"[+\-*!]+$")
+_ENDPOINT_SHORTHAND_CHARS = "+-*!"
 
 
 def _pascal_case(name: str) -> str:
@@ -175,11 +175,11 @@ def _rewritten_target_list(targets: str, spellings: set[str], new_token: str) ->
 
 def _rewritten_endpoint(endpoint: str, spellings: set[str], new_token: str) -> str:
     """Replace one side of a message arrow, preserving activation shorthand."""
-    shorthand = _ENDPOINT_SHORTHAND_RE.search(endpoint.rstrip())
-    if shorthand is None:
+    stripped = endpoint.rstrip()
+    without_suffix = stripped.rstrip(_ENDPOINT_SHORTHAND_CHARS)
+    suffix = stripped[len(without_suffix) :]
+    if not suffix:
         return _rewritten_target(endpoint, spellings, new_token)
-    suffix = shorthand.group(0)
-    without_suffix = endpoint[: endpoint.rindex(suffix)]
     return f"{_rewritten_target(without_suffix, spellings, new_token)}{suffix}"
 
 
