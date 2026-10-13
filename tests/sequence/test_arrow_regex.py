@@ -22,15 +22,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""ARROW_RE: what it matches, and that it stays linear on hostile input."""
+"""find_arrow: what it finds, and that it stays linear on hostile input."""
 
 import time
 
 import pytest
-from plantuml_gui.sequence.classes import ARROW_RE
+from plantuml_gui.sequence.classes import find_arrow
 
 
-class TestArrowRegex:
+class TestFindArrow:
     @pytest.mark.parametrize(
         ("head", "arrow"),
         [
@@ -44,16 +44,23 @@ class TestArrowRegex:
             ("A <-[#blue]- B", "<-[#blue]-"),
             ("A -x B", "-x"),
             ("A -o B", "-o"),
+            ("Web-Server -> Db", "->"),
+            ("a<b", "<"),
+            ("-<-", "<-"),
         ],
     )
-    def test_matches_the_arrow(self, head, arrow):
-        match = ARROW_RE.search(head)
-        assert match is not None
-        assert match.group(0) == arrow
+    def test_finds_the_arrow(self, head, arrow):
+        span = find_arrow(head)
+        assert span is not None
+        start, end = span
+        assert head[start:end] == arrow
+        assert start == head.index(arrow)
 
-    @pytest.mark.parametrize("head", ["Web-Server", "A B", "-", "---", ""])
-    def test_does_not_match_a_non_arrow(self, head):
-        assert ARROW_RE.search(head) is None
+    @pytest.mark.parametrize(
+        "head", ["Web-Server", "A B", "-", "---", "", "-[#red", "-[#a[#b]>"]
+    )
+    def test_does_not_find_a_non_arrow(self, head):
+        assert find_arrow(head) is None
 
     @pytest.mark.parametrize(
         "hostile",
@@ -72,7 +79,7 @@ class TestArrowRegex:
             "dash-color-tail",
         ],
     )
-    def test_hostile_input_is_matched_in_linear_time(self, hostile):
+    def test_hostile_input_is_searched_in_linear_time(self, hostile):
         """Regression (CodeQL py/polynomial-redos): a run of dashes without an
         arrow head used to be retried from every start position and split
         between two adjacent dash classes, so the work grew cubically (~2.5s at
@@ -80,7 +87,7 @@ class TestArrowRegex:
         what the old pattern needed at this size.
         """
         start = time.perf_counter()
-        ARROW_RE.search(hostile)
+        find_arrow(hostile)
         elapsed = time.perf_counter() - start
 
         assert elapsed < 0.5

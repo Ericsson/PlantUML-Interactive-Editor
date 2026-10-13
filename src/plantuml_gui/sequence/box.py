@@ -47,6 +47,7 @@ from typing import Dict, List
 from pyquery import PyQuery as Pq
 
 from .classes import participant_header_bounds, rect_encloses
+from .errors import EditError
 
 # Style PlantUML gives box rects. Shared verbatim with participant headers and
 # rnotes; see the module docstring for how the three are told apart.
@@ -111,9 +112,7 @@ def _needs_teoz_or_raise(spans: List[tuple[int, int]], start: int, end: int) -> 
         if new_contains or existing_contains:
             needs_teoz = True
         else:
-            raise ValueError(
-                "Box overlaps an existing box. Boxes may nest but not cross."
-            )
+            raise EditError("box_crosses_box")
     return needs_teoz
 
 
@@ -147,10 +146,7 @@ def add_box(puml: str, title: str, color: str, start_index: int, end_index: int)
     lands inside out, with ``end box`` above ``@startuml``.
     """
     if start_index < 0 or end_index < 0:
-        raise ValueError(
-            "A participant can only be put in a box if it is declared on its "
-            'own line. Add a "participant" line for it first.'
-        )
+        raise EditError("box_participant_undeclared")
 
     start = min(start_index, end_index)
     end = max(start_index, end_index)

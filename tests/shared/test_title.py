@@ -156,3 +156,22 @@ endtitle
             expected_result = """Placeholder Title
 Hello"""
             assert response.data.decode("utf-8") == expected_result
+
+
+class TestTitleResponsesArePlainText:
+    """Title routes echo puml text, so they must never be served as HTML."""
+
+    def test_title_routes_return_text_plain(self, client):
+        payload = {"plantuml": "@startuml\ntitle\n<b>x</b>\nendtitle\n@enduml"}
+        calls = {
+            "/addTitle": payload,
+            "/getTextTitle": payload,
+            "/editTitle": {**payload, "title": "<script>alert(1)</script>"},
+            "/deleteTitle": payload,
+        }
+        for url, data in calls.items():
+            response = client.post(
+                url, data=json.dumps(data), content_type="application/json"
+            )
+            assert response.status_code == 200, url
+            assert response.mimetype == "text/plain", url

@@ -26,6 +26,7 @@ from flask import Blueprint, jsonify, request
 
 from .activation import add_activation, delete_activation
 from .box import add_box, delete_box, edit_box, get_box_label
+from .errors import user_message
 from .group import add_group, delete_group, get_group_label, rename_group
 from .message import (
     add_message,
@@ -246,7 +247,7 @@ def addgroup():
             puml, group_type, label, start_message_index, end_message_index
         )
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": user_message(e)}), 400
     return jsonify({"plantuml": result})
 
 
@@ -290,7 +291,7 @@ def addbox():
     try:
         result = add_box(puml, title, color, start_index, end_index)
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": user_message(e)}), 400
     return jsonify({"plantuml": result})
 
 

@@ -33,7 +33,7 @@ from pyquery import PyQuery as Pq  # pragma: no cover
 # Matches the identification used by the frontend's checkIfParticipant.
 PARTICIPANT_RECT_STYLE = "stroke:#181818;stroke-width:0.5;"
 
-# A message arrow, matched so its optional embedded color bracket can be read or
+# A message arrow, found so its optional embedded color bracket can be read or
 # rewritten. The arrow either starts with ``<`` (a reverse/bidirectional head)
 # or ends with a head (``>``, ``x`` or ``o``); either way it contains at least
 # one dash. Requiring a head keeps a lone ``-`` inside a participant name (e.g.
@@ -44,10 +44,44 @@ PARTICIPANT_RECT_STYLE = "stroke:#181818;stroke-width:0.5;"
 # below) and message.py's color read/rewrite share one arrow definition and
 # cannot drift apart. classes.py imports nothing from the package, so message.py
 # importing this back is cycle-free.
-ARROW_RE = re.compile(
-    r"<{1,2}[-\\/]*(?:\[#[^\[\]]*\][-\\/]*)?(?:>{1,2}|[xo])?"  # starts with '<'
-    r"|(?<![-\\/])[-\\/]+(?:\[#[^\[\]]*\][-\\/]*)?(?:>{1,2}|[xo])"  # ends with a head
+_ARROW_CHARS = "-\\/"
+# An arrow that starts with ``<``, matched from that ``<``.
+_REVERSE_ARROW_RE = re.compile(
+    r"<{1,2}[-\\/]*(?:\[#[^\[\]]*\][-\\/]*)?(?:>{1,2}|[xo])?"
 )
+# What must follow a run of dashes for the run to be an arrow: an optional
+# color token (with more dashes after it) and then a head.
+_ARROW_HEAD_RE = re.compile(r"(?:\[#[^\[\]]*\][-\\/]*)?(?:>{1,2}|[xo])")
+
+
+def find_arrow(text: str) -> tuple[int, int] | None:
+    """Return the ``(start, end)`` span of the leftmost arrow in ``text``.
+
+    Returns ``None`` if ``text`` holds no arrow. The run of dashes that opens a
+    head-ended arrow is walked here rather than matched by a regex: a pattern
+    of the form ``[-\\/]+`` followed by a required head is retried from every
+    dash of a headless run, which is quadratic unless the pattern is anchored
+    to the start of the run, and CodeQL (``py/polynomial-redos``) reports it
+    even when it is. Each character is visited once, so hostile input such as
+    thousands of dashes stays linear.
+    """
+    run_start = None
+    for pos, char in enumerate(text):
+        if char in _ARROW_CHARS:
+            if run_start is None:
+                run_start = pos
+            continue
+        if run_start is not None:
+            head = _ARROW_HEAD_RE.match(text, pos)
+            if head:
+                return run_start, head.end()
+            run_start = None
+        if char == "<":
+            reverse = _REVERSE_ARROW_RE.match(text, pos)
+            if reverse:
+                return reverse.span()
+    return None
+
 
 # A participant declaration, split into the parts a rename must treat
 # differently:
@@ -160,19 +194,20 @@ def is_message_line(line: str) -> bool:
     The arrow always precedes the ``": "`` text separator, so only the part
     before the first colon is inspected. Reverse (``<-``), bidirectional
     (``<->``), dotted, self, and colored (``-[#red]>``) arrows are all matched
-    via :data:`ARROW_RE`.
+    via :func:`find_arrow`.
 
     Requiring a real dash in the matched arrow rejects two look-alikes:
     non-message lines whose free text happens to contain a ``<`` before a colon
-    (e.g. a group label ``alt <size:12>...``), which :data:`ARROW_RE` would
+    (e.g. a group label ``alt <size:12>...``), which :func:`find_arrow` would
     otherwise match as a bare ``<``; and notes/labels that carry their arrow
     only after the colon.
     """
     colon_pos = line.find(":")
     if colon_pos == -1:
         return False
-    match = ARROW_RE.search(line[:colon_pos])
-    return match is not None and "-" in match.group(0)
+    head = line[:colon_pos]
+    span = find_arrow(head)
+    return span is not None and "-" in head[span[0] : span[1]]
 
 
 def is_participant_rect(rect: Pq) -> bool:
