@@ -33,6 +33,8 @@ from typing import Dict, List
 
 from pyquery import PyQuery as Pq
 
+from .errors import EditError
+
 VALID_GROUP_TYPES = ("group", "alt", "opt", "loop")
 
 
@@ -50,13 +52,11 @@ def add_group(
     inserted before the earlier message and the closing ``end`` line is inserted
     after the later message.
 
-    Raises ``ValueError`` if ``group_type`` is not one of the valid keywords.
+    Raises ``EditError`` (a ``ValueError``) if ``group_type`` is not one of the
+    valid keywords.
     """
     if group_type not in VALID_GROUP_TYPES:
-        raise ValueError(
-            f"Invalid group type '{group_type}'. "
-            f"Must be one of: {', '.join(VALID_GROUP_TYPES)}"
-        )
+        raise EditError("invalid_group_type")
 
     # Normalize so start <= end (user may have selected bottom-to-top)
     start = min(start_message_index, end_message_index)

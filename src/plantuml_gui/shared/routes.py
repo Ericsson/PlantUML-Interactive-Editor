@@ -27,7 +27,7 @@ import io
 import os
 from functools import lru_cache
 
-from flask import Blueprint, jsonify, render_template, request, send_file
+from flask import Blueprint, Response, jsonify, render_template, request, send_file
 
 from ..__about__ import __version__
 from .parse_changelog import parse_changelog
@@ -124,6 +124,17 @@ def changelog():
     return jsonify(parse_changelog())
 
 
+def _plain_text(text: str) -> Response:
+    """Return ``text`` as ``text/plain``.
+
+    Flask serves a bare ``str`` as ``text/html``, so puml text echoed back from
+    the request would be rendered as markup if a browser ever opened the URL
+    directly (CodeQL ``py/reflective-xss``). The editor reads these responses
+    with ``response.text()``, so the body is unchanged.
+    """
+    return Response(text, mimetype="text/plain")
+
+
 # Diagram title routes. The title block (title ... endtitle) is diagram-agnostic
 # puml, edited the same way for activity and sequence diagrams, so these live in
 # the shared blueprint. URLs are unchanged from when they lived on activity_bp
@@ -132,14 +143,14 @@ def changelog():
 def addtitle():
     data = request.get_json()
     puml = data["plantuml"]
-    return add_title(puml)
+    return _plain_text(add_title(puml))
 
 
 @shared_bp.route("/getTextTitle", methods=["POST"])
 def gettexttile():
     data = request.get_json()
     puml = data["plantuml"]
-    return get_title_text(puml)
+    return _plain_text(get_title_text(puml))
 
 
 @shared_bp.route("/editTitle", methods=["POST"])
@@ -147,11 +158,11 @@ def edittitle():
     data = request.get_json()
     puml = data["plantuml"]
     title = data["title"]
-    return edit_title_text(puml, title)
+    return _plain_text(edit_title_text(puml, title))
 
 
 @shared_bp.route("/deleteTitle", methods=["POST"])
 def deletetitle():
     data = request.get_json()
     puml = data["plantuml"]
-    return delete_title(puml)
+    return _plain_text(delete_title(puml))

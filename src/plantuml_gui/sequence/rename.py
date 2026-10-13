@@ -44,9 +44,9 @@ import html
 import re
 
 from .classes import (
-    ARROW_RE,
     Participant,
     contains_line_break,
+    find_arrow,
     parse_participant_declaration,
     participant_declarations,
 )
@@ -197,13 +197,17 @@ def _rewritten_message_line(
     head = line if colon == -1 else line[:colon]
     tail = "" if colon == -1 else line[colon:]
 
-    arrow = ARROW_RE.search(head)
-    if arrow is None or "-" not in arrow.group(0):
+    span = find_arrow(head)
+    if span is None:
+        return None
+    start, end = span
+    arrow = head[start:end]
+    if "-" not in arrow:
         return None
 
-    sender = _rewritten_endpoint(head[: arrow.start()], spellings, new_token)
-    receiver = _rewritten_endpoint(head[arrow.end() :], spellings, new_token)
-    return f"{sender}{arrow.group(0)}{receiver}{tail}"
+    sender = _rewritten_endpoint(head[:start], spellings, new_token)
+    receiver = _rewritten_endpoint(head[end:], spellings, new_token)
+    return f"{sender}{arrow}{receiver}{tail}"
 
 
 def _rewritten_line(line: str, spellings: set[str], new_token: str) -> str:

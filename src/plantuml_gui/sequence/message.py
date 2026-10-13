@@ -27,7 +27,7 @@ from typing import Dict, List
 
 from pyquery import PyQuery as Pq
 
-from .classes import ARROW_RE, Diagram, Participant
+from .classes import Diagram, Participant, find_arrow
 from .util import (
     escape_multiline_text,
     find_insertion_index,
@@ -165,15 +165,15 @@ def index_of_clicked_message(svg: str, svgelement: str) -> int:
 def _arrow_color_from_line(line: str) -> str:
     """Extract a message's arrow color from its puml line (``""`` if none).
 
-    Uses the shared ``ARROW_RE`` (defined in ``classes.py``) so message-line
+    Uses the shared ``find_arrow`` (defined in ``classes.py``) so message-line
     detection and color read/rewrite recognize the exact same arrow shapes.
     """
     colon_pos = line.find(": ")
     prefix = line[:colon_pos] if colon_pos != -1 else line
-    match = ARROW_RE.search(prefix)
-    if not match:
+    span = find_arrow(prefix)
+    if not span:
         return ""
-    color_match = re.search(r"\[#([^\]]+)\]", match.group(0))
+    color_match = re.search(r"\[#([^\[\]]+)\]", prefix[span[0] : span[1]])
     return color_match.group(1) if color_match else ""
 
 
@@ -185,7 +185,7 @@ def _apply_arrow_color(arrow: str, color: str) -> str:
     is PlantUML's canonical placement (``->`` -> ``-[#red]>``, ``-->`` ->
     ``-[#red]->``, ``<->`` -> ``<-[#red]->``).
     """
-    arrow = re.sub(r"\[#[^\]]*\]", "", arrow)
+    arrow = re.sub(r"\[#[^\[\]]*\]", "", arrow)
     if not color:
         return arrow
     dash = arrow.find("-")
@@ -196,11 +196,12 @@ def _apply_arrow_color(arrow: str, color: str) -> str:
 
 def _set_arrow_color(prefix: str, color: str) -> str:
     """Rewrite the arrow color in a message line's pre-``": "`` prefix."""
-    match = ARROW_RE.search(prefix)
-    if not match:
+    span = find_arrow(prefix)
+    if not span:
         return prefix
-    new_arrow = _apply_arrow_color(match.group(0), color)
-    return prefix[: match.start()] + new_arrow + prefix[match.end() :]
+    start, end = span
+    new_arrow = _apply_arrow_color(prefix[start:end], color)
+    return prefix[:start] + new_arrow + prefix[end:]
 
 
 def _clicked_message_line(puml: str, svg: str, svgelement: str) -> str | None:
