@@ -6,6 +6,13 @@
 
 Welcome to PlantUML Interactive Editor! This application is designed to provide an intuitive and interactive environment for editing PlantUML code and generating diagrams in real-time. Whether you're creating a huge activity diagram or a single while loop, our tool streamlines the process, allowing you to focus on design rather than syntax.
 
+Interactive editing is supported for both **activity diagrams** and **sequence (signaling) diagrams**.
+
+The editor is available in two forms:
+
+- **Web application**: run the server locally and edit in the browser (see below)
+- **VS Code extension**: edit PlantUML files interactively in a panel beside the code, with every change written back into the document. See the [extension README](./plantuml-extension/README.md) for installation and details
+
 </td>
 <td width="96">
 
@@ -19,7 +26,7 @@ Welcome to PlantUML Interactive Editor! This application is designed to provide 
 
 With PlantUML Interactive Editor, you can:
 
-- Edit PlantUML activity diagrams by directly interacting with the diagram
+- Edit PlantUML activity and sequence diagrams by directly interacting with the diagram
 - Also change the diagram by editing the PlantUML code, just like other PlantUML editors, allowing you to choose code or interactive editing depending on what is easier in the moment
 - Instantly preview diagrams as you type
 - Easily share the created diagram
