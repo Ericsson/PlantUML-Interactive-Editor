@@ -116,31 +116,6 @@ endtitle
 @enduml"""
             assert response.data.decode("utf-8") == expected_result
 
-    def test_gettitleline(self, client):
-        test_data = {
-            "plantuml": """@startuml
-title
-Placeholder Title
-Hello
-endtitle
-:Activity 1;
-@enduml"""
-        }
-        with client:
-            response = client.post(
-                "/getTitleLine",
-                data=json.dumps(test_data),
-                content_type="application/json",
-            )
-            response_json = json.loads(response.data.decode("utf-8"))
-            result_value = response_json.get("result")
-
-            # Expected value
-            expected_result = [1, 4]
-
-            # Assert the result value is as expected
-            assert result_value == expected_result
-
     def test_deletetitle(self, client):
         test_data = {
             "plantuml": """@startuml
@@ -181,3 +156,22 @@ endtitle
             expected_result = """Placeholder Title
 Hello"""
             assert response.data.decode("utf-8") == expected_result
+
+
+class TestTitleResponsesArePlainText:
+    """Title routes echo puml text, so they must never be served as HTML."""
+
+    def test_title_routes_return_text_plain(self, client):
+        payload = {"plantuml": "@startuml\ntitle\n<b>x</b>\nendtitle\n@enduml"}
+        calls = {
+            "/addTitle": payload,
+            "/getTextTitle": payload,
+            "/editTitle": {**payload, "title": "<script>alert(1)</script>"},
+            "/deleteTitle": payload,
+        }
+        for url, data in calls.items():
+            response = client.post(
+                url, data=json.dumps(data), content_type="application/json"
+            )
+            assert response.status_code == 200, url
+            assert response.mimetype == "text/plain", url

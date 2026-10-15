@@ -34,6 +34,16 @@ html, body {
     overflow: hidden;
 }
 
+.left-pane.collapsed {
+    min-width: 0;
+}
+
+.left-pane.collapsed .code-toolbar,
+.left-pane.collapsed #editor {
+    opacity: 0;
+    pointer-events: none;
+}
+
 .right-pane {
     display: flex;
     flex-direction: column;
@@ -43,6 +53,7 @@ html, body {
 }
 
 .divider {
+    position: relative;
     width: var(--divider-width);
     background: var(--border-color);
     cursor: col-resize;
@@ -53,4 +64,38 @@ html, body {
 .divider:hover,
 .divider.dragging {
     background: var(--accent-text);
+}
+
+.divider-toggle {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-btn);
+    background: var(--panel-bg);
+    color: var(--text-secondary);
+    box-shadow: var(--panel-shadow);
+    cursor: pointer;
+}
+
+.divider-toggle:hover {
+    color: var(--accent-text);
+}
+
+.divider-toggle svg {
+    width: 12px;
+    height: 12px;
+    transition: transform 0.15s;
+}
+
+.divider.collapsed .divider-toggle svg {
+    transform: rotate(180deg);
 }

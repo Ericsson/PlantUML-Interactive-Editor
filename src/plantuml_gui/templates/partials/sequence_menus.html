@@ -1,4 +1,24 @@
 
+{# Shared color palette for the Box / Note / Message edit modals. Defined once
+   here so the option list lives in a single place; callers pass the <select>'s
+   id. "none" maps to PlantUML's default color. #}
+{% macro color_select(select_id) %}
+<select class="form-control" id="{{ select_id }}">
+    <option value="none">None</option>
+    <option value="LightBlue" style="background-color:LightBlue">LightBlue</option>
+    <option value="LightGreen" style="background-color:LightGreen">LightGreen</option>
+    <option value="Red" style="background-color:Red">Red</option>
+    <option value="LightPink" style="background-color:LightPink">LightPink</option>
+    <option value="LightGray" style="background-color:LightGray">LightGray</option>
+    <option value="Wheat" style="background-color:Wheat">Wheat</option>
+    <option value="Khaki" style="background-color:Khaki">Khaki</option>
+    <option value="Orange" style="background-color:Orange">Orange</option>
+    <option value="LightCoral" style="background-color:LightCoral">LightCoral</option>
+    <option value="Blue" style="background-color:Blue">Blue</option>
+    <option value="Thistle" style="background-color:Thistle">Thistle</option>
+</select>
+{% endmacro %}
+
 <div class="modal fade" id="participant-modalForm" tabindex="-1" role="dialog" aria-labelledby="myModalLabel"
   aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered" role="document">
@@ -14,6 +34,10 @@
                   <div class="form-group">
                       <label for="participant-message-text" class="col-form-label">Message:</label>
                       <textarea class="form-control" id="participant-message-text"></textarea>
+                  </div>
+                  <div class="form-group" id="participant-message-color-group" style="display:none">
+                      <label for="participant-message-color-select" class="col-form-label">Color:</label>
+                      {{ color_select('participant-message-color-select') }}
                   </div>
               </form>
           </div>
@@ -54,12 +78,105 @@
 <div class="dropdown-menu" id="sequence-menu">
   <li><a class="dropdown-item" href="#" id="addMessageSolid">Add Message <span style="display:inline-block;width:20px;border-top:2px solid #333;vertical-align:middle;margin-left:4px"></span></a></li>
   <li><a class="dropdown-item" href="#" id="addMessageDashed">Add Message <span style="display:inline-block;width:20px;border-top:2px dashed #333;vertical-align:middle;margin-left:4px"></span></a></li>
+  <li><a class="dropdown-item" href="#" id="seq-addActivation">Activate <span style="display:inline-block;width:6px;height:14px;background:#fff;border:1px solid #333;vertical-align:middle;margin-left:4px"></span></a></li>
+  <li><a class="dropdown-item" href="#" id="seq-addNote">Add Note &#9998;</a></li>
+  <li><a class="dropdown-item" href="#" id="seq-addGroup">Add Group &#9634;</a></li>
+  <li id="seq-deleteActivation-divider" style="display:none"><hr class="dropdown-divider"></li>
+  <li id="seq-deleteActivation-item" style="display:none"><a class="dropdown-item" href="#" id="seq-deleteActivation">Delete activation bar</a></li>
+  <li id="seq-box-divider" style="display:none"><hr class="dropdown-divider"></li>
+  <li id="seq-editBox-item" style="display:none"><a class="dropdown-item" href="#" id="seq-editBox">Edit Box</a></li>
+  <li id="seq-deleteBox-item" style="display:none"><a class="dropdown-item" href="#" id="seq-deleteBox">Delete Box</a></li>
+</div>
+
+<div class="dropdown-menu" id="seq-group-type-menu">
+  <li><a class="dropdown-item" href="#" data-group-type="group">group</a></li>
+  <li><a class="dropdown-item" href="#" data-group-type="alt">alt</a></li>
+  <li><a class="dropdown-item" href="#" data-group-type="opt">opt</a></li>
+  <li><a class="dropdown-item" href="#" data-group-type="loop">loop</a></li>
+</div>
+
+<div class="dropdown-menu" id="seq-note-type-menu">
+  <li><a class="dropdown-item" href="#" data-note-type="note">Note</a></li>
+  <li><a class="dropdown-item" href="#" data-note-type="hnote">H Note</a></li>
+  <li><a class="dropdown-item" href="#" data-note-type="rnote">R Note</a></li>
+</div>
+
+<div class="dropdown-menu" id="activation-end-menu">
+  <li><a class="dropdown-item" href="#" id="activation-deactivate">Deactivate</a></li>
+  <li><a class="dropdown-item" href="#" id="activation-destroy">Destroy &#10005;</a></li>
+</div>
+
+<div class="dropdown-menu" id="seq-note-placement-menu">
+  <li><a class="dropdown-item" href="#" data-placement="over">Over this participant</a></li>
+  <li><a class="dropdown-item" href="#" data-placement="left"><span style="display:inline-block;transform:scaleX(-1)">&#10132;</span> Left</a></li>
+  <li><a class="dropdown-item" href="#" data-placement="right">Right &#10132;</a></li>
+  <li><a class="dropdown-item" href="#" data-placement="spanning">Spanning participants</a></li>
+</div>
+
+<div class="dropdown-menu" id="seq-note-menu">
+  <li><a class="dropdown-item" href="#" id="seq-editNote">Edit Note</a></li>
+  <li><hr class="dropdown-divider"></li>
+  <li><a class="dropdown-item" href="#" id="seq-deleteNote">Delete Note</a></li>
+</div>
+
+<div class="dropdown-menu" id="seq-group-menu">
+  <li><a class="dropdown-item" href="#" id="seq-renameGroup">Rename</a></li>
+  <li><hr class="dropdown-divider"></li>
+  <li><a class="dropdown-item" href="#" id="seq-deleteGroup">Delete Group</a></li>
+</div>
+
+<div class="modal fade" id="seq-note-modalForm" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+      <div class="modal-content shadow">
+          <div class="modal-header">
+              <h5 class="modal-title">Add Note</h5>
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                  <span aria-hidden="true">&times;</span>
+              </button>
+          </div>
+          <div class="modal-body">
+              <div class="form-group" id="seq-note-type-group">
+                  <label class="col-form-label">Note type:</label>
+                  <div>
+                      <div class="form-check form-check-inline">
+                          <input class="form-check-input" type="radio" name="seq-note-type-radio" id="seq-note-type-note" value="note" checked>
+                          <label class="form-check-label" for="seq-note-type-note">Note</label>
+                      </div>
+                      <div class="form-check form-check-inline">
+                          <input class="form-check-input" type="radio" name="seq-note-type-radio" id="seq-note-type-hnote" value="hnote">
+                          <label class="form-check-label" for="seq-note-type-hnote">H Note</label>
+                      </div>
+                      <div class="form-check form-check-inline">
+                          <input class="form-check-input" type="radio" name="seq-note-type-radio" id="seq-note-type-rnote" value="rnote">
+                          <label class="form-check-label" for="seq-note-type-rnote">R Note</label>
+                      </div>
+                  </div>
+              </div>
+              <div class="form-group">
+                  <label for="seq-note-text" class="col-form-label">Note text:</label>
+                  <textarea class="form-control" id="seq-note-text"></textarea>
+              </div>
+              <div class="form-group" id="seq-note-color-group" style="display:none">
+                  <label for="seq-note-color-select" class="col-form-label">Color:</label>
+                  {{ color_select('seq-note-color-select') }}
+              </div>
+              <div class="form-group" id="seq-note-second-participant-group" style="display:none">
+                  <label for="seq-note-second-participant" class="col-form-label">Second participant:</label>
+                  <select class="form-control" id="seq-note-second-participant"></select>
+              </div>
+          </div>
+          <div class="modal-footer">
+              <button id="seq-submit-note" type="button" class="btn btn-primary">Submit</button>
+          </div>
+      </div>
+  </div>
 </div>
 
 <div class="dropdown-menu" id="participant-menu">
   <li><a class="dropdown-item" href="#" id="addParticipantLeft"><span style="display:inline-block;transform:scaleX(-1)">&#10132;</span> Add Participant</a></li>
   <li><a class="dropdown-item" href="#" id="addParticipantRight">Add Participant &#10132;</a></li>
   <li><a class="dropdown-item" href="#" id="renameParticipant">Rename</a></li>
+  <li><a class="dropdown-item" href="#" id="seq-addBox">Box &#9634;</a></li>
   <li><hr class="dropdown-divider"></li>
   <li><a class="dropdown-item" href="#" id="deleteParticipant">Delete Participant</a></li>
 </div>
@@ -68,4 +185,53 @@
   <li><a class="dropdown-item" href="#" id="editMessage">Edit Message</a></li>
   <li><hr class="dropdown-divider"></li>
   <li><a class="dropdown-item" href="#" id="deleteMessage">Delete Message</a></li>
+</div>
+
+<div class="modal fade" id="seq-group-modalForm" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+      <div class="modal-content shadow">
+          <div class="modal-header">
+              <h5 class="modal-title">Add Group</h5>
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                  <span aria-hidden="true">&times;</span>
+              </button>
+          </div>
+          <div class="modal-body">
+              <div class="form-group">
+                  <label for="seq-group-label-text" class="col-form-label">Label:</label>
+                  <textarea class="form-control" id="seq-group-label-text"></textarea>
+              </div>
+          </div>
+          <div class="modal-footer">
+              <button id="seq-submit-group" type="button" class="btn btn-primary">Submit</button>
+          </div>
+      </div>
+  </div>
+</div>
+
+
+<div class="modal fade" id="seq-box-modalForm" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+      <div class="modal-content shadow">
+          <div class="modal-header">
+              <h5 class="modal-title">Edit Box</h5>
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                  <span aria-hidden="true">&times;</span>
+              </button>
+          </div>
+          <div class="modal-body">
+              <div class="form-group">
+                  <label for="seq-box-title-text" class="col-form-label">Title:</label>
+                  <textarea class="form-control" id="seq-box-title-text"></textarea>
+              </div>
+              <div class="form-group">
+                  <label for="seq-box-color-select" class="col-form-label">Color:</label>
+                  {{ color_select('seq-box-color-select') }}
+              </div>
+          </div>
+          <div class="modal-footer">
+              <button id="seq-submit-box" type="button" class="btn btn-primary">Submit</button>
+          </div>
+      </div>
+  </div>
 </div>

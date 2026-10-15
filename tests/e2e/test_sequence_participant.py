@@ -53,6 +53,25 @@ class TestCheckIfParticipant:
         }""")
         assert result is False
 
+    def test_rejects_rnote_rect_with_same_style_but_no_rounded_corners(
+        self, app_url, page
+    ):
+        """Regression: an rnote is a plain <rect> with the exact same
+        stroke-width:0.5 style as a participant header, but participant
+        headers always have rx/ry (rounded corners) and rnote never does.
+        Without this check, an rnote's rect (and its text, mistaken for a
+        participant name) would be treated as a participant."""
+        result = page.evaluate("""() => {
+            const container = document.createElement('div');
+            container.innerHTML = `
+                <rect fill="#FEFFDD" height="23"
+                      style="stroke:#181818;stroke-width:0.5;" width="76" x="90" y="164"></rect>
+            `;
+            const elements = container.querySelectorAll('*');
+            return checkIfParticipant(elements, 0);
+        }""")
+        assert result is False
+
     def test_rejects_non_rect_element(self, app_url, page):
         """checkIfParticipant returns false for non-rect elements."""
         result = page.evaluate("""() => {
@@ -117,10 +136,50 @@ class TestRenameParticipant:
         }""")
         assert result == "Rename Alice"
 
+    def test_enter_inserts_a_newline(self, app_url, page):
+        """The rename field is a <textarea>: a name can span several lines, and
+        the backend folds the newline into the literal \\n escape. Pressing Enter
+        inserts a real newline rather than submitting."""
+        page.evaluate("""() => {
+            editor.session.setValue("@startuml\\nparticipant Alice\\nparticipant Bob\\n@enduml");
+        }""")
+        page.wait_for_timeout(3000)
+
+        field = page.locator("#participant-name-text")
+        page.evaluate("""() => {
+            $('#participant-name-text').val('New');
+            $('#participant-name-modalForm').modal('show');
+        }""")
+        field.click()
+        # Put the caret at the end, then press Enter.
+        page.keyboard.press("End")
+        page.keyboard.press("Enter")
+
+        assert "\n" in field.input_value()
+
+    def test_enter_does_not_submit_the_rename(self, app_url, page):
+        """Enter now inserts a newline, so it must not trigger a submit. Only
+        Ctrl+Enter submits (handled globally, like the other modals)."""
+        page.evaluate("""() => {
+            editor.session.setValue("@startuml\\nparticipant Alice\\nparticipant Bob\\nAlice -> Bob: hi\\n@enduml");
+            window.__submitted = false;
+            $('#submit-participant-name').on('click', () => { window.__submitted = true; });
+        }""")
+        page.wait_for_timeout(3000)
+
+        page.evaluate("""() => {
+            $('#participant-name-text').val('Carol');
+            $('#participant-name-modalForm').modal('show');
+        }""")
+        page.locator("#participant-name-text").click()
+        page.keyboard.press("Enter")
+
+        assert page.evaluate("() => window.__submitted") is False
+
 
 class TestLifelineExtraction:
     def test_extract_lifeline_positions(self, app_url, page):
-        """extractLifelinePositions fetches positions from backend after render."""
+        """fetchSequencePositions fetches positions from backend after render."""
         page.evaluate("""() => {
             editor.session.setValue("@startuml\\nparticipant Alice\\nparticipant Bob\\n@enduml");
         }""")

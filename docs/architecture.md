@@ -12,7 +12,7 @@ The Flask app is stateless. There is no database or session storage. Diagram sta
 ## Layer 2: Data Models
 
 - `classes.py` — Shared data classes for activity diagrams: `RectElement`, `PolyElement`, `Ellipse`, `TextElement`, `SvgChunk`, and the `TreeNode` hierarchy (`IfElseNode`, `RepeatSwitchNode`). Also contains helper functions for navigating nested if/else/repeat structures in puml lines.
-- `sequence_classes.py` — Data classes for sequence diagrams: `Participant`, `Message`, `Diagram`. The `Diagram` class parses SVG to extract participants and messages, and assigns source line indexes from the puml text.
+- `sequence_classes.py` — Data classes for sequence diagrams: `Participant`, `Message`, `Diagram`, `ParticipantDeclaration`. The `Diagram` class parses SVG to extract participants and messages, and assigns source line indexes from the puml text. Declaration parsing (`parse_participant_declaration`, `participant_declarations`, `reference_name_for`) joins what the SVG shows (the displayed name) to what the puml body refers to (the alias), which only the source knows. Reading a header's label is `participant_label`, and matching it against a declaration goes through `display_names_match`. Only the `participant` keyword is parsed, since it is the only lifeline the editor can click.
 
 ## Layer 3: Rendering Pipeline
 
@@ -36,6 +36,7 @@ Modules:
 - `arrow.py` — Arrow/connection handling
 - `connector.py` — Connector elements (small labeled circles)
 - `merge.py` — Merge points
+- `positions.py` — Editor-row positions for every activity element (powers editor→diagram hover highlighting; reuses the other modules' line finders)
 - `add.py` — Element creation logic (inserts new puml lines for a given element type)
 - `participant.py` — Sequence diagram participants and messages
 
@@ -45,7 +46,8 @@ Modules:
 - `templates/partials/activity_menus.html` — All activity diagram context menus and modal dialogs.
 - `templates/partials/sequence_menus.html` — Sequence diagram context menus and modal dialogs.
 - `static/script.js` — Core logic: editor initialization (Ace with PlantUML syntax mode), rendering (calls `/render` and `/encode`), URL hash management, undo/redo history, diagram type detection, indentation, panning/zooming, and utility functions.
-- `static/activity.js` — Event listeners and fetch calls for all activity diagram interactions (edit, delete, add, detach, context menus for activities, if-statements, ellipses, forks, notes, groups, merges, whiles, connectors, arrows).
+- `static/activity.js` — Event listeners and fetch calls for all activity diagram interactions (edit, delete, add, detach, context menus for activities, if-statements, ellipses, forks, notes, groups, merges, whiles, connectors, arrows). Also owns the activity side of the editor→diagram hover highlighting: hoverable elements are registered per type during handler setup, joined by ordinal with the row tables from `/getActivityPositions`, and highlighted/restored through the shared `hover-highlight.js` core via `highlightActivityForRow`/`resetActivityHighlight`.
+- `static/hover-highlight.js` — Shared editor→diagram hover-highlight core used by both `activity.js` and `sequence-operations.js`: pure functions over a per-diagram row map and active-highlight list (`registerHoverRow`, `highlightHoverRow`, `clearHoverHighlight`, `findActiveHighlight`) plus the `attributeHighlight`/`stylePropertyHighlight` style factories. Also owns the editor-side dispatch (`initEditorHoverHighlighting` wires the editor hover/leave listeners; `highlightEditorRow`/`resetEditorHighlight` route the current row to the active diagram type).
 - `static/sequence.js` — Event listeners for sequence diagram interactions (add/edit/delete participants, add messages with two-click coordinate capture).
 
 ## Summary

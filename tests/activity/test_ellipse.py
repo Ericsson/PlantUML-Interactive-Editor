@@ -107,27 +107,3 @@ stop
 start
 @enduml"""
             assert response.data.decode("utf-8") == expected_puml
-
-    def test_get_ellipse_line(self, client):
-        test_data = {
-            "plantuml": """@startuml
-start
-stop
-@enduml""",
-            "svg": """<ellipse cx="24" cy="20" fill="#222222" rx="10" ry="10" style="stroke:#222222;stroke-width:1.0;"></ellipse><ellipse cx="24" cy="61" fill="transparent" rx="11" ry="11" style="stroke:#222222;stroke-width:1.0;"></ellipse><ellipse cx="24" cy="61" fill="#222222" rx="6" ry="6" style="stroke:#111111;stroke-width:1.0;"></ellipse><line style="stroke: rgb(24, 24, 24); stroke-width: 1; pointer-events: none;" x1="24" x2="24" y1="30" y2="50"></line><polygon fill="#181818" points="20,40,24,50,28,40,24,44" style="stroke:#181818;stroke-width:1.0;"></polygon>""",
-            "svgelement": """<ellipse cx="24" cy="61" fill="#222222" rx="6" ry="6" style="stroke:#111111;stroke-width:1.0;"></ellipse>""",
-        }
-        with client:
-            response = client.post(
-                "/getEllipseLine",
-                data=json.dumps(test_data),
-                content_type="application/json",
-            )
-            response_json = json.loads(response.data.decode("utf-8"))
-            result_value = response_json.get("result")
-
-            # Expected value
-            expected_puml = 3
-
-            # Assert the result value is as expected
-            assert result_value == expected_puml

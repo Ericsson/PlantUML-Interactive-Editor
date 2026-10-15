@@ -71,34 +71,6 @@ partition bom {
 @enduml"""
             assert response.data.decode("utf-8") == expected_result
 
-    def test_get_group_line(self, client):
-        test_data = {
-            "plantuml": """@startuml
-group group
-:Activity 1;
-end group
-partition bom {
-:Activity 8;
-}
-@enduml""",
-            "svg": """<rect fill="none" height="75.2656" style="stroke:#000000;stroke-width:1.5;" width="95" x="11" y="11"></rect><path d="M62,11 L62,20.2969 L52,30.2969 L11,30.2969 " fill="none" style="stroke:#000000;stroke-width:1.5;"></path><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="41" x="14" y="24.7969">group</text><rect fill="#F1F1F1" height="33.9688" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="75" x="21" y="40.2969"></rect><text fill="#000000" font-family="sans-serif" font-size="12" lengthAdjust="spacing" textLength="55" x="31" y="61.2656" style="pointer-events: none;">Activity 1</text><rect fill="none" height="82.2656" style="stroke:#000000;stroke-width:1.5;" width="95" x="11" y="96.2656"></rect><path d="M52,96.2656 L52,105.5625 L42,115.5625 L11,115.5625 " fill="none" style="stroke:#000000;stroke-width:1.5;"></path><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="31" x="14" y="110.0625">bom</text><rect fill="#F1F1F1" height="33.9688" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="75" x="21" y="132.5625"></rect><text fill="#000000" font-family="sans-serif" font-size="12" lengthAdjust="spacing" textLength="55" x="31" y="153.5313" style="pointer-events: none;">Activity 8</text><line style="stroke: rgb(24, 24, 24); stroke-width: 1; pointer-events: none;" x1="58.5" x2="58.5" y1="74.2656" y2="132.5625"></line><polygon fill="#181818" points="54.5,122.5625,58.5,132.5625,62.5,122.5625,58.5,126.5625" style="stroke:#181818;stroke-width:1.0;"></polygon>""",
-            "svgelement": """<path d="M62,11 L62,20.2969 L52,30.2969 L11,30.2969 " fill="none" style="stroke:#000000;stroke-width:1.5;"></path>""",
-        }
-        with client:
-            response = client.post(
-                "/getGroupLine",
-                data=json.dumps(test_data),
-                content_type="application/json",
-            )
-        response_json = json.loads(response.data.decode("utf-8"))
-        result_value = response_json.get("result")
-
-        # Expected value
-        expected_puml = [1, 3]
-
-        # Assert the result value is as expected
-        assert result_value == expected_puml
-
     def test_deletegroupwithpartition(self, client):
         test_data = {
             "plantuml": """@startuml
