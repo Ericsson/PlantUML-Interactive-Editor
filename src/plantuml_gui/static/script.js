@@ -43,6 +43,21 @@ let renderGeneration = 0;
 // element handlers are bound separately in setHandlersFor*Diagram.)
 let activityListenersAttached = false;
 let sequenceListenersAttached = false;
+// Multi-page (newpage) sequence diagrams: the 0-based page shown in #colb and
+// how many pages the last render reported (X-PlantUML-Page-Count). Every
+// sequence request sends currentPage so the backend matches the clicked
+// element against that page only. Other diagram types always stay on page 0.
+let currentPage = 0;
+let pageCount = 1;
+// Line indexes of the newpage lines, from /getSequencePositions; maps an
+// editor row to its page for cursor sync.
+let pageBoundaries = [];
+// Editor row to highlight once a cursor-driven page switch has re-rendered.
+let pendingHighlightRow = null;
+// True while setPuml replaces the text: Ace moves the cursor to row 0, which
+// must not count as the user navigating to page 1.
+let suppressCursorPageSync = false;
+const PAGE_COUNT_HEADER = 'X-PlantUML-Page-Count';
 var Range = ace.require("ace/range").Range
 
 async function initeditor() {
@@ -124,8 +139,58 @@ function findChangedLines() {
 
 const cursorChangeListener = async function(e) {
     resetEditorHighlight();
-    highlightEditorRow(editor.getCursorPosition().row);
+    const row = editor.getCursorPosition().row;
+    if (!suppressCursorPageSync && currentDiagramType === 'sequence' && pageCount > 1) {
+        const page = pageOfRow(row);
+        if (page !== currentPage) {
+            // The row's element is on another page: show that page, then
+            // highlight once its handlers (and row map) are rebuilt.
+            pendingHighlightRow = row;
+            goToPage(page);
+            return;
+        }
+    }
+    highlightEditorRow(row);
 };
+
+// 0-based page an editor row is on (a newpage line belongs to the page it ends).
+function pageOfRow(row) {
+    return pageBoundaries.filter(boundary => boundary < row).length;
+}
+
+// Show another page of a multi-page sequence diagram.
+function goToPage(page) {
+    const next = Math.max(0, Math.min(page, pageCount - 1));
+    if (next === currentPage) return;
+    currentPage = next;
+    updatePageControls();
+    renderPlantUml();
+}
+
+// A different diagram was loaded: start again from its first page.
+function resetPage() {
+    currentPage = 0;
+    pageBoundaries = [];
+}
+
+// Record the page count a render reported, clamping the current page if
+// pages were removed, and refresh the toolbar's page navigation.
+function setPageCount(count) {
+    pageCount = Math.max(1, count || 1);
+    currentPage = Math.min(currentPage, pageCount - 1);
+    updatePageControls();
+}
+
+// Page navigation in the diagram toolbar (partials/diagram_toolbar.html):
+// visible only for a sequence diagram with more than one page.
+function updatePageControls() {
+    const nav = document.getElementById('page-nav');
+    if (!nav) return;
+    nav.hidden = !(currentDiagramType === 'sequence' && pageCount > 1);
+    document.getElementById('page-indicator').textContent = `Page ${currentPage + 1} / ${pageCount}`;
+    document.getElementById('page-prev').disabled = currentPage === 0;
+    document.getElementById('page-next').disabled = currentPage >= pageCount - 1;
+}
 
 function initialize() {
     indentPuml(editor.session.getValue())
@@ -155,6 +220,7 @@ window.onunhandledrejection = function(event) {
 };
 
 function setDemo() {
+    resetPage();
     puml = `@startuml
 title
 This is not an ordinary PlantUML editor!
@@ -215,6 +281,7 @@ stop
 }
 
 function setSequence() {
+    resetPage();
     puml = `@startuml
 title
 This is the Sequence Diagram demo!
@@ -261,6 +328,7 @@ function buttonEventListeners() {
 
     document.getElementById('clear').addEventListener('click', function() {
         puml = "@startuml\n' Add your PlantUML code here\n@enduml"
+        resetPage();
         setPuml(puml)
     });
 
@@ -285,7 +353,10 @@ function buttonEventListeners() {
     document.getElementById('file-input').addEventListener('change', function(event) {
         const file = event.target.files[0];
         const reader = new FileReader();
-        reader.onload = () => editor.session.setValue(reader.result);
+        reader.onload = () => {
+            resetPage();
+            editor.session.setValue(reader.result);
+        };
         reader.readAsText(file);
     });
 
@@ -364,10 +435,11 @@ function buttonEventListeners() {
     document.getElementById('png').addEventListener('click', async () => {
         try {
             const plantuml = trimlines(editor.session.getValue());
+            const page = currentDiagramType === 'sequence' ? currentPage : 0;
             const response = await fetch("/renderPNG", {
                 method: "POST",
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 'plantuml': plantuml })
+                body: JSON.stringify({ 'plantuml': plantuml, 'page': page })
             });
 
             const blob = await response.blob();
@@ -375,7 +447,8 @@ function buttonEventListeners() {
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
-            a.download = "diagram.png";
+            // Multi-page diagrams download the page on screen.
+            a.download = pageCount > 1 ? `diagram-page-${page + 1}.png` : "diagram.png";
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -399,6 +472,7 @@ function buttonEventListeners() {
 
     document.getElementById('pastebutton').addEventListener('click', function() {
         navigator.clipboard.readText().then(function(text) {
+            resetPage();
             setPuml(text)
         }).catch(function(err) {
             console.error('Failed to read clipboard contents: ', err);
@@ -596,19 +670,31 @@ const debouncedRenderPlantUml = debounce(async () => {
 }, 200);
 
 async function fetchSvgFromPlantUml() {
+    const result = await fetchSvgPage();
+    return result ? result.svg : undefined;
+}
+
+// Render the current page. Returns {svg, pageCount}; the caller applies
+// pageCount only after its render-generation check, so a stale render can't
+// overwrite a newer diagram's page count. Only sequence diagrams are paged;
+// everything else renders (and reports) page 1.
+async function fetchSvgPage() {
     try {
         const plantuml = editor.session.getValue();
+        const paged = currentDiagramType === 'sequence';
         const response = await fetch("render", {
             method: "POST",
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                'plantuml': plantuml
+                'plantuml': plantuml,
+                'page': paged ? currentPage : 0
             })
         });
         const svg = await response.text()
-        return svg
+        const count = paged ? parseInt(response.headers.get(PAGE_COUNT_HEADER), 10) : 1;
+        return { svg: svg, pageCount: Number.isNaN(count) ? 1 : count };
     } catch (error) {
         console.error('Error with render fetch api?', error);
     }
@@ -671,6 +757,10 @@ async function renderPlantUml() {
     }
 
     currentDiagramType = checkDiagramType(pumlcontent);
+    if (currentDiagramType !== 'sequence') {
+        resetPage();
+        setPageCount(1);
+    }
     const renderId = ++renderGeneration;
     switch (currentDiagramType) {
         case "activity":
@@ -692,7 +782,13 @@ async function renderPlantUml() {
 function setPuml(pumlcontent) {
     text = processForkAndSwitch(pumlcontent)
     text = indentPuml(text)
-    editor.session.setValue(text)
+    // Ace resets the cursor to row 0 here; don't treat that as navigation.
+    suppressCursorPageSync = true;
+    try {
+        editor.session.setValue(text)
+    } finally {
+        suppressCursorPageSync = false;
+    }
 }
 
 function indentPuml(pumlcontent) {

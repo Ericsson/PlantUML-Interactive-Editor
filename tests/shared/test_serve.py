@@ -209,6 +209,16 @@ def test_cors_preflight_permits_the_headers_the_client_sends(bare_app):
     assert "x-plantuml-token" in allowed
 
 
+def test_cors_exposes_the_page_count_header(bare_app):
+    """The webview reads /render's page count cross-origin; a non-safelisted
+    response header is invisible to fetch() unless it is exposed."""
+    serve.install_cors(bare_app)
+
+    response = bare_app.test_client().post("/editText")
+
+    assert response.headers["Access-Control-Expose-Headers"] == "X-PlantUML-Page-Count"
+
+
 def test_cors_headers_are_on_real_responses_too(bare_app):
     """Without these the browser completes the request but hides the response
     body from JavaScript, which also surfaces as "Failed to fetch"."""

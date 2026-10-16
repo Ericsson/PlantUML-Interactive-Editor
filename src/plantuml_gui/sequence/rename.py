@@ -248,6 +248,17 @@ def rewrite_participant_references(
     )
 
 
+def message_involves(line: str, reference_name: str) -> bool:
+    """Whether ``line`` is a message sent or received by ``reference_name``.
+
+    Text-based, so it holds on every page of a ``newpage`` diagram, where the
+    SVG only shows one page's messages.
+    """
+    spellings = _spellings_of(reference_name)
+    rewritten = _rewritten_message_line(line, spellings, _REFERENCE_PROBE)
+    return rewritten is not None and rewritten != line
+
+
 def _references_participant(line: str, spellings: set[str]) -> bool:
     """Whether ``line`` mentions the participant in a structural position.
 

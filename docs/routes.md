@@ -9,8 +9,8 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 
 ## Render
 
-- **POST /render** — Input: `plantuml`. Returns: SVG string.
-- **POST /renderPNG** — Input: `plantuml`. Returns: PNG file download (`image/png`).
+- **POST /render** — Input: `plantuml`, optional `page` (0-based, clamped; default 0). Returns: SVG string of that page, with an `X-PlantUML-Page-Count` header giving the number of pages the diagram's `newpage` lines split it into.
+- **POST /renderPNG** — Input: `plantuml`, optional `page` (as for `/render`). Returns: PNG file download (`image/png`) of that page.
 
 ## Encode / Decode
 
@@ -106,6 +106,7 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 
 - **POST /addParticipant** — Input: `plantuml`, `svg`, `svgelement`, `direction` ('left'/'right'). Returns: modified puml.
 - **POST /addMessage** — Input: `plantuml`, `svg`, `message`, `firstcoordinates` ([x,y]), `secondcoordinates` ([x,y]). Returns: modified puml. Y-coordinate determines insertion position between existing messages.
+- **Multi-page sequence diagrams:** every sequence route accepts an optional `page` (0-based). The frontend renders one page at a time and sends that page's SVG, so routes that match the clicked element against the SVG (everything except the participant and box routes, `/addActivation` and `/addGroup`, whose diagram content repeats on every page or which take line indexes) first mask the other pages' lines (`sequence/pages.py`). Returned line indexes and puml stay global. `/getSequencePositions` additionally returns `pageBoundaries`: the line indexes of the `newpage` lines.
 - **POST /getSequencePositions** — Input: `plantuml`, `svg`. Returns: JSON `{"participants": [{name, cx, yTop, yBottom, index}, ...], "messages": [{cy, index, text}, ...], "notes": [{cy, index}, ...], "groups": [{headerIndex, endIndex}, ...]}`. Called once per render: bundles every sequence element type's position table into a single response so a render costs one round-trip instead of one per type. Each sub-table keeps its own shape (participants carry lifeline bounds, messages/notes carry SVG Y-coordinates) because sequence elements are matched spatially. Powers hover highlighting and the activation/group gestures (which snap to the nearest message and send its line index).
 - **POST /getParticipantName** — Input: `plantuml`, `svg`, `svgelement`. Returns: participant name string.
 - **POST /editParticipantName** — Input: `plantuml`, `svg`, `name`, `svgelement`. Returns: modified puml. `name` is the new *displayed* name; each line has its internal whitespace collapsed to single spaces and is trimmed, and the lines are rejoined with the literal `\n` escape PlantUML draws as a line break (a declaration is one line, so a real newline is folded rather than left to split it). A name that is blank on every line returns the puml unchanged. What changes depends on the declaration: an aliased participant (`participant "Old" as ON`) has only its displayed name replaced, since the body refers to the alias; an unaliased one has its declaration and every reference updated; and if the new name cannot be a bare reference token (it contains whitespace, a line break, `#`, `,` or `:`) the participant gains a generated PascalCase alias (`participant "Space Room" as SpaceRoom`) that the references switch to. Only real reference positions are rewritten — message endpoints, `activate`/`deactivate`/`destroy`/`create`, note placement, `ref over` — so message text and note bodies that mention the old name are left alone.

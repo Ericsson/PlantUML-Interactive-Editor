@@ -30,6 +30,7 @@ from functools import lru_cache
 from flask import Blueprint, Response, jsonify, render_template, request, send_file
 
 from ..__about__ import __version__
+from ..sequence.pages import clamp_page, page_count
 from .parse_changelog import parse_changelog
 from .puml_encoder import plantuml_decode, plantuml_encode
 from .render import _create_png_from_uml, _create_svg_from_uml
@@ -78,20 +79,29 @@ def home():
     )  # pragma: no cover
 
 
+# Response header carrying how many pages (``newpage``) the diagram has. The
+# VS Code webview reads it cross-origin, so serve.py's CORS layer must expose it.
+PAGE_COUNT_HEADER = "X-PlantUML-Page-Count"
+
+
 @shared_bp.route("/render", methods=["POST"])
 def render():
     data = request.get_json()
     puml = data["plantuml"]
-    return _create_svg_from_uml(puml)
+    page = clamp_page(puml, data.get("page", 0))
+    response = Response(_create_svg_from_uml(puml, page), mimetype="text/html")
+    response.headers[PAGE_COUNT_HEADER] = str(page_count(puml))
+    return response
 
 
 @shared_bp.route("/renderPNG", methods=["POST"])
 def renderpng():
     data = request.get_json()
     puml = data["plantuml"]
+    page = clamp_page(puml, data.get("page", 0))
 
     # Create the PNG image from the PlantUML code
-    image_bytes = _create_png_from_uml(puml)
+    image_bytes = _create_png_from_uml(puml, page)
 
     # Use io.BytesIO to handle the byte stream
     image_stream = io.BytesIO(image_bytes)

@@ -362,6 +362,7 @@ function messageEventListeners() {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
+                        page: currentPage,
                         'plantuml': plantuml,
                         'svg': svg.innerHTML,
                         'svgelement': lastclickedsvgelement.outerHTML,
@@ -374,6 +375,7 @@ function messageEventListeners() {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
+                        page: currentPage,
                         'plantuml': plantuml,
                         'svg': svg.innerHTML,
                         'message': newmessage,

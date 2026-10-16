@@ -25,6 +25,7 @@
 │   │   ├── group.py        # Group block logic (group, alt, opt, loop)
 │   │   ├── box.py          # Participant box logic (add, delete, nesting via teoz, is_box_rect)
 │   │   ├── note.py         # Note logic (add, edit, delete notes)
+│   │   ├── pages.py        # Multi-page (newpage) diagrams: page boundaries, and masking other pages so element modules see only the current one
 │   │   ├── positions.py    # Per-render position aggregator (get_sequence_positions: one fetch for all element types' editor rows)
 │   │   └── util.py         # Shared utilities (insertion index, note position extraction, multi-line text escaping)
 │   ├── activity/           # Activity diagram package
@@ -97,6 +98,7 @@
 │   │   ├── test_activation.py
 │   │   ├── test_sequence_group.py
 │   │   ├── test_box.py
+│   │   ├── test_newpage.py                # Multi-page (newpage): page model, masking, paged render and routes
 │   │   └── test_sequence_note.py
 │   └── e2e/                # Playwright end-to-end tests
 │       ├── conftest.py     # Live server fixture
@@ -110,6 +112,7 @@
 │       ├── test_sequence_message_interactions.py # Message add/edit/delete e2e tests
 │       ├── test_sequence_note_menu.py         # Note type menu, modal type selector & create/edit flow e2e tests
 │       ├── test_sequence_note_group_hover.py  # Note hover during add-mode gestures (regression: note turned black during group ghost box)
+│       ├── test_sequence_newpage.py          # Multi-page (newpage) navigation, paged editing, cursor sync, PNG page e2e tests
 │       ├── test_sequence_participant.py      # Participant add/rename/delete e2e tests
 │       └── test_sequence_title.py            # Double-click title editing e2e tests (shared by activity & sequence)
 └── .kiro/steering/         # Kiro steering files

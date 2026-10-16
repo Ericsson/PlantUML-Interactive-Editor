@@ -68,6 +68,7 @@ async function fetchSequencePositions() {
         notes: data ? data.notes : [],
         groups: data ? data.groups : [],
         boxes: data ? data.boxes : [],
+        pageBoundaries: data && data.pageBoundaries ? data.pageBoundaries : [],
     };
 }
 
@@ -144,6 +145,7 @@ function participantEventListeners() {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
+                    page: currentPage,
                     'plantuml': plantuml,
                     'svg': svg.innerHTML,
                     'name': newname,
@@ -169,6 +171,7 @@ function participantEventListeners() {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
+                    page: currentPage,
                     'plantuml': plantuml,
                     'svg': svg.innerHTML,
                     'svgelement': lastclickedsvgelement.outerHTML
@@ -267,6 +270,7 @@ function setupParticipantHandlers(svgelements, svg, element) {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
+                        page: currentPage,
                         'plantuml': plantuml,
                         'svg': svg.innerHTML,
                         'svgelement': svgelement.outerHTML
@@ -326,7 +330,7 @@ function sequenceEventListeners() {
 
 // Called on every render when diagram type is sequence
 async function setHandlersForSequenceDiagram(pumlcontent, element, renderId) {
-    fetchSvgFromPlantUml().then(async (svgContent) => {
+    fetchSvgPage().then(async (result) => {
         // A newer render started while this SVG was being fetched (e.g. the
         // user switched diagrams); drop this result so it can't clobber the
         // current diagram. Balance the loading overlay toggle that
@@ -335,6 +339,8 @@ async function setHandlersForSequenceDiagram(pumlcontent, element, renderId) {
             hideLoadingOverlay();
             return;
         }
+        const svgContent = result ? result.svg : '';
+        setPageCount(result ? result.pageCount : 1);
         element.innerHTML = svgContent;
         sequenceHighlighted = []; // old SVG is gone; drop stale references
         sequenceDiagramHover = []; // old SVG is gone; drop stale references
@@ -361,6 +367,7 @@ async function setHandlersForSequenceDiagram(pumlcontent, element, renderId) {
         notePositions = positions.notes;
         groupPositions = positions.groups;
         boxPositions = positions.boxes;
+        pageBoundaries = positions.pageBoundaries;
 
         cancelMessageAddMode();
         cancelActivationAddMode();
@@ -376,6 +383,14 @@ async function setHandlersForSequenceDiagram(pumlcontent, element, renderId) {
         setupNoteHandlers(svg.querySelectorAll('*'));
         setupGroupHandlers(svg.querySelectorAll('*'));
         setupBoxHandlers(svg.querySelectorAll('*'));
+
+        // A cursor move onto another page switched to it; highlight the
+        // cursor's element now that this page's row map exists.
+        if (pendingHighlightRow !== null) {
+            const row = pendingHighlightRow;
+            pendingHighlightRow = null;
+            highlightEditorRow(row);
+        }
 
         hideLoadingOverlay();
     }).catch((error) => {
@@ -595,6 +610,7 @@ function messageOperationEventListeners() {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
+                    page: currentPage,
                     'plantuml': plantuml,
                     'svg': svg.innerHTML,
                     'svgelement': lastclickedsvgelement.outerHTML
@@ -625,6 +641,7 @@ function messageOperationEventListeners() {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
+                    page: currentPage,
                     'plantuml': plantuml,
                     'svg': svg.innerHTML,
                     'svgelement': lastclickedsvgelement.outerHTML
@@ -957,6 +974,7 @@ function noteOperationEventListeners() {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
+                    page: currentPage,
                     plantuml: plantuml,
                     svg: svg.innerHTML,
                     svgelement: lastclickedsvgelement.outerHTML
@@ -988,6 +1006,7 @@ function noteOperationEventListeners() {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
+                    page: currentPage,
                     plantuml: plantuml,
                     svg: svg.innerHTML,
                     svgelement: lastclickedsvgelement.outerHTML
@@ -1025,6 +1044,7 @@ function groupOperationEventListeners() {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
+                    page: currentPage,
                     plantuml: plantuml,
                     svg: svg.innerHTML,
                     svgelement: lastclickedsvgelement.outerHTML
@@ -1053,6 +1073,7 @@ function groupOperationEventListeners() {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
+                    page: currentPage,
                     plantuml: plantuml,
                     svg: svg.innerHTML,
                     svgelement: lastclickedsvgelement.outerHTML
@@ -1114,6 +1135,7 @@ async function submitNote() {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
+                    page: currentPage,
                     plantuml: plantuml,
                     svg: svg.innerHTML,
                     svgelement: lastclickedsvgelement.outerHTML,

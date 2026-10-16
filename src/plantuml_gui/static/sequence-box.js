@@ -202,6 +202,7 @@ async function submitBox(startIndex, endIndex) {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
+                page: currentPage,
                 plantuml: plantuml,
                 startParticipantIndex: startIndex,
                 endParticipantIndex: endIndex,
@@ -243,6 +244,7 @@ function boxEventListeners() {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
+                    page: currentPage,
                     plantuml: plantuml,
                     svg: svg.innerHTML,
                     svgelement: contextBoxRect.outerHTML,
@@ -271,6 +273,7 @@ function boxEventListeners() {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
+                    page: currentPage,
                     plantuml: plantuml,
                     svg: svg.innerHTML,
                     svgelement: contextBoxRect.outerHTML,
@@ -307,6 +310,7 @@ async function submitBoxEdit() {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
+                page: currentPage,
                 plantuml: plantuml,
                 svg: svg.innerHTML,
                 svgelement: contextBoxRect.outerHTML,

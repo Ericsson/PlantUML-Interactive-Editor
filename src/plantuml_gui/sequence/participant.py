@@ -28,7 +28,7 @@ from typing import Dict, List
 from pyquery import PyQuery as Pq
 
 from .classes import Diagram, is_participant_rect
-from .rename import rename_participant
+from .rename import message_involves, rename_participant
 from .util import note_regions
 
 
@@ -112,9 +112,11 @@ def delete_participant(puml: str, svg: str, svgelement: str) -> str:
     lines = puml.splitlines()
 
     lines_to_remove = {participant.index}
-    for msg in diagram.messages:
-        if msg.from_participant == participant or msg.to_participant == participant:
-            lines_to_remove.add(msg.index)
+    # Matched on the source text rather than the SVG's messages: with
+    # ``newpage`` the SVG shows one page, but the cascade covers every page.
+    for i, line in enumerate(lines):
+        if message_involves(line, participant.reference_name):
+            lines_to_remove.add(i)
     # Remove notes that reference the participant. For block notes (note ...
     # end note) the whole region must go, not just the opening line, or the
     # orphaned body and "end note" break the diagram. Matched on the reference

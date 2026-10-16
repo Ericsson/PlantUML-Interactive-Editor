@@ -312,6 +312,28 @@ suite('extension: which document the panel shows', () => {
 	});
 });
 
+suite('extension: exporting one page of a newpage diagram', () => {
+	test('asks the backend for the page on screen', () => {
+		assert.deepStrictEqual(extension.pngRequestBody('@startuml\n@enduml', 2), {
+			plantuml: '@startuml\n@enduml',
+			page: 2
+		});
+	});
+
+	test('falls back to the first page for anything but a page index', () => {
+		// Also what an older webview sends: a bare savePng with no page.
+		for (const page of [undefined, null, -1, 1.5, '2']) {
+			assert.strictEqual(extension.pngRequestBody('x', page).page, 0, String(page));
+		}
+	});
+
+	test('names the file after the page only when there are several', () => {
+		assert.strictEqual(extension.pngFileName('flow', 0, 1), 'flow.png');
+		assert.strictEqual(extension.pngFileName('flow', undefined, undefined), 'flow.png');
+		assert.strictEqual(extension.pngFileName('flow', 1, 3), 'flow-page-2.png');
+	});
+});
+
 suite('extension: running the command a second time', () => {
 	// Regression: every invocation called createWebviewPanel, so running the
 	// command again -- the natural thing to do when the diagram is not in front
