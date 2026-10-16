@@ -38,6 +38,7 @@ Enterprise developers and technical teams (primarily at Ericsson and similar com
 - Group blocks (group, alt, opt, loop): add, rename title, delete (unwraps, keeping contents)
 - Participant boxes: add around contiguous participants (ghost-box gesture), edit title/color, delete (unwraps, keeping participants); nested boxes supported via the teoz engine
 - Bidirectional hover highlighting between the editor and messages, participants, notes, group blocks, and participant boxes
+- Multi-page diagrams (`newpage`): previous/next page navigation, every page fully editable, the editor cursor switches page, PNG of the current page
 
 ## Business Objectives
 

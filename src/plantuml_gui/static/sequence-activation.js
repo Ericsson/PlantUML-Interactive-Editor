@@ -160,6 +160,7 @@ function activationEventListeners() {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
+                    page: currentPage,
                     plantuml: plantuml,
                     svg: svg.innerHTML,
                     svgelement: lastclickedsvgelement.outerHTML
@@ -196,6 +197,7 @@ async function submitActivation(endType) {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
+                page: currentPage,
                 plantuml: plantuml,
                 participant: origin.name,
                 startMessageIndex: origin.startMessageIndex,

@@ -63,6 +63,21 @@ button itself; only the three zoom buttons are shared.
         </svg>
     </button>
     <span class="toolbar-spacer"></span>
+    {#- Shown by script.js's updatePageControls() for multi-page (newpage) sequence diagrams. #}
+    <div id="page-nav" class="page-nav" role="group" aria-label="Diagram pages" hidden>
+        <button type="button" id="page-prev" class="toolbar-btn" aria-label="Previous page" {{ tooltip_attr }}="Previous page">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M10 3L5 8l5 5" />
+            </svg>
+        </button>
+        <span id="page-indicator" class="page-indicator" aria-live="polite">Page 1 / 1</span>
+        <button type="button" id="page-next" class="toolbar-btn" aria-label="Next page" {{ tooltip_attr }}="Next page">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M6 3l5 5-5 5" />
+            </svg>
+        </button>
+    </div>
+    <span class="toolbar-spacer"></span>
     <button type="button" id="png" class="toolbar-btn toolbar-btn--accent" {{ tooltip_attr }}="{{ png_tooltip }}">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
             <path d="M8 2v9M5 8l3 3 3-3" />

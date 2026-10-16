@@ -75,4 +75,9 @@
 		instance.moveTo(0, 0);
 		instance.zoomAbs(0, 0, 1);
 	});
+
+	// Page navigation for multi-page (newpage) sequence diagrams. The page
+	// state and the re-render live in script.js, which both pages load.
+	document.getElementById('page-prev').addEventListener('click', () => goToPage(currentPage - 1));
+	document.getElementById('page-next').addEventListener('click', () => goToPage(currentPage + 1));
 })();
