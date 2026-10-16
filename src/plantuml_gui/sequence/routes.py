@@ -22,6 +22,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+from typing import Callable, Tuple
+
 from flask import Blueprint, jsonify, request
 
 from .activation import add_activation, delete_activation
@@ -35,6 +37,7 @@ from .message import (
     get_message_label,
 )
 from .note import add_note, delete_note, edit_note, get_note_text_and_type
+from .pages import clamp_page, mask_other_pages, page_boundaries, unmask
 from .participant import (
     add_participant,
     delete_participant,
@@ -44,6 +47,19 @@ from .participant import (
 from .positions import get_sequence_positions
 
 sequence_bp = Blueprint("sequence", __name__)
+
+
+def _page_view(puml: str, data: dict) -> Tuple[str, Callable[[str], str]]:
+    """Narrow ``puml`` to the page the request was made on.
+
+    Element modules match the clicked SVG element to the puml by counting
+    elements, and the frontend only sends the current page's SVG, so the other
+    pages' lines are masked out (see pages.py). Returns the masked puml and a
+    function that restores the hidden lines in the module's edited result.
+    Requests without ``page`` (or single-page diagrams) pass through unchanged.
+    """
+    masked, originals = mask_other_pages(puml, clamp_page(puml, data.get("page", 0)))
+    return masked, lambda result: unmask(result, originals)
 
 
 @sequence_bp.route("/addParticipant", methods=["POST"])
@@ -60,6 +76,7 @@ def addparticipant():
 def addmessage():
     data = request.get_json()
     puml = data["plantuml"]
+    puml, restore = _page_view(puml, data)
     svg = data["svg"]
     message = data["message"]
     firstcoordinates = data["firstcoordinates"]
@@ -67,8 +84,10 @@ def addmessage():
     arrow_type = data.get("arrowtype", "->")
     return jsonify(
         {
-            "plantuml": add_message(
-                puml, svg, message, firstcoordinates, secondcoordinates, arrow_type
+            "plantuml": restore(
+                add_message(
+                    puml, svg, message, firstcoordinates, secondcoordinates, arrow_type
+                )
             )
         }
     )
@@ -95,9 +114,10 @@ def addactivation():
 def deleteactivation():
     data = request.get_json()
     puml = data["plantuml"]
+    puml, restore = _page_view(puml, data)
     svg = data["svg"]
     svgelement = data["svgelement"]
-    return jsonify({"plantuml": delete_activation(puml, svg, svgelement)})
+    return jsonify({"plantuml": restore(delete_activation(puml, svg, svgelement))})
 
 
 @sequence_bp.route("/getParticipantName", methods=["POST"])
@@ -131,15 +151,20 @@ def deleteparticipant():
 @sequence_bp.route("/getSequencePositions", methods=["POST"])
 def getsequencepositions():
     data = request.get_json()
-    puml = data["plantuml"]
+    full_puml = data["plantuml"]
+    puml, _restore = _page_view(full_puml, data)
     svg = data["svg"]
-    return jsonify(get_sequence_positions(puml, svg))
+    positions = get_sequence_positions(puml, svg)
+    # Lets the frontend tell which page an editor line is on (cursor sync).
+    positions["pageBoundaries"] = page_boundaries(full_puml)
+    return jsonify(positions)
 
 
 @sequence_bp.route("/getMessageText", methods=["POST"])
 def getmessagetext():
     data = request.get_json()
     puml = data["plantuml"]
+    puml, _restore = _page_view(puml, data)
     svg = data["svg"]
     svgelement = data["svgelement"]
     text, color = get_message_label(puml, svg, svgelement)
@@ -150,26 +175,31 @@ def getmessagetext():
 def editmessagetext():
     data = request.get_json()
     puml = data["plantuml"]
+    puml, restore = _page_view(puml, data)
     svg = data["svg"]
     svgelement = data["svgelement"]
     text = data["text"]
     color = data.get("color")
-    return jsonify({"plantuml": edit_message_text(puml, svg, svgelement, text, color)})
+    return jsonify(
+        {"plantuml": restore(edit_message_text(puml, svg, svgelement, text, color))}
+    )
 
 
 @sequence_bp.route("/deleteMessage", methods=["POST"])
 def deletemessage():
     data = request.get_json()
     puml = data["plantuml"]
+    puml, restore = _page_view(puml, data)
     svg = data["svg"]
     svgelement = data["svgelement"]
-    return jsonify({"plantuml": delete_message(puml, svg, svgelement)})
+    return jsonify({"plantuml": restore(delete_message(puml, svg, svgelement))})
 
 
 @sequence_bp.route("/addNote", methods=["POST"])
 def addnote():
     data = request.get_json()
     puml = data["plantuml"]
+    puml, restore = _page_view(puml, data)
     svg = data["svg"]
     participant = data["participant"]
     placement = data["placement"]
@@ -180,16 +210,18 @@ def addnote():
     note_type = data.get("noteType")
     return jsonify(
         {
-            "plantuml": add_note(
-                puml,
-                svg,
-                participant,
-                placement,
-                text,
-                y_position,
-                second_participant,
-                x_position,
-                note_type,
+            "plantuml": restore(
+                add_note(
+                    puml,
+                    svg,
+                    participant,
+                    placement,
+                    text,
+                    y_position,
+                    second_participant,
+                    x_position,
+                    note_type,
+                )
             )
         }
     )
@@ -199,6 +231,7 @@ def addnote():
 def getseqnotetext():
     data = request.get_json()
     puml = data["plantuml"]
+    puml, _restore = _page_view(puml, data)
     svg = data["svg"]
     svgelement = data["svgelement"]
     text, note_type, color = get_note_text_and_type(puml, svg, svgelement)
@@ -215,13 +248,14 @@ def getseqnotetext():
 def editseqnote():
     data = request.get_json()
     puml = data["plantuml"]
+    puml, restore = _page_view(puml, data)
     svg = data["svg"]
     svgelement = data["svgelement"]
     text = data["text"]
     note_type = data.get("noteType")
     color = data.get("color")
     return jsonify(
-        {"plantuml": edit_note(puml, svg, svgelement, text, note_type, color)}
+        {"plantuml": restore(edit_note(puml, svg, svgelement, text, note_type, color))}
     )
 
 
@@ -229,9 +263,10 @@ def editseqnote():
 def deleteseqnote():
     data = request.get_json()
     puml = data["plantuml"]
+    puml, restore = _page_view(puml, data)
     svg = data["svg"]
     svgelement = data["svgelement"]
-    return jsonify({"plantuml": delete_note(puml, svg, svgelement)})
+    return jsonify({"plantuml": restore(delete_note(puml, svg, svgelement))})
 
 
 @sequence_bp.route("/addGroup", methods=["POST"])
@@ -255,6 +290,7 @@ def addgroup():
 def getseqgrouplabel():
     data = request.get_json()
     puml = data["plantuml"]
+    puml, _restore = _page_view(puml, data)
     svg = data["svg"]
     svgelement = data["svgelement"]
     return jsonify(get_group_label(puml, svg, svgelement))
@@ -264,19 +300,21 @@ def getseqgrouplabel():
 def renameseqgroup():
     data = request.get_json()
     puml = data["plantuml"]
+    puml, restore = _page_view(puml, data)
     svg = data["svg"]
     svgelement = data["svgelement"]
     label = data["label"]
-    return jsonify({"plantuml": rename_group(puml, svg, svgelement, label)})
+    return jsonify({"plantuml": restore(rename_group(puml, svg, svgelement, label))})
 
 
 @sequence_bp.route("/deleteSeqGroup", methods=["POST"])
 def deleteseqgroup():
     data = request.get_json()
     puml = data["plantuml"]
+    puml, restore = _page_view(puml, data)
     svg = data["svg"]
     svgelement = data["svgelement"]
-    return jsonify({"plantuml": delete_group(puml, svg, svgelement)})
+    return jsonify({"plantuml": restore(delete_group(puml, svg, svgelement))})
 
 
 @sequence_bp.route("/addBox", methods=["POST"])

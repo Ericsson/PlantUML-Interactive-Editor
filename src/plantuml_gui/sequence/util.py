@@ -44,6 +44,18 @@ _HEXAGON_POINT_COUNT = 7
 # and to avoid repeating the literal list at each call site.
 NOTE_KEYWORDS = ("note", "hnote", "rnote")
 
+# PlantUML accepts ``newpage`` in any case, optionally followed by a page title.
+_NEWPAGE_RE = re.compile(r"^newpage(?:\s.*)?$", re.IGNORECASE)
+
+
+def is_page_break(stripped_line: str) -> bool:
+    """Return True if a (stripped) puml line is a ``newpage`` page break.
+
+    Does not know about notes; callers that scan whole diagrams must skip note
+    bodies themselves (see ``pages.page_boundaries``).
+    """
+    return _NEWPAGE_RE.match(stripped_line) is not None
+
 
 def classify_note_shape(path: Pq) -> Optional[str]:
     """Classify a single SVG shape element as a note type, or None.
@@ -354,7 +366,13 @@ def find_insertion_index(
         if cy > y:
             return line_index
 
-    # After all elements: insert before @enduml
+    # After all elements: insert at the end of the page. With a multi-page
+    # diagram masked to one page (see pages.py), the first unmasked ``newpage``
+    # ends the current page; otherwise insert before @enduml.
+    in_note = {i for start, end in note_regions(puml) for i in range(start, end + 1)}
+    for i, line in enumerate(lines):
+        if i not in in_note and is_page_break(line.strip()):
+            return i
     for i in range(len(lines) - 1, -1, -1):
         if lines[i].strip() == "@enduml":
             return i

@@ -55,7 +55,7 @@ from werkzeug.serving import make_server
 
 from .__about__ import __version__
 from .app import app
-from .shared.routes import generate_static_js_hash
+from .shared.routes import PAGE_COUNT_HEADER, generate_static_js_hash
 
 # Line written to stdout once the port is known. The parent process scans
 # stdout for this exact prefix, so do not reformat it without updating
@@ -143,6 +143,9 @@ def install_cors(flask_app: Flask) -> None:
     def _add_cors_headers(response: Response) -> Response:
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Headers"] = CORS_ALLOW_HEADERS
+        # A cross-origin fetch can only read safelisted response headers unless
+        # told otherwise; the frontend reads the page count off /render.
+        response.headers["Access-Control-Expose-Headers"] = PAGE_COUNT_HEADER
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
         response.headers["Access-Control-Max-Age"] = CORS_MAX_AGE
         return response
