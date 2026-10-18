@@ -1154,8 +1154,8 @@ async function applyPuml(document, region, source) {
  * @param {import('./src/sourceRegion').SourceRegion | undefined} region where
  *   the diagram lives now, as currentRegion() found it
  * @param {import('./src/sidecar').Sidecar} sidecar a running sidecar
- * @param {unknown} [page] 0-based page on screen, for `newpage` diagrams
- * @param {unknown} [pageCount] how many pages the diagram has
+ * @param {number} page 0-based page on screen, for `newpage` diagrams
+ * @param {number} pageCount how many pages the diagram has
  */
 async function savePng(document, region, sidecar, page, pageCount) {
 	// A render comes from a block the document still holds: what is on screen is
@@ -1178,9 +1178,7 @@ async function savePng(document, region, sidecar, page, pageCount) {
 				'Content-Type': 'application/json',
 				[TOKEN_HEADER]: sidecar.token
 			},
-			body: JSON.stringify(
-				pngRequestBody(regionSource(document.getText(), region), page)
-			),
+			body: JSON.stringify({ plantuml: regionSource(document.getText(), region), page }),
 			signal: AbortSignal.timeout(RENDER_PNG_TIMEOUT_MS)
 		});
 	} catch (err) {
@@ -1226,41 +1224,15 @@ async function savePng(document, region, sidecar, page, pageCount) {
 }
 
 /**
- * A page index the webview sent, as the non-negative integer /renderPNG takes.
- *
- * The message crosses a trust boundary of sorts -- it is whatever the webview
- * posted -- so anything that is not a whole number means the first page. The
- * backend clamps an index past the last page itself.
- *
- * @param {unknown} page
- * @returns {number}
- */
-function normalizePage(page) {
-	return Number.isInteger(page) && page > 0 ? page : 0;
-}
-
-/**
- * The /renderPNG request for one page of a diagram.
- *
- * @param {string} source the diagram's PlantUML source
- * @param {unknown} [page] 0-based page on screen
- * @returns {{ plantuml: string, page: number }}
- */
-function pngRequestBody(source, page) {
-	return { plantuml: source, page: normalizePage(page) };
-}
-
-/**
  * The PNG's file name: the document's, plus the page for a multi-page diagram.
  *
  * @param {string} name file name without extension
- * @param {unknown} [page] 0-based page on screen
- * @param {unknown} [pageCount] how many pages the diagram has
+ * @param {number} page 0-based page on screen
+ * @param {number} pageCount how many pages the diagram has
  * @returns {string}
  */
 function pngFileName(name, page, pageCount) {
-	const paged = Number.isInteger(pageCount) && pageCount > 1;
-	return paged ? `${name}-page-${normalizePage(page) + 1}.png` : `${name}.png`;
+	return pageCount > 1 ? `${name}-page-${page + 1}.png` : `${name}.png`;
 }
 
 /**
@@ -1271,8 +1243,8 @@ function pngFileName(name, page, pageCount) {
  * VS Code's own choice.
  *
  * @param {vscode.TextDocument} document
- * @param {unknown} [page] 0-based page on screen
- * @param {unknown} [pageCount] how many pages the diagram has
+ * @param {number} page 0-based page on screen
+ * @param {number} pageCount how many pages the diagram has
  * @returns {vscode.Uri | undefined}
  */
 function defaultPngUri(document, page, pageCount) {
@@ -1485,7 +1457,6 @@ module.exports = {
 	// Exported for the tests: the reinstall's one step whose failure must not
 	// pass for success, since an install over a surviving venv does nothing.
 	removeManagedVenv,
-	// Exported for the tests: which page of a newpage diagram is exported.
-	pngRequestBody,
+	// Exported for the tests: how an exported page of a newpage diagram is named.
 	pngFileName
 };
