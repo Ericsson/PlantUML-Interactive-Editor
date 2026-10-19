@@ -1146,6 +1146,7 @@ async function submitNote() {
             });
         } else {
             var body = {
+                page: currentPage,
                 plantuml: plantuml,
                 svg: svg.innerHTML,
                 participant: messageOrigin.name,

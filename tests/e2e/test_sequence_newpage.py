@@ -28,6 +28,8 @@ import json
 
 from playwright.sync_api import expect
 
+from .test_sequence_note_menu import _right_click_lifeline
+
 THREE_PAGES = """@startuml
 participant Alice
 participant Bob
@@ -111,6 +113,24 @@ class TestEditingOnLaterPages:
         assert lines[6] == "Bob -> Alice: edited"
         assert lines[3] == "Alice -> Bob: p1m1"
         expect(page.locator("#page-indicator")).to_have_text("Page 2 / 3")
+
+    def test_add_note_on_page_two_lands_on_page_two(self, app_url, page):
+        _load(page, THREE_PAGES)
+        page.click("#page-next")
+        expect(_diagram_text(page)).to_contain_text("p2m2")
+
+        _right_click_lifeline(page)
+        page.click("#seq-addNote")
+        page.click('#seq-note-type-menu [data-note-type="note"]')
+        page.click('#seq-note-placement-menu [data-placement="over"]')
+        page.fill("#seq-note-text", "on page two")
+        page.click("#seq-submit-note")
+
+        page.wait_for_function("editor.session.getValue().includes('on page two')")
+        lines = page.evaluate("editor.session.getValue()").splitlines()
+        note = next(i for i, line in enumerate(lines) if "on page two" in line)
+        assert lines.index("newpage Second") < note < lines.index("newpage"), lines
+        expect(_diagram_text(page)).to_contain_text("on page two")
 
     def test_requests_carry_the_current_page(self, app_url, page):
         _load(page, THREE_PAGES)
