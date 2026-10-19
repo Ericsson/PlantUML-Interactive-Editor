@@ -155,7 +155,7 @@ async function fetchDiagramData(endpoint) {
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({plantuml: plantuml, svg: svg.innerHTML})
+            body: JSON.stringify({plantuml: plantuml, svg: svg.innerHTML, page: currentPage})
         });
         return await response.json();
     } catch (error) {

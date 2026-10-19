@@ -92,7 +92,8 @@ Message and note `text`/`message` fields may contain real newlines (the textarea
 `script.js` handles core operations:
 
 - **render:** `{plantuml}` → returns SVG text
-- **renderPNG:** `{plantuml}` → returns PNG blob
+- **renderPNG:** `{plantuml, page}` → returns PNG blob of that page
+- **Pages (`newpage`):** for sequence diagrams the frontend keeps `currentPage`/`pageCount` (script.js). `/render` receives `page` and reports the count in the `X-PlantUML-Page-Count` header; requests to the routes that match the clicked element against the SVG include `page: currentPage`, and the backend masks the other pages before matching (see `docs/routes.md` for which routes) (see `sequence/pages.py`). Changing page re-renders via `goToPage()`.
 - **encode:** `{plantuml}` → returns URL-encoded string
 - **decode:** `{hash}` → returns puml text
 - **addTitle:** `{plantuml}` → returns modified puml

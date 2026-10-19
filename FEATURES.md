@@ -108,3 +108,8 @@ but adding them to the PlantUML code should still work.
 - Bidirectional hover highlighting
   - Hovering a message, participant, note, group box, or participant box in the diagram highlights its line(s) in the editor
   - Hovering a line in the editor, or moving the cursor to it, highlights the matching element in the diagram
+- Multi-page diagrams (`newpage`)
+  - One page is shown at a time; the diagram toolbar's previous/next buttons and "Page N / M" indicator appear when there is more than one page
+  - Every editing action above works on every page
+  - Moving the editor cursor onto a line of another page switches to that page; hovering an editor line only highlights elements on the page shown
+  - PNG export saves the page on screen

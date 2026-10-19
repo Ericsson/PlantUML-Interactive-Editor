@@ -73,6 +73,31 @@ Copyright (c) 2026 Ericsson
     flex: 1;
 }
 
+/* ===== Page Navigation (multi-page sequence diagrams) ===== */
+.page-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.page-nav[hidden] {
+    display: none;
+}
+
+.page-indicator {
+    font-size: 14px;
+    color: var(--text-primary);
+    padding: 0 6px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.toolbar-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+    pointer-events: none;
+}
+
 /* ===== Shared Button Styles ===== */
 .toolbar-btn {
     display: inline-flex;

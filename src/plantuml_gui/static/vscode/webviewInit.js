@@ -118,6 +118,8 @@
 				// explicitly. For the first message this also keeps the render
 				// clear of the handler setup.
 				booted = true;
+				// A different diagram starts on its first page.
+				resetPage();
 				editor.primeDocumentText(message.text);
 				renderPlantUml();
 				return;
@@ -134,9 +136,16 @@
 	// The toolbar's PNG button. Panning and the three zoom buttons come from
 	// static/diagram-toolbar.js, loaded just before this file.
 	//
-	// The message carries no payload: the host renders the PNG from the
-	// document it owns and writes it, being the runtime with a filesystem.
-	document.getElementById('png').addEventListener('click', () => post({ type: 'savePng' }));
+	// The message carries only the page on screen: the host renders the PNG
+	// from the document it owns and writes it, being the runtime with a
+	// filesystem.
+	document.getElementById('png').addEventListener('click', () =>
+		post({
+			type: 'savePng',
+			page: currentPage,
+			pageCount: pageCount
+		})
+	);
 
 	post({ type: 'ready' });
 })();

@@ -1038,7 +1038,7 @@ async function createDiagramPanel(context) {
 		} else if (message.type === 'setHighlight') {
 			applyHighlight(document, currentRegion(), message.rows);
 		} else if (message.type === 'savePng') {
-			await savePng(document, currentRegion(), active);
+			await savePng(document, currentRegion(), active, message.page, message.pageCount);
 		} else if (message.type === 'backendUnreachable') {
 			reportBackendUnreachable(message);
 		} else if (message.type === 'ready') {
@@ -1145,17 +1145,19 @@ async function applyPuml(document, region, source) {
 /**
  * Render the diagram as a PNG and write it wherever the user chooses.
  *
- * The webview posts a bare `savePng`; the source comes from the document, which
- * this process owns and which every diagram edit is written into before a render
- * can be asked for. From the *region* of it the panel is showing, so a diagram
- * in a Markdown file is exported as that diagram.
+ * The webview posts `savePng` with the page it is showing; the source comes
+ * from the document, which this process owns and which every diagram edit is
+ * written into before a render can be asked for. From the *region* of it the
+ * panel is showing, so a diagram in a Markdown file is exported as that diagram.
  *
  * @param {vscode.TextDocument} document
  * @param {import('./src/sourceRegion').SourceRegion | undefined} region where
  *   the diagram lives now, as currentRegion() found it
  * @param {import('./src/sidecar').Sidecar} sidecar a running sidecar
+ * @param {number} page 0-based page on screen, for `newpage` diagrams
+ * @param {number} pageCount how many pages the diagram has
  */
-async function savePng(document, region, sidecar) {
+async function savePng(document, region, sidecar, page, pageCount) {
 	// A render comes from a block the document still holds: what is on screen is
 	// the document's to give, this process keeping no copy of it. The panel can
 	// outlive the block it is showing, and the button says so when it has.
@@ -1176,7 +1178,7 @@ async function savePng(document, region, sidecar) {
 				'Content-Type': 'application/json',
 				[TOKEN_HEADER]: sidecar.token
 			},
-			body: JSON.stringify({ plantuml: regionSource(document.getText(), region) }),
+			body: JSON.stringify({ plantuml: regionSource(document.getText(), region), page }),
 			signal: AbortSignal.timeout(RENDER_PNG_TIMEOUT_MS)
 		});
 	} catch (err) {
@@ -1205,7 +1207,7 @@ async function savePng(document, region, sidecar) {
 	}
 
 	const target = await vscode.window.showSaveDialog({
-		defaultUri: defaultPngUri(document),
+		defaultUri: defaultPngUri(document, page, pageCount),
 		filters: { 'PNG image': ['png'] }
 	});
 
@@ -1222,6 +1224,18 @@ async function savePng(document, region, sidecar) {
 }
 
 /**
+ * The PNG's file name: the document's, plus the page for a multi-page diagram.
+ *
+ * @param {string} name file name without extension
+ * @param {number} page 0-based page on screen
+ * @param {number} pageCount how many pages the diagram has
+ * @returns {string}
+ */
+function pngFileName(name, page, pageCount) {
+	return pageCount > 1 ? `${name}-page-${page + 1}.png` : `${name}.png`;
+}
+
+/**
  * Where the save dialog should open: beside the document, under its own name.
  *
  * An unsaved document has no directory to sit beside -- its uri is
@@ -1229,16 +1243,18 @@ async function savePng(document, region, sidecar) {
  * VS Code's own choice.
  *
  * @param {vscode.TextDocument} document
+ * @param {number} page 0-based page on screen
+ * @param {number} pageCount how many pages the diagram has
  * @returns {vscode.Uri | undefined}
  */
-function defaultPngUri(document) {
+function defaultPngUri(document, page, pageCount) {
 	if (document.uri.scheme === 'file') {
 		const { dir, name } = path.parse(document.uri.fsPath);
-		return vscode.Uri.file(path.join(dir, `${name}.png`));
+		return vscode.Uri.file(path.join(dir, pngFileName(name, page, pageCount)));
 	}
 
 	const folder = vscode.workspace.workspaceFolders?.[0];
-	return folder && vscode.Uri.joinPath(folder.uri, 'diagram.png');
+	return folder && vscode.Uri.joinPath(folder.uri, pngFileName('diagram', page, pageCount));
 }
 
 /**
@@ -1440,5 +1456,7 @@ module.exports = {
 	ensureBackendPython,
 	// Exported for the tests: the reinstall's one step whose failure must not
 	// pass for success, since an install over a surviving venv does nothing.
-	removeManagedVenv
+	removeManagedVenv,
+	// Exported for the tests: how an exported page of a newpage diagram is named.
+	pngFileName
 };

@@ -34,9 +34,19 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent.parent.parent / ".env", override=True)
 
 
-def _create_svg_from_uml(uml):
+def _page_args(page: int) -> list[str]:
+    """PlantUML arguments selecting one page of a ``newpage`` diagram.
+
+    ``-pipe`` alone renders only the first page; ``-pipeimageindex`` picks the
+    0-based page. Omitted for page 0 so single-page renders are unchanged.
+    """
+    return ["-pipeimageindex", str(page)] if page > 0 else []
+
+
+def _create_svg_from_uml(uml, page: int = 0):
     """Create a scalable vector graphic(SVG) from a UML string
     :param uml: The input UML text used for creating the image
+    :param page: 0-based page to render (diagrams split by ``newpage``)
     :return: The content of generated svg
     """
     base_command = [
@@ -46,6 +56,7 @@ def _create_svg_from_uml(uml):
         os.environ["PLANTUML_JAR"],
         "-pipe",
         "-tsvg",  # output in svg format
+        *_page_args(page),
     ]
     process = run(
         base_command,
@@ -57,9 +68,10 @@ def _create_svg_from_uml(uml):
     return process.stdout.decode("utf-8")
 
 
-def _create_png_from_uml(uml):
+def _create_png_from_uml(uml, page: int = 0):
     """Create a PNG image from a UML string
     :param uml: The input UML text used for creating the image
+    :param page: 0-based page to render (diagrams split by ``newpage``)
     :return: The content of generated png
     """
     base_command = [
@@ -70,6 +82,7 @@ def _create_png_from_uml(uml):
         "-pipe",
         "-tpng",  # output in png format
         "-Sdpi=300",  # render at higher resolution for crisper downloaded images
+        *_page_args(page),
     ]
     process = run(
         base_command,
