@@ -142,7 +142,7 @@
 	document.getElementById('png').addEventListener('click', () =>
 		post({
 			type: 'savePng',
-			page: currentDiagramType === 'sequence' ? currentPage : 0,
+			page: currentPage,
 			pageCount: pageCount
 		})
 	);

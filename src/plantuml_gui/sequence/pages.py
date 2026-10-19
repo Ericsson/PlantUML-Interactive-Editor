@@ -82,13 +82,13 @@ def page_count(puml: str) -> int:
     return len(page_boundaries(puml)) + 1
 
 
-def clamp_page(puml: str, page: object) -> int:
-    """Coerce a requested page to a valid 0-based page index for ``puml``."""
-    try:
-        requested = int(page)  # type: ignore[call-overload]
-    except (TypeError, ValueError):
-        requested = 0
-    return max(0, min(requested, page_count(puml) - 1))
+def clamp_page(puml: str, page: int) -> int:
+    """Clamp a requested 0-based page to the pages ``puml`` has.
+
+    The request carries the page that was on screen, which an edit removing
+    ``newpage`` lines can leave past the last page.
+    """
+    return min(page, page_count(puml) - 1)
 
 
 def page_span(puml: str, page: int) -> Tuple[int, int]:
@@ -101,11 +101,6 @@ def page_span(puml: str, page: int) -> Tuple[int, int]:
     start = boundaries[page - 1] + 1 if page > 0 else 0
     end = boundaries[page] if page < len(boundaries) else len(puml.splitlines())
     return start, end
-
-
-def page_of_line(puml: str, line_index: int) -> int:
-    """0-based page that a line belongs to (a ``newpage`` belongs to the page it ends)."""
-    return sum(1 for b in page_boundaries(puml) if b < line_index)
 
 
 def _group_spans(lines: List[str], in_note: Set[int]) -> List[Tuple[int, int]]:

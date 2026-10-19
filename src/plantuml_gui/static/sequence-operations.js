@@ -68,7 +68,7 @@ async function fetchSequencePositions() {
         notes: data ? data.notes : [],
         groups: data ? data.groups : [],
         boxes: data ? data.boxes : [],
-        pageBoundaries: data && data.pageBoundaries ? data.pageBoundaries : [],
+        pageBoundaries: data ? data.pageBoundaries : [],
     };
 }
 
@@ -145,7 +145,6 @@ function participantEventListeners() {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    page: currentPage,
                     'plantuml': plantuml,
                     'svg': svg.innerHTML,
                     'name': newname,
@@ -171,7 +170,6 @@ function participantEventListeners() {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    page: currentPage,
                     'plantuml': plantuml,
                     'svg': svg.innerHTML,
                     'svgelement': lastclickedsvgelement.outerHTML
@@ -270,7 +268,6 @@ function setupParticipantHandlers(svgelements, svg, element) {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        page: currentPage,
                         'plantuml': plantuml,
                         'svg': svg.innerHTML,
                         'svgelement': svgelement.outerHTML

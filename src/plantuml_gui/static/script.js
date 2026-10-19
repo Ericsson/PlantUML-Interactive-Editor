@@ -176,7 +176,7 @@ function resetPage() {
 // Record the page count a render reported, clamping the current page if
 // pages were removed, and refresh the toolbar's page navigation.
 function setPageCount(count) {
-    pageCount = Math.max(1, count || 1);
+    pageCount = count;
     currentPage = Math.min(currentPage, pageCount - 1);
     updatePageControls();
 }
@@ -184,9 +184,7 @@ function setPageCount(count) {
 // Page navigation in the diagram toolbar (partials/diagram_toolbar.html):
 // visible only for a sequence diagram with more than one page.
 function updatePageControls() {
-    const nav = document.getElementById('page-nav');
-    if (!nav) return;
-    nav.hidden = !(currentDiagramType === 'sequence' && pageCount > 1);
+    document.getElementById('page-nav').hidden = !(currentDiagramType === 'sequence' && pageCount > 1);
     document.getElementById('page-indicator').textContent = `Page ${currentPage + 1} / ${pageCount}`;
     document.getElementById('page-prev').disabled = currentPage === 0;
     document.getElementById('page-next').disabled = currentPage >= pageCount - 1;
@@ -435,11 +433,10 @@ function buttonEventListeners() {
     document.getElementById('png').addEventListener('click', async () => {
         try {
             const plantuml = trimlines(editor.session.getValue());
-            const page = currentDiagramType === 'sequence' ? currentPage : 0;
             const response = await fetch("/renderPNG", {
                 method: "POST",
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 'plantuml': plantuml, 'page': page })
+                body: JSON.stringify({ 'plantuml': plantuml, 'page': currentPage })
             });
 
             const blob = await response.blob();
@@ -448,7 +445,7 @@ function buttonEventListeners() {
             const a = document.createElement("a");
             a.href = url;
             // Multi-page diagrams download the page on screen.
-            a.download = pageCount > 1 ? `diagram-page-${page + 1}.png` : "diagram.png";
+            a.download = pageCount > 1 ? `diagram-page-${currentPage + 1}.png` : "diagram.png";
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -676,12 +673,11 @@ async function fetchSvgFromPlantUml() {
 
 // Render the current page. Returns {svg, pageCount}; the caller applies
 // pageCount only after its render-generation check, so a stale render can't
-// overwrite a newer diagram's page count. Only sequence diagrams are paged;
-// everything else renders (and reports) page 1.
+// overwrite a newer diagram's page count. Only sequence diagrams are paged:
+// renderPlantUml keeps every other type on page 0.
 async function fetchSvgPage() {
     try {
         const plantuml = editor.session.getValue();
-        const paged = currentDiagramType === 'sequence';
         const response = await fetch("render", {
             method: "POST",
             headers: {
@@ -689,12 +685,11 @@ async function fetchSvgPage() {
             },
             body: JSON.stringify({
                 'plantuml': plantuml,
-                'page': paged ? currentPage : 0
+                'page': currentPage
             })
         });
         const svg = await response.text()
-        const count = paged ? parseInt(response.headers.get(PAGE_COUNT_HEADER), 10) : 1;
-        return { svg: svg, pageCount: Number.isNaN(count) ? 1 : count };
+        return { svg: svg, pageCount: Number(response.headers.get(PAGE_COUNT_HEADER)) };
     } catch (error) {
         console.error('Error with render fetch api?', error);
     }

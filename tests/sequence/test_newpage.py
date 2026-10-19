@@ -34,7 +34,6 @@ from plantuml_gui.sequence.pages import (
     mask_other_pages,
     page_boundaries,
     page_count,
-    page_of_line,
     unmask,
 )
 from plantuml_gui.sequence.util import iter_note_shapes, note_regions
@@ -113,13 +112,6 @@ class TestPageModel:
         assert page_boundaries(THREE_PAGES) == [8, 14]
         assert page_count(THREE_PAGES) == 3
 
-    def test_page_of_line(self):
-        assert page_of_line(THREE_PAGES, 3) == 0
-        # A newpage belongs to the page it ends.
-        assert page_of_line(THREE_PAGES, 8) == 0
-        assert page_of_line(THREE_PAGES, 9) == 1
-        assert page_of_line(THREE_PAGES, 15) == 2
-
     @pytest.mark.parametrize("line", ["NEWPAGE", "  newpage  ", "newpage Title X"])
     def test_spellings_plantuml_accepts(self, line):
         assert page_count(f"@startuml\nA -> B: a\n{line}\nA -> B: b\n@enduml") == 2
@@ -132,9 +124,7 @@ class TestPageModel:
         puml = "@startuml\nA -> B: a\nnote right of A\nnewpage\nend note\n@enduml"
         assert page_count(puml) == 1
 
-    @pytest.mark.parametrize(
-        "requested, expected", [(None, 0), ("x", 0), (-3, 0), (1, 1), ("2", 2), (9, 2)]
-    )
+    @pytest.mark.parametrize("requested, expected", [(0, 0), (1, 1), (2, 2), (9, 2)])
     def test_clamp_page(self, requested, expected):
         assert clamp_page(THREE_PAGES, requested) == expected
 

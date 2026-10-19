@@ -56,7 +56,7 @@ def _page_view(puml: str, data: dict) -> Tuple[str, Callable[[str], str]]:
     elements, and the frontend only sends the current page's SVG, so the other
     pages' lines are masked out (see pages.py). Returns the masked puml and a
     function that restores the hidden lines in the module's edited result.
-    Requests without ``page`` (or single-page diagrams) pass through unchanged.
+    A request without ``page`` is matched against the first page.
     """
     masked, originals = mask_other_pages(puml, clamp_page(puml, data.get("page", 0)))
     return masked, lambda result: unmask(result, originals)

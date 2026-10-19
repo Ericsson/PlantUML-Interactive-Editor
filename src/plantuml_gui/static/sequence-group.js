@@ -179,7 +179,6 @@ async function submitGroup() {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    page: currentPage,
                     plantuml: plantuml,
                     groupType: selectedGroupType,
                     label: label,
