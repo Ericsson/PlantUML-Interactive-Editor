@@ -34,6 +34,7 @@ const {
 	readPortLine,
 	resolvePythonPath,
 	EXPECTED_BACKEND_VERSION,
+	backendVersionMatches,
 	PythonConfigError,
 	BackendMissingError,
 	Sidecar,
@@ -111,37 +112,34 @@ suite('sidecar: environment', () => {
 });
 
 suite('sidecar: version compatibility', () => {
-	// Kept in step by hand with _major_minor in scripts/check_app_versions.py
-	// -- the pre-commit hook's build-time half of this same rule. A test
-	// reads that file's source rather than importing it, the same reasoning
-	// as the PORT_LINE_PREFIX/TOKEN_HEADER contract tests above: a Python
-	// script and a Node module cannot share a definition, only agree by hand.
-	const checkAppVersionsPy = require('fs').readFileSync(
-		require('path').join(__dirname, '..', '..', 'scripts', 'check_app_versions.py'),
-		'utf-8'
-	);
+	// Build time pairs the versions exactly (scripts/check_app_versions.py);
+	// at runtime only major.minor is compared, since every merged PR bumps the
+	// patch and a backend one fix behind still serves the same routes.
+	const [major, minor, patch] = require('../package.json').version.split('.').map(Number);
 
 	test('expects the backend at this extension\'s major.minor', () => {
-		// The patch component is free -- an extension-only fix can ship as
-		// 0.31.1 against the same 0.31 backend -- so it is dropped here rather
-		// than compared.
-		const [major, minor] = require('../package.json').version.split('.');
-
 		assert.strictEqual(EXPECTED_BACKEND_VERSION, `${major}.${minor}`);
 	});
 
-	test('applies the same major.minor rule as check_app_versions.py', () => {
-		// Read _major_minor's own behaviour off the source: patch components
-		// split off and ignored, same as the expected version here.
-		assert.ok(
-			/version\.split\(["']\.["']\)/.test(checkAppVersionsPy),
-			'check_app_versions.py no longer splits on "." the way this test assumes'
-		);
-		assert.ok(
-			checkAppVersionsPy.includes('components[0]') &&
-				checkAppVersionsPy.includes('components[1]'),
-			'check_app_versions.py no longer takes the first two components'
-		);
+	test('accepts the exact version and any other patch of it', () => {
+		assert.ok(backendVersionMatches(`${major}.${minor}.${patch}`));
+		assert.ok(backendVersionMatches(`${major}.${minor}.${patch + 1}`));
+	});
+
+	test('accepts a backend from before three-component versions', () => {
+		assert.ok(backendVersionMatches(`${major}.${minor}`));
+	});
+
+	test('rejects another minor, another major, and no version at all', () => {
+		assert.ok(!backendVersionMatches(`${major}.${minor + 1}.0`));
+		assert.ok(!backendVersionMatches(`${major + 1}.${minor}.${patch}`));
+		assert.ok(!backendVersionMatches(undefined));
+		assert.ok(!backendVersionMatches(''));
+	});
+
+	test('does not mistake a longer minor for a match', () => {
+		// "0.3" must not match "0.31": the comparison is per component.
+		assert.ok(!backendVersionMatches(`${major}.${minor}1.0`));
 	});
 });
 

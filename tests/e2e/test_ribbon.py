@@ -1,4 +1,30 @@
+# SPDX-License-Identifier: MIT
+#
+# MIT License
+#
+# Copyright (c) 2026 Ericsson
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 """Tests for the ribbon UI layout structure."""
+
+import re
 
 
 def test_global_bar_visible(app_url, page):
@@ -392,6 +418,19 @@ def test_version_panel_opens(app_url, page):
     assert panel.is_visible()
     # Should have changelog content
     assert "0.28" in panel.inner_text() or "0.27" in panel.inner_text()
+
+
+def test_version_history_shows_only_major_minor(app_url, page):
+    """Badge and panel headings are vX.Y: patch versions are for tracking only."""
+    page.wait_for_timeout(2000)
+    assert re.fullmatch(r"v\d+\.\d+", page.locator("#version").inner_text())
+    page.locator("#version").click()
+    panel = page.locator("#version-panel")
+    panel.wait_for(state="visible", timeout=3000)
+    headings = panel.locator("h4").all_inner_texts()
+    assert headings
+    for heading in headings:
+        assert re.fullmatch(r"v\d+\.\d+", heading), heading
 
 
 def test_version_panel_closes_on_outside_click(app_url, page):

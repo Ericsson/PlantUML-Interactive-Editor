@@ -53,6 +53,7 @@ const {
 	PythonConfigError,
 	BackendMissingError,
 	EXPECTED_BACKEND_VERSION,
+	backendVersionMatches,
 	TOKEN_HEADER
 } = require('./src/sidecar');
 const {
@@ -613,11 +614,12 @@ async function showInstallError(err) {
  * Warn, once per sidecar start, when the running backend is not the version
  * this extension was built against.
  *
- * The build-time pairing (scripts/check_app_versions.py) holds for the wheel
- * inside this vsix, so the backend the extension installs for itself always
- * matches. This catches one that came from somewhere else: an interpreter named
- * by the setting or by PLANTUML_GUI_PYTHON, carrying whichever version of the
- * package happens to be installed in it.
+ * The build-time pairing (scripts/check_app_versions.py, an exact X.Y.Z match)
+ * holds for the wheel inside this vsix, so the backend the extension installs
+ * for itself always matches. This catches one that came from somewhere else: an
+ * interpreter named by the setting or by PLANTUML_GUI_PYTHON, carrying whichever
+ * version of the package happens to be installed in it. Only major.minor is
+ * compared here; see backendVersionMatches.
  *
  * A mismatch still runs -- the routes this extension calls have generally not
  * gone away across a minor version -- so this warns rather than blocking.
@@ -627,7 +629,7 @@ async function showInstallError(err) {
 function warnOnBackendVersionMismatch(activeSidecar) {
 	const backendVersion = activeSidecar.backendVersion;
 
-	if (backendVersion === EXPECTED_BACKEND_VERSION) {
+	if (backendVersionMatches(backendVersion)) {
 		return;
 	}
 
