@@ -14,7 +14,7 @@
 │   │   ├── render.py       # PlantUML JAR invocation for PNG/SVG
 │   │   ├── puml_encoder.py # URL encoding/decoding for diagram sharing
 │   │   ├── title.py        # Diagram titles (shared by activity & sequence)
-│   │   └── parse_changelog.py # CHANGELOG.md parser for version history
+│   │   └── parse_changelog.py # CHANGELOG.md parser for version history (folds X.Y.Z sections into one X.Y entry each)
 │   ├── sequence/           # Sequence diagram package
 │   │   ├── routes.py       # Sequence routes (/addParticipant, /addMessage, etc.)
 │   │   ├── classes.py      # Diagram, Participant, Message, ParticipantDeclaration data classes; declaration parsing (displayed name vs alias, reference_name_for); displayed-name reading and matching (participant_label, display_names_match); shared participant-rect helpers (is_participant_rect, participant_header_bounds, rect_encloses)
@@ -86,6 +86,7 @@
 │   ├── shared/             # Shared route tests (render, encode/decode, title) and the extension-facing entry points
 │   │   ├── test_render.py
 │   │   ├── test_title.py
+│   │   ├── test_parse_changelog.py # Version History feed: X.Y.Z sections grouped into X.Y, badge shows X.Y
 │   │   └── test_serve.py       # Sidecar entry point (token auth, CORS, /health, /webview)
 │   ├── sequence/           # Sequence diagram tests
 │   │   ├── test_participant.py            # Participant routes, incl. the three renaming cases
