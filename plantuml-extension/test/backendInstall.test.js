@@ -206,20 +206,20 @@ function fakeProbes(answers) {
 
 suite('backendInstall: the bundled wheel', () => {
 	test('is found by its filename, with its version', () => {
-		const dir = extensionWith(['plantuml_gui-0.31-py3-none-any.whl']);
+		const dir = extensionWith(['plantuml_gui-0.31.2-py3-none-any.whl']);
 
 		assert.deepStrictEqual(bundledWheel(dir), {
-			path: path.join(dir, BACKEND_DIR, 'plantuml_gui-0.31-py3-none-any.whl'),
-			version: '0.31'
+			path: path.join(dir, BACKEND_DIR, 'plantuml_gui-0.31.2-py3-none-any.whl'),
+			version: '0.31.2'
 		});
 	});
 
-	test('reads a three-component version too', () => {
-		// An extension-only patch release leaves the backend at major.minor,
-		// but nothing stops the backend having a patch of its own.
-		const dir = extensionWith(['plantuml_gui-0.31.2-py3-none-any.whl']);
+	test('reads a two-component version too', () => {
+		// Backends before 0.31.0 were versioned major.minor; a wheel built
+		// from one still names itself that way.
+		const dir = extensionWith(['plantuml_gui-0.31-py3-none-any.whl']);
 
-		assert.strictEqual(bundledWheel(dir).version, '0.31.2');
+		assert.strictEqual(bundledWheel(dir).version, '0.31');
 	});
 
 	test('ignores anything that is not a wheel of ours', () => {
