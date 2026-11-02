@@ -14,7 +14,7 @@ Review and update any documentation affected by your changes:
 - **`docs/`** — Update the relevant doc if you changed architecture, routes, data models, the frontend-backend contract, element patterns, or setup steps.
 - **`README.md`** — Update if you changed usage instructions, pre-requisites, or setup steps.
 - **`FEATURES.md`** — Update if you added, removed, or changed a user-facing feature.
-- **`CHANGELOG.md`** — Add new features and bug fixes to the `## [Unreleased]` section. User-facing changes go under `### External`; technical/internal changes go under `### Internal`.
+- **`CHANGELOG.md`** — Add new features and bug fixes to the `## [Unreleased]` section. User-facing changes go under `### External`; technical/internal changes go under `### Internal`. Don't write a version heading yourself; `bump_version.py` turns `[Unreleased]` into one (see "Before opening a PR to `main`").
 - **`.kiro/steering/structure.md`** — Update if you added new files, modules, or changed the directory layout.
 - **`.kiro/steering/product.md`** — Update if you changed supported diagram elements or key features.
 - **`.kiro/steering/tech.md`** — Update if you added dependencies, changed tooling, or modified commands.
@@ -31,6 +31,24 @@ git diff --cached
 ```
 
 Ensure no unrelated changes, secrets, or temporary files are included.
+
+## Before opening a PR to `main`, once per PR:
+
+### Bump the version
+
+Every PR to `main` bumps the version by exactly one step; the `version-check` CI job rejects the PR otherwise.
+
+```bash
+git fetch
+uv run python scripts/bump_version.py minor   # new user-facing feature
+uv run python scripts/bump_version.py patch   # bug fix, internal change, docs
+```
+
+This updates `__about__.py`, `plantuml-extension/package.json` and `package-lock.json`, and turns `[Unreleased]` into `[X.Y.Z] - <date>` in `CHANGELOG.md`. Commit the result with the PR.
+
+- Run it once per PR, not per commit.
+- If `main` moved ahead (another PR merged first), rebase onto `main` and run the script again; it renumbers your section instead of adding a second one.
+- Don't edit version numbers by hand.
 
 ## Summary
 

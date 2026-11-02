@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-11-02
+
 ### External
 
 - Sequence diagrams split with `newpage` now show every page, in the web app and the VS Code panel. Page through them with the new previous/next buttons and "Page N / M" indicator in the diagram toolbar (shown only for multi-page diagrams). Every page is fully interactive, and moving the editor cursor onto a line of another page switches to that page. PNG export saves the page on screen (`diagram-page-N.png`).
@@ -29,6 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The Version History panel and the version badge show `X.Y` only. `parse_changelog` now folds the `X.Y.Z` sections of `CHANGELOG.md` into one entry per minor (`group_by_minor`: entries latest patch first, dated when `X.Y.0` shipped, minors without External entries dropped); the per-heading parse is kept as `parse_changelog_sections`. The `/` route passes `display_version(__version__)` to the badge; `/health` still reports the full `X.Y.Z`. No frontend change. Covered by `tests/shared/test_parse_changelog.py` and `test_version_history_shows_only_major_minor` in `tests/e2e/test_ribbon.py`.
 - Added `scripts/bump_version.py patch|minor`, which sets `__about__.py`, `plantuml-extension/package.json` and `package-lock.json` one step above the version on `origin/main` (`--base-ref` to change) and turns `[Unreleased]` in `CHANGELOG.md` into `[X.Y.Z] - <date>` (the extension changelog too, if its `[Unreleased]` has entries). Because it bumps from the base branch, running it again renames the branch's own section instead of bumping twice, including after a rebase onto a `main` that released the same number. It refuses when there is nothing to release, or when entries sit both under `[Unreleased]` and in the branch's section, and writes nothing in that case. If the base ref cannot be read it warns and bumps from the local version. Covered by `tests/scripts/test_bump_version.py`, which drives it against temporary git repos.
 - Added the `version-check` workflow (`.github/workflows/version-check.yml`): on pull requests to `main` it runs `scripts/check_version_bump.py --base-ref origin/main`, which fails unless the version is exactly one patch or minor step above `main`'s, and says how to fix it. Skipped for Dependabot PRs (by PR author). Read-only permissions. Covered by `tests/scripts/test_check_version_bump.py`.
+- Documented the per-PR version bump in `README.md` (Development → Versioning), `.kiro/steering/tech.md`, `.kiro/steering/structure.md` and the pre-commit-checklist skill.
 
 - Removed leftover module-level debug prints from `shared/puml_encoder.py`.
 - Added `src/plantuml_gui/serve.py`, an alternative entry point that runs the Flask app on an ephemeral port and announces it as `PLANTUML_GUI_PORT=<n>` on stdout, with optional `PLANTUML_GUI_TOKEN` auth, permissive CORS, and a `PLANTUML_GUI_JAR_OVERRIDE` applied after `render.py`'s `load_dotenv`. Unlike `python -m plantuml_gui` (fixed port 5000, reloader), it is safe to run as a managed child process. Covered by `tests/shared/test_serve.py`.

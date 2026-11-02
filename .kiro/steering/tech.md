@@ -52,6 +52,10 @@ uv run python -m pytest --cov --cov-report=html
 
 # Setup pre-commit hooks
 uv run pre-commit install -t pre-commit -t pre-push
+
+# Bump the version, once per PR to main (after git fetch)
+uv run python scripts/bump_version.py patch   # bug fix, internal change
+uv run python scripts/bump_version.py minor   # new user-facing feature
 ```
 
 ## Constraints

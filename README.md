@@ -97,3 +97,15 @@ uv run python -m pytest --cov --cov-report=html
 ```
 uv run pytest tests/e2e/
 ```
+
+### Versioning
+
+Every PR to `main` bumps the version by one step; CI rejects it otherwise. Describe the change under `## [Unreleased]` in `CHANGELOG.md`, then, once per PR:
+
+```
+git fetch
+uv run python scripts/bump_version.py patch   # bug fix, internal change
+uv run python scripts/bump_version.py minor   # new user-facing feature
+```
+
+If another PR merges first, rebase onto `main` and run it again; it renumbers your changelog section rather than bumping twice.
