@@ -1,0 +1,22 @@
+name: version-check
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  version-bump:
+    # Dependabot cannot run bump_version.py; the next human PR's bump covers
+    # its change. Skipped jobs count as passing for a required check.
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # makes origin/<base branch> available to compare against
+        persist-credentials: false
+    - name: Check the version is one step above the base branch
+      run: python3 scripts/check_version_bump.py --base-ref "origin/${GITHUB_BASE_REF}"
