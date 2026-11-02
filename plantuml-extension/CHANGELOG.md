@@ -9,6 +9,8 @@ Changes to the diagram editing itself are listed in the repository's
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-11-02
+
 - Added support for diagrams written in Markdown files. A `.md` file holding a
   ` ```plantuml ` block is followed by the diagram panel: put the caret in a
   block and the panel shows that diagram, and editing it in the panel rewrites
