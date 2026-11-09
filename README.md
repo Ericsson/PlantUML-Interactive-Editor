@@ -64,48 +64,6 @@ pip install .
 python -m plantuml_gui
 ```
 
-## Development
+## Contributing
 
-### Pre-requisites
-
-- uv
-
-### Setup
-
-```
-uv run pre-commit install -t pre-commit -t pre-push
-```
-
-### Running tests
-
-#### Python
-
-##### Without coverage
-
-```
-uv run pytest
-```
-
-##### With coverage
-
-```
-uv run python -m pytest --cov --cov-report=html
-```
-
-#### Javascript
-
-```
-uv run pytest tests/e2e/
-```
-
-### Versioning
-
-Versions follow [semver](https://semver.org) (`X.Y.Z`). Every PR describes its change under `## [Unreleased]` in `CHANGELOG.md` but leaves the version alone. Releasing is a separate, deliberate step: review the unreleased entries, pick the step they call for, and run
-
-```
-uv run python scripts/bump_version.py patch   # bug fixes only
-uv run python scripts/bump_version.py minor   # new features
-uv run python scripts/bump_version.py major   # incompatible changes
-```
-
-This updates every version file and turns `[Unreleased]` into `[X.Y.Z] - <date>`. Do it in a release PR, or inside a small fix PR you want out quickly. Once that is merged, `scripts/build_release.sh <destination>` publishes it from a clean checkout and tags the commit `vX.Y.Z`; it refuses if that version was already released from another commit.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup, running the tests, the checklist to follow before opening a pull request, and how to release a new version.
