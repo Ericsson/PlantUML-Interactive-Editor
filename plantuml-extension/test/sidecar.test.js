@@ -34,7 +34,6 @@ const {
 	readPortLine,
 	resolvePythonPath,
 	EXPECTED_BACKEND_VERSION,
-	backendVersionMatches,
 	PythonConfigError,
 	BackendMissingError,
 	Sidecar,
@@ -112,34 +111,8 @@ suite('sidecar: environment', () => {
 });
 
 suite('sidecar: version compatibility', () => {
-	// Build time pairs the versions exactly (scripts/check_app_versions.py);
-	// at runtime only major.minor is compared, since every merged PR bumps the
-	// patch and a backend one fix behind still serves the same routes.
-	const [major, minor, patch] = require('../package.json').version.split('.').map(Number);
-
-	test('expects the backend at this extension\'s major.minor', () => {
-		assert.strictEqual(EXPECTED_BACKEND_VERSION, `${major}.${minor}`);
-	});
-
-	test('accepts the exact version and any other patch of it', () => {
-		assert.ok(backendVersionMatches(`${major}.${minor}.${patch}`));
-		assert.ok(backendVersionMatches(`${major}.${minor}.${patch + 1}`));
-	});
-
-	test('accepts a backend from before three-component versions', () => {
-		assert.ok(backendVersionMatches(`${major}.${minor}`));
-	});
-
-	test('rejects another minor, another major, and no version at all', () => {
-		assert.ok(!backendVersionMatches(`${major}.${minor + 1}.0`));
-		assert.ok(!backendVersionMatches(`${major + 1}.${minor}.${patch}`));
-		assert.ok(!backendVersionMatches(undefined));
-		assert.ok(!backendVersionMatches(''));
-	});
-
-	test('does not mistake a longer minor for a match', () => {
-		// "0.3" must not match "0.31": the comparison is per component.
-		assert.ok(!backendVersionMatches(`${major}.${minor}1.0`));
+	test('expects the backend at exactly this extension\'s version', () => {
+		assert.strictEqual(EXPECTED_BACKEND_VERSION, require('../package.json').version);
 	});
 });
 

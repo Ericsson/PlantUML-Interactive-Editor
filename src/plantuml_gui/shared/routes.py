@@ -31,7 +31,7 @@ from flask import Blueprint, Response, jsonify, render_template, request, send_f
 
 from ..__about__ import __version__
 from ..sequence.pages import clamp_page, page_count
-from .parse_changelog import display_version, parse_changelog
+from .parse_changelog import parse_changelog
 from .puml_encoder import plantuml_decode, plantuml_encode
 from .render import _create_png_from_uml, _create_svg_from_uml
 from .title import add_title, delete_title, edit_title_text, get_title_text
@@ -73,9 +73,9 @@ def generate_static_js_hash():
 def home():
     # Cache-busting hash covering all static JS files.
     file_hash = generate_static_js_hash()
-    # pass hash to the template; the badge shows X.Y, like the version history
+    # pass hash to the template
     return render_template(
-        "index.html", script_hash=file_hash, version=display_version(__version__)
+        "index.html", script_hash=file_hash, version=__version__
     )  # pragma: no cover
 
 

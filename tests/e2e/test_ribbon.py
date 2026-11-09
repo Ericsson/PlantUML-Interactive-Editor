@@ -24,8 +24,6 @@
 
 """Tests for the ribbon UI layout structure."""
 
-import re
-
 
 def test_global_bar_visible(app_url, page):
     """The global bar element exists and is visible."""
@@ -418,19 +416,6 @@ def test_version_panel_opens(app_url, page):
     assert panel.is_visible()
     # Should have changelog content
     assert "0.28" in panel.inner_text() or "0.27" in panel.inner_text()
-
-
-def test_version_history_shows_only_major_minor(app_url, page):
-    """Badge and panel headings are vX.Y: patch versions are for tracking only."""
-    page.wait_for_timeout(2000)
-    assert re.fullmatch(r"v\d+\.\d+", page.locator("#version").inner_text())
-    page.locator("#version").click()
-    panel = page.locator("#version-panel")
-    panel.wait_for(state="visible", timeout=3000)
-    headings = panel.locator("h4").all_inner_texts()
-    assert headings
-    for heading in headings:
-        assert re.fullmatch(r"v\d+\.\d+", heading), heading
 
 
 def test_version_panel_closes_on_outside_click(app_url, page):

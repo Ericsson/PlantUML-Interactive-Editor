@@ -11,6 +11,11 @@
 #
 # If destination already contains a published release, it's moved into
 # destination/old/ before the new one is installed.
+#
+# Every published version is tagged vX.Y.Z, so one version number can never
+# name two different builds: publishing refuses when the tag already exists on
+# another commit (bump with scripts/bump_version.py first), and otherwise tags
+# this commit and pushes the tag to origin.
 set -euo pipefail
 shopt -s nullglob
 
@@ -18,6 +23,21 @@ REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 DEST=${1:-}
 
 cd "$REPO"
+
+# Also checks that every version file agrees, before anything is built.
+VERSION=$(python3 -c 'import sys; sys.path.insert(0, "scripts"); from check_app_versions import check_app_versions; print(check_app_versions())')
+TAG="v$VERSION"
+
+if [[ -n $DEST ]]; then
+	git diff --quiet HEAD || { echo "uncommitted changes: a release must be built from a commit, so its tag names what shipped" >&2; exit 1; }
+	git fetch --quiet --tags origin
+fi
+if tagged=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}"); then
+	if [[ $tagged != $(git rev-parse HEAD) ]]; then
+		echo "$VERSION was already released from ${tagged:0:7}; bump the version (scripts/bump_version.py) before releasing again" >&2
+		exit 1
+	fi
+fi
 
 archive_old() {
 	local dest=$1
@@ -66,3 +86,11 @@ install -m 664 plantuml-extension/plantuml-editor-*.vsix "$DEST/"
 
 echo "published to $DEST:"
 ls -l "$DEST"
+
+# Tag after publishing, so a failed publish leaves no tag behind. Already
+# tagged when republishing the same commit.
+if ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+	git tag -a "$TAG" -m "Release $VERSION"
+	git push --quiet origin "$TAG"
+	echo "tagged $TAG"
+fi

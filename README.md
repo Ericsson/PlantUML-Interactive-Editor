@@ -100,12 +100,12 @@ uv run pytest tests/e2e/
 
 ### Versioning
 
-Every PR to `main` bumps the version by one step; CI rejects it otherwise. Describe the change under `## [Unreleased]` in `CHANGELOG.md`, then, once per PR:
+Versions follow [semver](https://semver.org) (`X.Y.Z`). Every PR describes its change under `## [Unreleased]` in `CHANGELOG.md` but leaves the version alone. Releasing is a separate, deliberate step: review the unreleased entries, pick the step they call for, and run
 
 ```
-git fetch
-uv run python scripts/bump_version.py patch   # bug fix, internal change
-uv run python scripts/bump_version.py minor   # new user-facing feature
+uv run python scripts/bump_version.py patch   # bug fixes only
+uv run python scripts/bump_version.py minor   # new features
+uv run python scripts/bump_version.py major   # incompatible changes
 ```
 
-If another PR merges first, rebase onto `main` and run it again; it renumbers your changelog section rather than bumping twice.
+This updates every version file and turns `[Unreleased]` into `[X.Y.Z] - <date>`. Do it in a release PR, or inside a small fix PR you want out quickly. Once that is merged, `scripts/build_release.sh <destination>` publishes it from a clean checkout and tags the commit `vX.Y.Z`; it refuses if that version was already released from another commit.

@@ -14,7 +14,7 @@
 │   │   ├── render.py       # PlantUML JAR invocation for PNG/SVG
 │   │   ├── puml_encoder.py # URL encoding/decoding for diagram sharing
 │   │   ├── title.py        # Diagram titles (shared by activity & sequence)
-│   │   └── parse_changelog.py # CHANGELOG.md parser for version history (folds X.Y.Z sections into one X.Y entry each)
+│   │   └── parse_changelog.py # CHANGELOG.md parser for version history
 │   ├── sequence/           # Sequence diagram package
 │   │   ├── routes.py       # Sequence routes (/addParticipant, /addMessage, etc.)
 │   │   ├── classes.py      # Diagram, Participant, Message, ParticipantDeclaration data classes; declaration parsing (displayed name vs alias, reference_name_for); displayed-name reading and matching (participant_label, display_names_match); shared participant-rect helpers (is_participant_rect, participant_header_bounds, rect_encloses)
@@ -86,7 +86,6 @@
 │   ├── shared/             # Shared route tests (render, encode/decode, title) and the extension-facing entry points
 │   │   ├── test_render.py
 │   │   ├── test_title.py
-│   │   ├── test_parse_changelog.py # Version History feed: X.Y.Z sections grouped into X.Y, badge shows X.Y
 │   │   └── test_serve.py       # Sidecar entry point (token auth, CORS, /health, /webview)
 │   ├── scripts/            # Tests for scripts/ (version bump, version checks)
 │   ├── sequence/           # Sequence diagram tests
@@ -118,12 +117,11 @@
 │       ├── test_sequence_participant.py      # Participant add/rename/delete e2e tests
 │       └── test_sequence_title.py            # Double-click title editing e2e tests (shared by activity & sequence)
 ├── scripts/                # Repo tooling (tests in tests/scripts/)
-│   ├── bump_version.py     # Bump the version one patch/minor step above origin/main; run once per PR
-│   ├── check_version_bump.py # CI check: version is one step above the base branch
+│   ├── bump_version.py     # Release: bump the version (patch/minor/major) and date the changelog
 │   ├── check_app_versions.py # Pre-commit: every version file carries the same X.Y.Z
 │   ├── check_vendor_versions.py # Pre-commit: extension and web app vendor the same library versions
-│   └── build_release.sh    # Build the wheel and the .vsix
-├── .github/workflows/      # CI: pytest, pre-commit, version-check (PRs to main), scorecard
+│   └── build_release.sh    # Build the wheel and the .vsix; publishing tags vX.Y.Z and refuses a reused version
+├── .github/workflows/      # CI: pytest, pre-commit, scorecard
 └── .kiro/steering/         # Kiro steering files
 ```
 

@@ -26,7 +26,6 @@
 
 import json
 import shutil
-import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -122,6 +121,8 @@ class TestNextVersion:
             ("0.31.9", "patch", "0.31.10"),
             ("0.31.4", "minor", "0.32.0"),
             ("1.9.2", "minor", "1.10.0"),
+            ("0.31.4", "major", "1.0.0"),
+            ("1.9.2", "major", "2.0.0"),
         ],
     )
     def test_steps(self, version, part, expected):
@@ -197,231 +198,84 @@ class TestSetPackageVersion:
         )
 
 
-def _git(repo: Path, *args: str) -> None:
-    subprocess.run(
-        ["git", "-c", "user.name=t", "-c", "user.email=t@example.com", *args],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-
-
-def _repo_on_branch(tmp_path: Path, **fixture) -> Paths:
-    """A git repo whose ``main`` holds the fixture (Unreleased empty), checked
-    out on a branch that has added an entry -- the state a PR starts in."""
-    base_changelog = fixture.pop("base_changelog", RELEASED_CHANGELOG)
-    paths = _write_fixture(tmp_path, changelog=base_changelog, **fixture)
-    _git(tmp_path, "init", "-q", "-b", "main")
-    _git(tmp_path, "add", ".")
-    _git(tmp_path, "commit", "-q", "-m", "base")
-    _git(tmp_path, "switch", "-q", "-c", "feature")
-    paths.changelog.write_text(
-        base_changelog.replace("## [Unreleased]\n", "## [Unreleased]\n\n- Mine.\n", 1),
-        encoding="utf-8",
-    )
-    return paths
-
-
-def _bump(paths: Paths, part: str = "patch", base_ref: str = "main") -> str:
-    return bump(part, paths, TODAY, base_ref=base_ref, repo=paths.about.parent)
-
-
-def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
-
-
-RELEASED_CHANGELOG = """\
-# Changelog
-
-## [Unreleased]
-
-## [0.31.0] - 2026-07-22
-
-- Older entry.
-"""
-
-
 class TestBump:
     def test_patch_updates_every_file(self, tmp_path):
-        paths = _repo_on_branch(tmp_path)
+        paths = _write_fixture(tmp_path)
 
-        assert _bump(paths) == "0.31.1"
+        assert bump("patch", paths, TODAY) == "0.31.1"
 
         assert (
             check_app_versions(paths.about, paths.package_json, paths.package_lock)
             == "0.31.1"
         )
-        assert _read(paths.about).startswith("# header\n")
-        assert _read(paths.changelog) == (
-            "# Changelog\n\n## [Unreleased]\n\n## [0.31.1] - 2026-11-02\n\n- Mine.\n\n"
-            "## [0.31.0] - 2026-07-22\n\n- Older entry.\n"
+        assert paths.about.read_text(encoding="utf-8").startswith("# header\n")
+        changelog = paths.changelog.read_text(encoding="utf-8")
+        assert (
+            "## [Unreleased]\n\n## [0.31.1] - 2026-11-02\n\n### External" in changelog
         )
+
+    def test_major_resets_minor_and_patch(self, tmp_path):
+        paths = _write_fixture(tmp_path, version="0.31.4")
+
+        assert bump("major", paths, TODAY) == "1.0.0"
 
     def test_minor_resets_the_patch(self, tmp_path):
-        paths = _repo_on_branch(tmp_path, version="0.31.4")
+        paths = _write_fixture(tmp_path, version="0.31.4")
 
-        assert _bump(paths, "minor") == "0.32.0"
-
-    def test_bumps_from_the_base_ref_not_the_local_files(self, tmp_path):
-        paths = _repo_on_branch(tmp_path)
-        for path in (paths.about, paths.package_json, paths.package_lock):
-            path.write_text(_read(path).replace("0.31.0", "0.31.7"), encoding="utf-8")
-
-        assert _bump(paths) == "0.31.1"
-
-    def test_legacy_two_part_base_is_padded(self, tmp_path):
-        paths = _repo_on_branch(tmp_path)
-        paths.about.write_text('__version__ = "0.31"\n', encoding="utf-8")
-        _git(tmp_path, "switch", "-q", "main")
-        _git(tmp_path, "commit", "-q", "-m", "two-part", "--", "__about__.py")
-        _git(tmp_path, "switch", "-q", "feature")
-
-        assert _bump(paths, "minor") == "0.32.0"
-
-    def test_running_twice_does_not_bump_twice(self, tmp_path):
-        paths = _repo_on_branch(tmp_path)
-
-        _bump(paths)
-        after_first = _read(paths.changelog)
-        assert _bump(paths) == "0.31.1"
-
-        assert _read(paths.changelog) == after_first
-
-    def test_switching_patch_to_minor_renames_the_section(self, tmp_path):
-        paths = _repo_on_branch(tmp_path)
-
-        _bump(paths)
-        assert _bump(paths, "minor") == "0.32.0"
-
-        changelog = _read(paths.changelog)
-        assert "## [0.32.0] - 2026-11-02\n\n- Mine." in changelog
-        assert "0.31.1" not in changelog
-
-    def test_renumbers_after_main_released_the_same_version(self, tmp_path):
-        """After a rebase: main released 0.31.1 too, both sections are present."""
-        paths = _repo_on_branch(tmp_path)
-        _bump(paths)
-        _git(tmp_path, "commit", "-q", "-am", "mine")
-        _git(tmp_path, "switch", "-q", "main")
-        theirs = RELEASED_CHANGELOG.replace(
-            "## [Unreleased]\n",
-            "## [Unreleased]\n\n## [0.31.1] - 2026-11-01\n\n- Theirs.\n",
-        )
-        paths.changelog.write_text(theirs, encoding="utf-8")
-        for path in (paths.about, paths.package_json, paths.package_lock):
-            path.write_text(_read(path).replace("0.31.0", "0.31.1"), encoding="utf-8")
-        _git(tmp_path, "commit", "-q", "-am", "theirs")
-        _git(tmp_path, "switch", "-q", "feature")
-        # The conflict resolved by keeping both sections, ours on top.
-        paths.changelog.write_text(
-            theirs.replace(
-                "## [Unreleased]\n\n",
-                "## [Unreleased]\n\n## [0.31.1] - 2026-11-02\n\n- Mine.\n\n",
-            ),
-            encoding="utf-8",
-        )
-
-        assert _bump(paths) == "0.31.2"
-
-        changelog = _read(paths.changelog)
-        assert (
-            "## [0.31.2] - 2026-11-02\n\n- Mine.\n\n## [0.31.1] - 2026-11-01\n\n- Theirs."
-            in changelog
-        )
-        assert changelog.count("## [0.31.1]") == 1
-
-    def test_an_edited_old_section_is_not_the_branchs(self, tmp_path):
-        paths = _repo_on_branch(tmp_path)
-        paths.changelog.write_text(
-            _read(paths.changelog).replace("Older entry.", "Older entry, reworded."),
-            encoding="utf-8",
-        )
-
-        _bump(paths)
-
-        assert "## [0.31.0] - 2026-07-22\n\n- Older entry, reworded." in _read(
-            paths.changelog
-        )
-
-    def test_refuses_entries_both_in_unreleased_and_own_section(self, tmp_path):
-        paths = _repo_on_branch(tmp_path)
-        _bump(paths)
-        paths.changelog.write_text(
-            _read(paths.changelog).replace(
-                "## [Unreleased]\n", "## [Unreleased]\n\n- Later.\n", 1
-            ),
-            encoding="utf-8",
-        )
-        before = _read(paths.changelog)
-
-        with pytest.raises(BumpError, match="move them into one"):
-            _bump(paths, "minor")
-
-        assert _read(paths.changelog) == before
-        assert '"0.31.1"' in _read(paths.about)
-
-    def test_refuses_without_changelog_entries_and_writes_nothing(self, tmp_path):
-        paths = _repo_on_branch(tmp_path)
-        paths.changelog.write_text(RELEASED_CHANGELOG, encoding="utf-8")
-        before = {p: _read(p) for p in vars(paths).values()}
-
-        with pytest.raises(BumpError, match="no entries under"):
-            _bump(paths)
-
-        assert {p: _read(p) for p in before} == before
-
-    def test_repairs_version_files_that_disagree(self, tmp_path):
-        # E.g. a conflict resolved by keeping main's side in only one file.
-        paths = _repo_on_branch(tmp_path)
-        paths.package_json.write_text(
-            _read(paths.package_json).replace("0.31.0", "0.30.9"), encoding="utf-8"
-        )
-
-        _bump(paths)
-
-        assert (
-            check_app_versions(paths.about, paths.package_json, paths.package_lock)
-            == "0.31.1"
-        )
+        assert bump("minor", paths, TODAY) == "0.32.0"
 
     def test_extension_changelog_untouched_without_entries(self, tmp_path):
-        paths = _repo_on_branch(tmp_path)
+        paths = _write_fixture(tmp_path)
 
-        _bump(paths)
+        bump("patch", paths, TODAY)
 
-        assert _read(paths.extension_changelog) == EXTENSION_CHANGELOG
-
-    def test_extension_changelog_released_and_renamed(self, tmp_path):
-        paths = _repo_on_branch(tmp_path)
-        paths.extension_changelog.write_text(
-            EXTENSION_CHANGELOG.replace(
-                "## [Unreleased]\n", "## [Unreleased]\n\n- Markdown.\n"
-            ),
-            encoding="utf-8",
+        assert (
+            paths.extension_changelog.read_text(encoding="utf-8") == EXTENSION_CHANGELOG
         )
 
-        _bump(paths)
-        _bump(paths, "minor")
+    def test_extension_changelog_released_with_entries(self, tmp_path):
+        paths = _write_fixture(
+            tmp_path,
+            extension_changelog=EXTENSION_CHANGELOG.replace(
+                "## [Unreleased]\n", "## [Unreleased]\n\n- Markdown support.\n"
+            ),
+        )
 
-        text = _read(paths.extension_changelog)
-        assert "## [Unreleased]\n\n## [0.32.0] - 2026-11-02\n\n- Markdown.\n" in text
-        assert "0.31.1" not in text
+        bump("minor", paths, TODAY)
 
-    def test_unreadable_base_ref_falls_back_with_a_warning(self, tmp_path, capsys):
-        paths = _repo_on_branch(tmp_path)
+        text = paths.extension_changelog.read_text(encoding="utf-8")
+        assert (
+            "## [Unreleased]\n\n## [0.32.0] - 2026-11-02\n\n- Markdown support.\n"
+            in text
+        )
 
-        assert _bump(paths, base_ref="no-such-branch") == "0.31.1"
+    def test_refuses_without_changelog_entries_and_writes_nothing(self, tmp_path):
+        empty = "# Changelog\n\n## [Unreleased]\n\n## [0.31] - 2026-07-22\n\n- x\n"
+        paths = _write_fixture(tmp_path, changelog=empty)
+        before = {p: p.read_text(encoding="utf-8") for p in vars(paths).values()}
 
-        assert "could not read no-such-branch" in capsys.readouterr().err
+        with pytest.raises(BumpError, match="no entries under"):
+            bump("patch", paths, TODAY)
+
+        assert {p: p.read_text(encoding="utf-8") for p in before} == before
+
+    def test_refuses_when_files_already_disagree(self, tmp_path):
+        paths = _write_fixture(tmp_path)
+        paths.package_json.write_text('{"version": "0.30.0"}\n', encoding="utf-8")
+
+        with pytest.raises(VersionCheckError):
+            bump("patch", paths, TODAY)
+
+        assert '"0.31.0"' in paths.about.read_text(encoding="utf-8")
 
 
 class TestMain:
     def test_rejects_an_unknown_part(self):
         with pytest.raises(SystemExit):
-            main(["major"])
+            main(["nano"])
 
     def test_real_files_end_to_end(self, tmp_path):
-        """On copies of the real files, in a repo whose main is their copy."""
+        """On copies of the real files, with an entry added to [Unreleased]."""
         files = {
             "about": REPO_ROOT / "src" / "plantuml_gui" / "__about__.py",
             "package_json": REPO_ROOT / "plantuml-extension" / "package.json",
@@ -434,11 +288,9 @@ class TestMain:
             copies[field] = tmp_path / f"{field}{source.suffix}"
             shutil.copy(source, copies[field])
         paths = Paths(**copies)
-        _git(tmp_path, "init", "-q", "-b", "main")
-        _git(tmp_path, "add", ".")
-        _git(tmp_path, "commit", "-q", "-m", "base")
+        changelog = paths.changelog.read_text(encoding="utf-8")
         paths.changelog.write_text(
-            _read(paths.changelog).replace(
+            changelog.replace(
                 "## [Unreleased]\n", "## [Unreleased]\n\n- Test entry.\n", 1
             ),
             encoding="utf-8",
@@ -447,7 +299,7 @@ class TestMain:
             paths.about, paths.package_json, paths.package_lock
         )
 
-        new = _bump(paths)
+        new = bump("patch", paths, TODAY)
 
         assert new == next_version(current, "patch")
-        assert f"## [{new}] - 2026-11-02" in _read(paths.changelog)
+        assert f"## [{new}] - 2026-11-02" in paths.changelog.read_text(encoding="utf-8")

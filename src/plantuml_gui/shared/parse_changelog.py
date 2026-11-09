@@ -25,48 +25,11 @@
 import re
 from pathlib import Path
 
-ChangelogSection = dict[str, str | list[str]]
-
-
-def display_version(version: str) -> str:
-    """Trim a version to ``X.Y``: ``"0.32.3"`` -> ``"0.32"``."""
-    parts = version.split(".")
-    return ".".join(parts[:2]) if len(parts) > 2 else version
-
 
 def parse_changelog(
     path: Path | None = None,
-) -> list[ChangelogSection]:
-    """Parse CHANGELOG.md into one entry per ``X.Y``, newest first."""
-    return group_by_minor(parse_changelog_sections(path))
-
-
-def group_by_minor(sections: list[ChangelogSection]) -> list[ChangelogSection]:
-    """Merge ``X.Y.Z`` sections into one ``X.Y`` section each.
-
-    The date is the oldest patch's; groups without entries are dropped,
-    except ``Unreleased``.
-    """
-    groups: dict[str, ChangelogSection] = {}
-    for section in sections:
-        key = display_version(str(section["version"]))
-        group = groups.setdefault(key, {"version": key, "date": "", "entries": []})
-        entries = group["entries"]
-        assert isinstance(entries, list)  # type narrowing for mypy
-        entries.extend(section["entries"])
-        if section["date"]:
-            group["date"] = section["date"]
-    return [
-        group
-        for group in groups.values()
-        if group["entries"] or group["version"] == "Unreleased"
-    ]
-
-
-def parse_changelog_sections(
-    path: Path | None = None,
-) -> list[ChangelogSection]:
-    """Parse CHANGELOG.md and extract External entries per version heading.
+) -> list[dict[str, str | list[str]]]:
+    """Parse CHANGELOG.md and extract External entries per version.
 
     Returns a list of dicts with keys: version, date, entries.
     """

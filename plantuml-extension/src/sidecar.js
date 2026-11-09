@@ -65,38 +65,10 @@ const STARTUP_TIMEOUT_MS = 30000;
 const HEALTH_TIMEOUT_MS = 2000;
 
 /**
- * A version trimmed to major.minor: `"0.31.2"` and `"0.31"` both give `"0.31"`.
- *
- * @param {string} version
- * @returns {string}
+ * The backend version this extension expects: exactly its own. The two carry
+ * the same X.Y.Z, which scripts/check_app_versions.py enforces at commit time.
  */
-function majorMinor(version) {
-	return version.split('.').slice(0, 2).join('.');
-}
-
-/**
- * The backend version this extension expects, trimmed to major.minor:
- * extension `0.31.4` gives `"0.31"`.
- *
- * At build time the pairing is exact -- scripts/check_app_versions.py makes
- * __about__.py and package.json carry the same X.Y.Z -- but at runtime only
- * major.minor is compared (see backendVersionMatches). Every merged PR bumps
- * the patch, so an exact rule would warn about an environment one bug fix
- * behind, whose routes are the same ones this extension calls.
- */
-const EXPECTED_BACKEND_VERSION = majorMinor(extensionPackage.version);
-
-/**
- * Whether a running backend's reported version is compatible with this
- * extension: same major.minor, any patch. Also accepts a backend from before
- * three-component versions (`"0.31"`).
- *
- * @param {string | undefined} backendVersion what `/health` reported, if anything
- * @returns {boolean}
- */
-function backendVersionMatches(backendVersion) {
-	return typeof backendVersion === 'string' && majorMinor(backendVersion) === EXPECTED_BACKEND_VERSION;
-}
+const EXPECTED_BACKEND_VERSION = extensionPackage.version;
 
 /** Thrown when the sidecar cannot be started or does not become ready. */
 class SidecarStartError extends Error {}
@@ -514,7 +486,6 @@ module.exports = {
 	PythonConfigError,
 	BackendMissingError,
 	EXPECTED_BACKEND_VERSION,
-	backendVersionMatches,
 	PYTHON_KEY,
 	PYTHON_SETTING,
 	PYTHON_ENV,

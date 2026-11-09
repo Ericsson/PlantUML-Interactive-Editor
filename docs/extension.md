@@ -606,9 +606,9 @@ no handle to stop yet), and reports a venv it could not remove instead of instal
 ## Version compatibility
 
 Once a fresh sidecar has answered `/health` (between steps 8 and 9 above),
-`warnOnBackendVersionMismatch()` in `extension.js` checks `Sidecar.backendVersion` with
-`backendVersionMatches()` in `src/sidecar.js`: the backend must be at this extension's own
-`major.minor`, any patch. It is
+`warnOnBackendVersionMismatch()` in `extension.js` compares `Sidecar.backendVersion` against
+`EXPECTED_BACKEND_VERSION` in `src/sidecar.js` — exactly this extension's own `X.Y.Z`, the
+same version the `scripts/check_app_versions.py` pre-commit hook requires at build time. It is
 non-blocking (the panel still opens), and runs once per sidecar start rather than once per
 panel, since every panel in the window shares one sidecar.
 

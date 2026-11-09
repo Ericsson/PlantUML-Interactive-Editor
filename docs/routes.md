@@ -5,7 +5,7 @@ All routes are organized into Blueprints: `shared_bp` (in `shared/routes.py`) fo
 ## General
 
 - **GET /** — Serves `index.html`. No input. Returns HTML.
-- **GET /changelog** — No input. Returns: JSON array of version objects with `version` (`X.Y`, or `Unreleased`), `date`, and `entries` (list of strings), newest first. Only includes External changelog entries; the `X.Y.Z` sections of a minor are merged into one object, and minors without External entries are omitted.
+- **GET /changelog** — No input. Returns: JSON array of version objects with `version`, `date`, and `entries` (list of strings). Only includes External changelog entries.
 
 ## Render
 
