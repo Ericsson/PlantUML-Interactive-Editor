@@ -47,10 +47,19 @@ class TestGenerateAlias:
             ("Payment-Service (v2)", "PaymentServiceV2"),
             # A single word still round-trips.
             ("Alice", "Alice"),
+            # A dash separates words exactly like a space does.
+            ("web-server", "WebServer"),
+            ("Web-Server", "WebServer"),
+            ("my web-server", "MyWebServer"),
+            ("a--b", "AB"),
+            ("-leading-dash-", "LeadingDash"),
         ],
     )
     def test_pascal_cases_and_sanitizes(self, new_name, expected):
         assert generate_alias(new_name, set()) == expected
+
+    def test_name_of_only_dashes_falls_back(self):
+        assert generate_alias("-", set()) == "Participant"
 
     def test_leading_digit_is_prefixed(self):
         """A bare token starting with a digit is not a usable alias."""

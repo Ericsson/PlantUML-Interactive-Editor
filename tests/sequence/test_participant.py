@@ -1049,6 +1049,117 @@ Bob -> SpaceRoom: hi
         )
         self.assert_renders(result, "Space Room")
 
+    # --- Case 3 with a dash: treated exactly like a space ---
+
+    def test_name_with_a_dash_gains_a_generated_alias(self, client):
+        """PlantUML reads `-` as the start of an arrow, so a dashed name cannot
+        be a bare reference token any more than a spaced one can."""
+        puml = """@startuml
+participant Alice
+participant Bob
+Alice -> Bob: hi
+Bob -> Alice: reply
+activate Alice
+note over Alice: text
+deactivate Alice
+@enduml"""
+
+        result = self.rename(client, puml, "web-server")
+
+        assert (
+            result
+            == """@startuml
+participant "web-server" as WebServer
+participant Bob
+WebServer -> Bob: hi
+Bob -> WebServer: reply
+activate WebServer
+note over WebServer: text
+deactivate WebServer
+@enduml"""
+        )
+        self.assert_renders(result, "web-server")
+
+    def test_dashed_alias_avoids_an_existing_identifier(self, client):
+        puml = """@startuml
+participant Alice
+participant WebServer
+Alice -> WebServer: hi
+@enduml"""
+
+        result = self.rename(client, puml, "web-server")
+
+        assert 'participant "web-server" as WebServer2' in result
+        assert "WebServer2 -> WebServer: hi" in result
+        self.assert_renders(result, "web-server")
+
+    def test_name_with_a_dash_keeps_modifiers(self, client):
+        puml = """@startuml
+participant Alice order 10
+participant Bob
+Alice -> Bob: hi
+@enduml"""
+
+        # `order 10` puts Alice to the right of Bob, hence the second rect.
+        result = self.rename(client, puml, "web-server", participant_index=1)
+
+        assert 'participant "web-server" as WebServer order 10' in result
+        assert "WebServer -> Bob: hi" in result
+
+    def test_quoted_name_without_alias_is_upgraded_for_a_dash(self, client):
+        puml = """@startuml
+participant "Old Name"
+participant Bob
+"Old Name" -> Bob: hi
+@enduml"""
+
+        result = self.rename(client, puml, "new-name")
+
+        assert (
+            result
+            == """@startuml
+participant "new-name" as NewName
+participant Bob
+NewName -> Bob: hi
+@enduml"""
+        )
+        self.assert_renders(result, "new-name")
+
+    def test_implicit_participant_gets_a_declaration_for_a_dash(self, client):
+        puml = """@startuml
+Alice -> Bob: hi
+@enduml"""
+
+        result = self.rename(client, puml, "web-server")
+
+        assert (
+            result
+            == """@startuml
+participant "web-server" as WebServer
+WebServer -> Bob: hi
+@enduml"""
+        )
+        self.assert_renders(result, "web-server")
+
+    def test_aliased_participant_renamed_to_a_dash_changes_only_the_label(self, client):
+        puml = """@startuml
+participant "Old Name" as ON
+participant Bob
+ON -> Bob: hi
+@enduml"""
+
+        result = self.rename(client, puml, "web-server")
+
+        assert (
+            result
+            == """@startuml
+participant "web-server" as ON
+participant Bob
+ON -> Bob: hi
+@enduml"""
+        )
+        self.assert_renders(result, "web-server")
+
     # --- Input handling ---
 
     def test_name_is_escaped(self, client):

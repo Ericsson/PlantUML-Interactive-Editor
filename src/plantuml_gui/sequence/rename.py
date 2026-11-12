@@ -32,12 +32,13 @@ to:
 
 * **Aliased** -- only the declaration's displayed name changes. The body already
   refers to the alias, so it is left alone. This is also the only form that can
-  carry a displayed name with spaces.
-* **No alias, new name without spaces** -- the declaration and every reference
-  change, since the displayed name doubles as the reference token.
-* **No alias, new name with spaces** -- spaces are illegal in a bare reference
-  token, so an alias is generated: the declaration gains ``as <Alias>`` and every
-  reference switches to that alias.
+  carry a displayed name with spaces or dashes.
+* **No alias, new name without spaces or dashes** -- the declaration and every
+  reference change, since the displayed name doubles as the reference token.
+* **No alias, new name with spaces or dashes** -- neither is legal in a bare
+  reference token (a dash would read as the start of an arrow), so an alias is
+  generated: the declaration gains ``as <Alias>`` and every reference switches
+  to that alias.
 """
 
 import html
@@ -61,6 +62,10 @@ _REFERENCE_PROBE = "\x00"
 # that the user never sees -- the displayed name carries the punctuation -- so
 # anything else is dropped rather than escaped or transliterated.
 _NON_ALIAS_CHARS_RE = re.compile(r"[^0-9A-Za-z]")
+
+# What separates the words of a displayed name when building its alias. A dash
+# counts like whitespace, so "web-server" and "web server" both give WebServer.
+_WORD_SEPARATOR_RE = re.compile(r"[\s-]+")
 
 # Used when a displayed name contains nothing alias-able at all ("___"). The
 # collision suffix then makes it unique, so this never has to be unique itself.
@@ -103,11 +108,16 @@ _ENDPOINT_SHORTHAND_CHARS = "+-*!"
 def _pascal_case(name: str) -> str:
     """Join the words of ``name`` capitalized, dropping non-alphanumerics.
 
+    Words are separated by whitespace or dashes, so "web-server" becomes
+    "WebServer" just like "web server" does.
+
     Only the first letter of each word is forced to upper case; the rest is left
     as the user typed it, so "REST Gateway" keeps its acronym as "RESTGateway"
     instead of being flattened to "RestGateway".
     """
-    words = (_NON_ALIAS_CHARS_RE.sub("", word) for word in name.split())
+    words = (
+        _NON_ALIAS_CHARS_RE.sub("", word) for word in _WORD_SEPARATOR_RE.split(name)
+    )
     return "".join(word[:1].upper() + word[1:] for word in words if word)
 
 
@@ -133,8 +143,9 @@ def generate_alias(new_name: str, taken: set[str]) -> str:
     """Build an alias for ``new_name`` that no other participant already uses.
 
     PascalCase with non-alphanumerics removed, because an alias appears as a
-    bare token in the diagram body: no spaces, and no leading digit. Collisions
-    are resolved with a numeric suffix (``SpaceRoom``, ``SpaceRoom2``, ...).
+    bare token in the diagram body: no spaces or dashes, and no leading digit.
+    Collisions are resolved with a numeric suffix (``SpaceRoom``,
+    ``SpaceRoom2``, ...).
     """
     candidate = _pascal_case(new_name) or _ALIAS_FALLBACK
     if candidate[0].isdigit():
@@ -315,17 +326,19 @@ def _normalize_incoming_name(new_name: str) -> str:
 def _needs_alias(new_name: str) -> bool:
     """Whether ``new_name`` cannot serve as a bare reference token.
 
-    Whitespace is the motivating case (``Space Room``). ``#``, ``,`` and ``:``
-    are included because PlantUML reads them as a color, a list separator and
-    the start of note/message text respectively, so a bare token containing one
-    would be silently mis-parsed rather than rejected. A line-break escape
-    (``a\\nb``) is included because PlantUML rejects it outright in a bare token
-    -- such a name is only legal as a quoted displayed name, which in turn needs
-    an alias for the body to refer to.
+    Whitespace is the motivating case (``Space Room``). A dash is treated the
+    same way (``web-server``), because PlantUML reads ``-`` as the start of an
+    arrow, so a bare dashed token is ambiguous on a message line. ``#``, ``,``
+    and ``:`` are included because PlantUML reads them as a color, a list
+    separator and the start of note/message text respectively, so a bare token
+    containing one would be silently mis-parsed rather than rejected. A
+    line-break escape (``a\\nb``) is included because PlantUML rejects it
+    outright in a bare token -- such a name is only legal as a quoted displayed
+    name, which in turn needs an alias for the body to refer to.
     """
     if contains_line_break(new_name):
         return True
-    return any(character.isspace() or character in "#,:" for character in new_name)
+    return any(character.isspace() or character in "#,:-" for character in new_name)
 
 
 def rename_participant(puml: str, participant: Participant, new_name: str) -> str:
@@ -357,7 +370,7 @@ def rename_participant(puml: str, participant: Participant, new_name: str) -> st
     display_name = html.escape(new_name, quote=True)
 
     # Case 1: the body refers to the alias, so only the label has to change --
-    # and this is the one form that may already hold a name with spaces.
+    # and this is the one form that may already hold a name with spaces or dashes.
     if declaration is not None and declaration.alias is not None:
         lines[participant.index] = _declaration_line(
             _indentation(lines[participant.index]),
@@ -413,7 +426,7 @@ def _insert_declaration_for_implicit(
     """Give an implicitly-introduced participant a declaration line.
 
     A participant that only ever appears in a message has no declaration to
-    rewrite, but a displayed name with spaces has nowhere else to live. The
+    rewrite, but a displayed name with spaces or dashes has nowhere else to live. The
     declaration goes immediately before the line that first refers to the
     participant, which is where PlantUML already places it in the diagram
     order, so the rename does not reshuffle the lifelines.
