@@ -619,8 +619,8 @@ async function showInstallError(err) {
  * by the setting or by PLANTUML_GUI_PYTHON, carrying whichever version of the
  * package happens to be installed in it.
  *
- * A mismatch still runs -- the routes this extension calls have generally not
- * gone away across a minor version -- so this warns rather than blocking.
+ * A mismatch still runs -- the routes this extension calls rarely go away
+ * between releases -- so this warns rather than blocking.
  *
  * @param {import('./src/sidecar').Sidecar} activeSidecar
  */

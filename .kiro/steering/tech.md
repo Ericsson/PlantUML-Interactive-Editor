@@ -52,6 +52,10 @@ uv run python -m pytest --cov --cov-report=html
 
 # Setup pre-commit hooks
 uv run pre-commit install -t pre-commit -t pre-push
+
+# Release: bump the version and date the changelog (only when releasing);
+# merging the bump to main triggers .github/workflows/release.yml
+uv run python scripts/bump_version.py patch|minor|major
 ```
 
 ## Constraints

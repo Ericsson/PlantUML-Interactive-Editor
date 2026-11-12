@@ -87,6 +87,7 @@
 │   │   ├── test_render.py
 │   │   ├── test_title.py
 │   │   └── test_serve.py       # Sidecar entry point (token auth, CORS, /health, /webview)
+│   ├── scripts/            # Tests for scripts/ (version bump, version checks)
 │   ├── sequence/           # Sequence diagram tests
 │   │   ├── test_participant.py            # Participant routes, incl. the three renaming cases
 │   │   ├── test_participant_declarations.py # Declaration parsing: keyword/displayed name/alias/modifiers
@@ -115,6 +116,12 @@
 │       ├── test_sequence_newpage.py          # Multi-page (newpage) navigation, paged editing, cursor sync, PNG page e2e tests
 │       ├── test_sequence_participant.py      # Participant add/rename/delete e2e tests
 │       └── test_sequence_title.py            # Double-click title editing e2e tests (shared by activity & sequence)
+├── scripts/                # Repo tooling (tests in tests/scripts/)
+│   ├── bump_version.py     # Release: bump the version (patch/minor/major) and date the changelog
+│   ├── check_app_versions.py # Pre-commit: every version file carries the same X.Y.Z
+│   ├── check_vendor_versions.py # Pre-commit: extension and web app vendor the same library versions
+│   └── build_release.sh    # Build the wheel and the .vsix, optionally copying it to a destination (run by the Release workflow)
+├── .github/workflows/      # CI: pytest, pre-commit, scorecard; release.yml tags vX.Y.Z and creates the GitHub Release when a version bump merges to main
 └── .kiro/steering/         # Kiro steering files
 ```
 

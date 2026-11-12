@@ -64,36 +64,6 @@ pip install .
 python -m plantuml_gui
 ```
 
-## Development
+## Contributing
 
-### Pre-requisites
-
-- uv
-
-### Setup
-
-```
-uv run pre-commit install -t pre-commit -t pre-push
-```
-
-### Running tests
-
-#### Python
-
-##### Without coverage
-
-```
-uv run pytest
-```
-
-##### With coverage
-
-```
-uv run python -m pytest --cov --cov-report=html
-```
-
-#### Javascript
-
-```
-uv run pytest tests/e2e/
-```
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup, running the tests, the checklist to follow before opening a pull request, and how to release a new version.

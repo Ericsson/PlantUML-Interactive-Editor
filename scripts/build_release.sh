@@ -11,6 +11,7 @@
 #
 # If destination already contains a published release, it's moved into
 # destination/old/ before the new one is installed.
+#
 set -euo pipefail
 shopt -s nullglob
 
@@ -18,6 +19,8 @@ REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 DEST=${1:-}
 
 cd "$REPO"
+
+python3 scripts/check_app_versions.py
 
 archive_old() {
 	local dest=$1

@@ -65,18 +65,10 @@ const STARTUP_TIMEOUT_MS = 30000;
 const HEALTH_TIMEOUT_MS = 2000;
 
 /**
- * The backend version this extension expects: its own, trimmed to major.minor.
- * Extension `0.31.0` gives `"0.31"`, which is what a matching backend's
- * __about__.py reports -- a VS Code manifest must carry three components and
- * the backend has two, so untrimmed, a correct pair would look mismatched.
- * Trimming also leaves the patch free, so an extension-only fix can ship as
- * `0.31.1` against an unchanged backend. Same rule as `_major_minor` in
- * scripts/check_app_versions.py, which enforces it at commit time.
+ * The backend version this extension expects: exactly its own. The two carry
+ * the same X.Y.Z, which scripts/check_app_versions.py enforces at commit time.
  */
-const EXPECTED_BACKEND_VERSION = extensionPackage.version
-	.split('.')
-	.slice(0, 2)
-	.join('.');
+const EXPECTED_BACKEND_VERSION = extensionPackage.version;
 
 /** Thrown when the sidecar cannot be started or does not become ready. */
 class SidecarStartError extends Error {}

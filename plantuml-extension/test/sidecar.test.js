@@ -111,37 +111,8 @@ suite('sidecar: environment', () => {
 });
 
 suite('sidecar: version compatibility', () => {
-	// Kept in step by hand with _major_minor in scripts/check_app_versions.py
-	// -- the pre-commit hook's build-time half of this same rule. A test
-	// reads that file's source rather than importing it, the same reasoning
-	// as the PORT_LINE_PREFIX/TOKEN_HEADER contract tests above: a Python
-	// script and a Node module cannot share a definition, only agree by hand.
-	const checkAppVersionsPy = require('fs').readFileSync(
-		require('path').join(__dirname, '..', '..', 'scripts', 'check_app_versions.py'),
-		'utf-8'
-	);
-
-	test('expects the backend at this extension\'s major.minor', () => {
-		// The patch component is free -- an extension-only fix can ship as
-		// 0.31.1 against the same 0.31 backend -- so it is dropped here rather
-		// than compared.
-		const [major, minor] = require('../package.json').version.split('.');
-
-		assert.strictEqual(EXPECTED_BACKEND_VERSION, `${major}.${minor}`);
-	});
-
-	test('applies the same major.minor rule as check_app_versions.py', () => {
-		// Read _major_minor's own behaviour off the source: patch components
-		// split off and ignored, same as the expected version here.
-		assert.ok(
-			/version\.split\(["']\.["']\)/.test(checkAppVersionsPy),
-			'check_app_versions.py no longer splits on "." the way this test assumes'
-		);
-		assert.ok(
-			checkAppVersionsPy.includes('components[0]') &&
-				checkAppVersionsPy.includes('components[1]'),
-			'check_app_versions.py no longer takes the first two components'
-		);
+	test('expects the backend at exactly this extension\'s version', () => {
+		assert.strictEqual(EXPECTED_BACKEND_VERSION, require('../package.json').version);
 	});
 });
 

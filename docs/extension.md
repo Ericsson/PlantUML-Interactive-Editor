@@ -546,8 +546,7 @@ The version in the directory name is the whole of the update story: after an ext
 update the path for the newly bundled wheel does not exist yet, so the install runs again,
 and reinstalling an older `.vsix` finds its own venv still beside it. Nothing is upgraded in
 place. The version comes from the wheel's filename, so there is no second record of what is
-installed, and an extension-only patch release — `0.31.1` against backend `0.31` — reuses
-the venv it already has.
+installed.
 
 Each backend version therefore keeps its own environment, at roughly 50 MB apiece, mostly
 lxml. They stay where they are for the life of the extension, which is what lets a window
@@ -608,8 +607,8 @@ no handle to stop yet), and reports a venv it could not remove instead of instal
 
 Once a fresh sidecar has answered `/health` (between steps 8 and 9 above),
 `warnOnBackendVersionMismatch()` in `extension.js` compares `Sidecar.backendVersion` against
-`EXPECTED_BACKEND_VERSION` in `src/sidecar.js` — this extension's own `major.minor`, the same
-rule as the `scripts/check_app_versions.py` pre-commit hook applies at build time. It is
+`EXPECTED_BACKEND_VERSION` in `src/sidecar.js` — exactly this extension's own `X.Y.Z`, the
+same version the `scripts/check_app_versions.py` pre-commit hook requires at build time. It is
 non-blocking (the panel still opens), and runs once per sidecar start rather than once per
 panel, since every panel in the window shares one sidecar.
 
@@ -1100,7 +1099,6 @@ Each site carries a comment naming the other.
 | `/renderPNG` | `extension.js` (`savePng`) | `shared/routes.py` (`renderpng`) |
 | `PLANTUML_GUI_TOKEN`, `PLANTUML_GUI_JAR_OVERRIDE` | `src/sidecar.js` (`buildEnv`) | `serve.py` (`TOKEN_ENV`, `JAR_ENV`) |
 | The six message types | `extension.js` | `static/vscode/` shims |
-| `major.minor` version compatibility rule | `src/sidecar.js` (`EXPECTED_BACKEND_VERSION`) | `scripts/check_app_versions.py` (`_major_minor`) |
 | Python 3.10 as the floor | `src/backendInstall.js` (`MIN_PYTHON`) | `pyproject.toml` (`requires-python`) |
 
 The floor is asserted by a test: `test/backendInstall.test.js` reads `requires-python` out of

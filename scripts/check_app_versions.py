@@ -23,21 +23,21 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Pre-commit hook (see .pre-commit-config.yaml) guarding the version pairing
-plantuml-extension/CHANGELOG.md documents: the extension's version tracks the
-``plantuml-gui`` backend it is built against, because the two are installed as
-a pair and the frontend ships inside the backend (see scripts/build_release.sh,
-which builds both from one commit). A VS Code manifest requires three-component
-semver, so backend ``0.31`` is extension ``0.31.x``.
+"""Pre-commit hook (see .pre-commit-config.yaml) guarding that every file
+holding the app's version agrees on it, exactly.
 
-Nothing at runtime notices if only one side is bumped -- the extension just
-launches whatever backend is installed -- so the mismatch would only surface as
-an old UI in the webview. Hence this check.
+The extension and the ``plantuml-gui`` backend are installed as a pair and the
+frontend ships inside the backend (see scripts/build_release.sh, which builds
+both from one commit), so they carry one version: three-component ``X.Y.Z``,
+which a VS Code manifest requires anyway. It lives in three files:
 
-The extension's patch component is free, so an extension-only fix can ship as
-``0.31.1`` without a backend release; ``major.minor`` must agree. That the
-extension's version is three-component semver at all is left to ``vsce
-package``, which refuses to build otherwise.
+- ``src/plantuml_gui/__about__.py`` -- the package version (hatch reads it)
+- ``plantuml-extension/package.json`` -- the extension manifest
+- ``plantuml-extension/package-lock.json`` -- twice: top level and ``packages[""]``
+
+Nothing at runtime notices if only one is bumped -- the extension just launches
+whatever backend is installed -- so the mismatch would only surface as an old UI
+in the webview, or a lockfile that ``npm ci`` quietly rewrites. Hence this check.
 
 Run directly with ``python scripts/check_app_versions.py``, or via the
 ``check-app-versions`` pre-commit hook, which is where this and the repo's
@@ -54,26 +54,49 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ABOUT_PATH = REPO_ROOT / "src" / "plantuml_gui" / "__about__.py"
 EXTENSION_PACKAGE_JSON = REPO_ROOT / "plantuml-extension" / "package.json"
+EXTENSION_PACKAGE_LOCK = REPO_ROOT / "plantuml-extension" / "package-lock.json"
 
 # __about__.py is read rather than imported: importing the package would pull
 # in Flask and the rest of the app just to read one string.
 VERSION_RE = re.compile(r"^__version__\s*=\s*[\"']([^\"']+)[\"']", re.MULTILINE)
 
+# Plain X.Y.Z, each component a non-negative integer without leading zeros
+# (leading zeros are not valid semver, and vsce refuses them).
+SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
+
 
 class VersionCheckError(Exception):
-    """A version could not be read, or the two do not agree."""
+    """A version could not be read, is malformed, or the files disagree."""
 
 
-def _read_backend_version(about_path: Path) -> str:
-    match = VERSION_RE.search(about_path.read_text(encoding="utf-8"))
+def parse_version(version: str, source: str) -> tuple[int, int, int]:
+    """Return ``X.Y.Z`` as ``(X, Y, Z)``; raise if it is not of that form."""
+    match = SEMVER_RE.match(version)
     if not match:
         raise VersionCheckError(
-            f"could not find a __version__ assignment in {about_path}"
+            f"{source} has version {version!r}, which is not of the form X.Y.Z"
         )
+    major, minor, patch = (int(component) for component in match.groups())
+    return major, minor, patch
+
+
+def read_backend_version(about_path: Path = ABOUT_PATH) -> str:
+    """Return the ``__version__`` string assigned in an ``__about__.py``."""
+    return backend_version_from_text(
+        about_path.read_text(encoding="utf-8"), str(about_path)
+    )
+
+
+def backend_version_from_text(text: str, source: str) -> str:
+    """Return the ``__version__`` assigned in ``__about__.py`` source text."""
+    match = VERSION_RE.search(text)
+    if not match:
+        raise VersionCheckError(f"could not find a __version__ assignment in {source}")
     return match.group(1)
 
 
-def _read_extension_version(package_json_path: Path) -> str:
+def read_extension_version(package_json_path: Path = EXTENSION_PACKAGE_JSON) -> str:
+    """Return the ``version`` field of the extension's package.json."""
     package_json = json.loads(package_json_path.read_text(encoding="utf-8"))
     version = package_json.get("version")
     if not version:
@@ -81,51 +104,70 @@ def _read_extension_version(package_json_path: Path) -> str:
     return version
 
 
-def _major_minor(version: str, source: str) -> tuple[int, int]:
-    """Return a version's (major, minor), ignoring any further components."""
-    components = version.split(".")
-    if len(components) < 2:
-        raise VersionCheckError(
-            f"{source} version {version!r} is not of the form major.minor"
-        )
-    try:
-        return int(components[0]), int(components[1])
-    except ValueError:
-        raise VersionCheckError(
-            f"{source} version {version!r} has non-numeric major/minor components"
-        ) from None
+def read_lockfile_versions(
+    package_lock_path: Path = EXTENSION_PACKAGE_LOCK,
+) -> dict[str, str]:
+    """Return the lockfile's two copies of the package's own version.
+
+    npm records it at the top level and again under ``packages[""]`` (the root
+    package); both are keyed by where they sit, so a stale one can be named.
+    """
+    lock = json.loads(package_lock_path.read_text(encoding="utf-8"))
+    root_package = lock.get("packages", {}).get("", {})
+    versions = {
+        f"{package_lock_path.name} (version)": lock.get("version"),
+        f'{package_lock_path.name} (packages[""].version)': root_package.get("version"),
+    }
+    for source, version in versions.items():
+        if not version:
+            raise VersionCheckError(f"{source} has no version field")
+    return versions  # type: ignore[return-value]  # None ruled out above
 
 
 def check_app_versions(
     about_path: Path = ABOUT_PATH,
     package_json_path: Path = EXTENSION_PACKAGE_JSON,
+    package_lock_path: Path = EXTENSION_PACKAGE_LOCK,
 ) -> str:
-    """Compare the web app's version against the extension's.
+    """Check every version-holding file carries the same ``X.Y.Z``.
 
-    Returns a message describing the agreement; raises VersionCheckError if
-    either version cannot be read or the two disagree.
+    Returns the agreed version; raises VersionCheckError if any version cannot
+    be read, is not ``X.Y.Z``, or differs from ``__about__.py``'s.
     """
-    backend_version = _read_backend_version(about_path)
-    extension_version = _read_extension_version(package_json_path)
+    versions = {
+        about_path.name: read_backend_version(about_path),
+        f"{package_json_path.parent.name}/{package_json_path.name}": (
+            read_extension_version(package_json_path)
+        ),
+        **{
+            f"{package_lock_path.parent.name}/{source}": version
+            for source, version in read_lockfile_versions(package_lock_path).items()
+        },
+    }
 
-    backend_major_minor = _major_minor(backend_version, "web app")
-    extension_major_minor = _major_minor(extension_version, "extension")
+    for source, version in versions.items():
+        parse_version(version, source)
 
-    if backend_major_minor != extension_major_minor:
+    expected = versions[about_path.name]
+    stale = {
+        source: version for source, version in versions.items() if version != expected
+    }
+    if stale:
+        listing = ", ".join(
+            f"{source} is at {version}" for source, version in stale.items()
+        )
         raise VersionCheckError(
-            f"web app is at {backend_version} ({about_path.name}) but the "
-            f"extension is at {extension_version} "
-            f"({package_json_path.parent.name}/{package_json_path.name}) - the "
-            "two ship as a pair, so the webview would run an unrelated "
-            "backend version. Bump whichever one is stale (and its CHANGELOG)."
+            f"{about_path.name} is at {expected} but {listing} - every file must "
+            "carry the same version. Bump with scripts/bump_version.py rather "
+            "than by hand."
         )
 
-    return f"web app {backend_version} and extension {extension_version} agree"
+    return expected
 
 
 def main() -> int:
     try:
-        print(f"OK {check_app_versions()}")
+        print(f"OK all version files agree on {check_app_versions()}")
     except VersionCheckError as error:
         print(f"FAIL {error}", file=sys.stderr)
         return 1
