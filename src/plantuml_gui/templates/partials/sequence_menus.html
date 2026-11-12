@@ -1,10 +1,10 @@
 
 {# Shared color palette for the Box / Note / Message edit modals. Defined once
    here so the option list lives in a single place; callers pass the <select>'s
-   id. "none" maps to PlantUML's default color. #}
+   id. "none" maps to PlantUML's default color, hence the "Default" label. #}
 {% macro color_select(select_id) %}
 <select class="form-control" id="{{ select_id }}">
-    <option value="none">None</option>
+    <option value="none">Default</option>
     <option value="LightBlue" style="background-color:LightBlue">LightBlue</option>
     <option value="LightGreen" style="background-color:LightGreen">LightGreen</option>
     <option value="Red" style="background-color:Red">Red</option>
@@ -36,7 +36,7 @@
                       <textarea class="form-control" id="participant-message-text"></textarea>
                   </div>
                   <div class="form-group" id="participant-message-color-group" style="display:none">
-                      <label for="participant-message-color-select" class="col-form-label">Color:</label>
+                      <label for="participant-message-color-select" class="col-form-label">Message color:</label>
                       {{ color_select('participant-message-color-select') }}
                   </div>
               </form>
@@ -157,7 +157,7 @@
                   <textarea class="form-control" id="seq-note-text"></textarea>
               </div>
               <div class="form-group" id="seq-note-color-group" style="display:none">
-                  <label for="seq-note-color-select" class="col-form-label">Color:</label>
+                  <label for="seq-note-color-select" class="col-form-label">Background color:</label>
                   {{ color_select('seq-note-color-select') }}
               </div>
               <div class="form-group" id="seq-note-second-participant-group" style="display:none">
@@ -225,7 +225,7 @@
                   <textarea class="form-control" id="seq-box-title-text"></textarea>
               </div>
               <div class="form-group">
-                  <label for="seq-box-color-select" class="col-form-label">Color:</label>
+                  <label for="seq-box-color-select" class="col-form-label">Background color:</label>
                   {{ color_select('seq-box-color-select') }}
               </div>
           </div>
