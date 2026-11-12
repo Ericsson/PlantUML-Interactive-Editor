@@ -23,8 +23,8 @@
 # SOFTWARE.
 
 """E2E tests for the sequence "Add Note" type submenu (menu-replaces-itself
-UX): clicking "Add Note" swaps the context menu in place for a Note/H Note/
-R Note choice, which itself swaps in place for the existing placement menu.
+UX): clicking "Add Note" swaps the context menu in place for a Note/Hexagonal/
+Rectangular choice, which itself swaps in place for the existing placement menu.
 """
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -456,6 +456,27 @@ class TestSequenceNoteModalTypeSelector:
     detected type. The checked radio (internal state, even while hidden)
     is still the source of truth submitNote() reads from. All driven by
     real clicks, per the stopPropagation lesson."""
+
+    def test_type_options_use_descriptive_labels(self, app_url, page):
+        """Both the add-flow type menu and the Edit modal's radios show
+        plain labels, while the values stay the PlantUML keywords."""
+        _open_sequence_demo(page)
+        expected = {"note": "Note", "hnote": "Hexagonal", "rnote": "Rectangular"}
+
+        menu_labels = page.evaluate(
+            """() => Object.fromEntries(
+                Array.from(document.querySelectorAll('#seq-note-type-menu [data-note-type]'))
+                    .map(a => [a.dataset.noteType, a.textContent.trim()]))"""
+        )
+        radio_labels = page.evaluate(
+            """() => Object.fromEntries(
+                Array.from(document.querySelectorAll('input[name="seq-note-type-radio"]'))
+                    .map(r => [r.value,
+                               document.querySelector(`label[for="${r.id}"]`).textContent.trim()]))"""
+        )
+
+        assert menu_labels == expected
+        assert radio_labels == expected
 
     def test_add_mode_hides_type_selector_but_preselects_submenu_choice(
         self, app_url, page
