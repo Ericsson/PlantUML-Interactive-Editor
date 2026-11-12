@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-11-12
+
 ### External
 
 - Sequence diagrams split with `newpage` now show every page, in the web app and the VS Code panel. Page through them with the new previous/next buttons and "Page N / M" indicator in the diagram toolbar (shown only for multi-page diagrams). Every page is fully interactive, and moving the editor cursor onto a line of another page switches to that page. PNG export saves the page on screen (`diagram-page-N.png`).
