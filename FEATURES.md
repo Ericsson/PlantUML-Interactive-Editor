@@ -98,7 +98,7 @@ but adding them to the PlantUML code should still work.
   - Rename a group's title (right-click the keyword tab or its header text → Rename); the keyword (group/alt/opt/loop) itself is unchanged
   - Delete a group (right-click the keyword tab or its header text → Delete Group); unwraps the block, removing only the header and matching `end` line and keeping its contents in place
 - Participant boxes
-  - Add a box from the participant context menu (right-click a participant → Box)
+  - Add a box from the participant context menu (right-click a participant → Add Box)
   - Hover another participant to grow a live ghost box across the range, then click to create it
   - Wraps the selected contiguous participants in a `box ... end box` block (created untitled/uncolored; edit afterwards to add a title or color)
   - Nested boxes supported: when the selected range nests inside or contains an existing box, `!pragma teoz true` is added automatically so PlantUML can render the nesting
