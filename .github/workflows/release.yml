@@ -2,8 +2,8 @@ name: Release
 
 # Releases when a version bump (scripts/bump_version.py) reaches main: builds
 # the .vsix with scripts/build_release.sh, tags the commit vX.Y.Z and creates a
-# GitHub Release with the .vsix attached and the version's CHANGELOG.md section
-# as its notes. A push to main that doesn't change the version does nothing.
+# GitHub Release with the .vsix attached and the version's External
+# CHANGELOG.md entries as its notes. A push to main that doesn't change the version does nothing.
 on:
   push:
     branches: [main]
@@ -82,14 +82,19 @@ jobs:
       env:
         VERSION: ${{ steps.decide.outputs.version }}
       run: |
-        # The "## [X.Y.Z] - <date>" section of CHANGELOG.md, without its heading.
-        awk -v v="$VERSION" '
-          /^## \[/ { inside = index($0, "## [" v "]") == 1; next }
-          inside
-        ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
-        if [[ ! -s $RUNNER_TEMP/notes.md ]]; then
+        if ! grep -qF "## [$VERSION]" CHANGELOG.md; then
           echo "::error::CHANGELOG.md has no [$VERSION] section; make the bump with scripts/bump_version.py"
           exit 1
+        fi
+        # Only the "### External" part of the "## [X.Y.Z] - <date>" section:
+        # the release page is for users, like the app's Version History panel.
+        awk -v v="$VERSION" '
+          /^## \[/ { inside = index($0, "## [" v "]") == 1; external = 0; next }
+          inside && /^### / { external = ($0 == "### External"); next }
+          inside && external
+        ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+        if ! grep -q '^- ' "$RUNNER_TEMP/notes.md"; then
+          echo "No user-facing changes." > "$RUNNER_TEMP/notes.md"
         fi
 
     # Tagged only after the build succeeded, so a failed build leaves no tag.
