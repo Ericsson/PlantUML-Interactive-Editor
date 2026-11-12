@@ -69,7 +69,7 @@ but adding them to the PlantUML code should still work.
 - Messages
   - Add message between participants (hover lifeline → right-click → ghost arrow → click destination)
   - Edit message text (right-click message → Edit Message)
-  - Edit message arrow color (Edit Message modal → Color dropdown; a preset palette or None); rendered as an `-[#color]>` arrow
+  - Message color, chosen when adding or editing a message (Color dropdown; a preset palette or None); colors both the arrow (`-[#color]>`) and the text (`<color:color>`)
   - Delete message (right-click message → Delete Message)
   - Self-messages supported (same participant as sender and receiver)
   - Messages inserted at correct vertical position between existing messages
