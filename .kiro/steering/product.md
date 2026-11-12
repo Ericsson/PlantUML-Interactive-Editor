@@ -33,7 +33,7 @@ Enterprise developers and technical teams (primarily at Ericsson and similar com
 ### Sequence Diagrams
 - **Participants** (add left/right, rename — including to a name with spaces or dashes, which generates an alias — delete with cascade)
 - Add messages between participants; edit message text and arrow color
-- Notes (add with a choice of type - Note, H Note, R Note; edit text, type, and background color; delete)
+- Notes (add with a choice of type - Note, Hexagonal, Rectangular; edit text, type, and background color; delete)
 - Activation bars (activate, deactivate, destroy participants)
 - Group blocks (group, alt, opt, loop): add, rename title, delete (unwraps, keeping contents)
 - Participant boxes: add around contiguous participants (ghost-box gesture), edit title/color, delete (unwraps, keeping participants); nested boxes supported via the teoz engine

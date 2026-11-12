@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### External
+
+- Renamed the sequence-diagram note types H Note and R Note to Hexagonal and Rectangular.
+
 ## [0.32.0] - 2026-11-12
 
 ### External
