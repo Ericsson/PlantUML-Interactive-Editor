@@ -6,6 +6,8 @@
 
 """End-to-end probes for sequence message hover and context-menu behavior."""
 
+from .test_sequence_note_menu import _open_sequence_demo, _right_click_lifeline
+
 
 def _probe_message_interaction(page, mode):
     return page.evaluate(
@@ -349,3 +351,44 @@ class TestSequenceGroupLockedY:
         assert result["origin"] is None
         assert result["type"] == ""
         assert result["ghostAttached"] is False
+
+
+class TestAddMessageColor:
+    """The Add message modal offers the color selector (not only Edit), and a
+    chosen color is applied to both the arrow and the text."""
+
+    def test_add_message_with_color(self, app_url, page):
+        _open_sequence_demo(page)
+        _right_click_lifeline(page, lifeline_index=0)
+        page.click("#addMessageSolid")
+
+        # Click Bob's lifeline just below his header box (on-screen rect, so
+        # panzoom's transform is already accounted for).
+        x, y = page.evaluate(
+            """() => {
+                const cx = participantLifelines[1].cx;
+                const box = Array.from(document.querySelectorAll('#colb svg rect'))
+                    .filter(r => r.hasAttribute('rx') && Math.abs(
+                        parseFloat(r.getAttribute('x')) +
+                        parseFloat(r.getAttribute('width')) / 2 - cx) <= 3)
+                    .map(r => r.getBoundingClientRect())
+                    .sort((a, b) => a.top - b.top)[0];
+                return [box.x + box.width / 2, box.bottom + 15];
+            }"""
+        )
+        page.mouse.click(x, y)
+        page.wait_for_selector("#participant-modalForm.show", timeout=15000)
+
+        assert page.is_visible("#participant-message-color-select")
+        assert page.input_value("#participant-message-color-select") == "none"
+
+        page.select_option("#participant-message-color-select", "Red")
+        page.fill("#participant-message-text", "colored")
+        page.click("#submit-participant-message")
+        page.wait_for_function(
+            "() => editor.session.getValue().includes('colored')", timeout=15000
+        )
+        assert (
+            "Alice -[#Red]> Bob: <color:Red>colored</color>"
+            in page.evaluate("editor.session.getValue()").splitlines()
+        )

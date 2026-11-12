@@ -59,8 +59,12 @@ def add_message(
     firstcoordinates: List[int],
     secondcoordinates: List[int],
     arrow_type: str = "->",
+    color: str | None = None,
 ):
-    """Add a message between two participants at the correct y-position."""
+    """Add a message between two participants at the correct y-position.
+
+    ``color`` (optional, palette value; ``None``/``""``/``"none"`` for the
+    default) colors the whole message."""
     first_x, first_y = firstcoordinates
     second_x, _second_y = secondcoordinates
 
@@ -70,11 +74,13 @@ def add_message(
 
     lines = puml.splitlines()
     insert_at = find_insertion_index(diagram.messages, svg, puml, first_y, lines)
-    message = escape_multiline_text(message)
+    resolved = resolve_color(color, "")
+    arrow = _apply_arrow_color(arrow_type, resolved)
+    message = _wrap_text_color(escape_multiline_text(message), resolved)
     # Built from reference_name, name may contain spaces, which is invalid in a message endpoint.
     lines.insert(
         insert_at,
-        f"{sender.reference_name} {arrow_type} {reciever.reference_name}: {message}",
+        f"{sender.reference_name} {arrow} {reciever.reference_name}: {message}",
     )
     return "\n".join(lines)
 
@@ -204,6 +210,32 @@ def _set_arrow_color(prefix: str, color: str) -> str:
     return prefix[:start] + new_arrow + prefix[end:]
 
 
+def _wrap_text_color(text: str, color: str) -> str:
+    """Wrap escaped message text in ``<color:color>`` (``""`` leaves it as-is).
+
+    PlantUML's ``<color>`` tag does not carry across a ``\\n`` break, so each
+    line of a multi-line text is wrapped separately.
+    """
+    if not color:
+        return text
+    return "\\n".join(
+        f"<color:{color}>{segment}</color>" for segment in text.split("\\n")
+    )
+
+
+def _unwrap_text_color(text: str, color: str) -> str:
+    """Undo ``_wrap_text_color``: remove the ``<color:color>`` tags it added.
+
+    Only tags of the arrow ``color`` are removed, so markup in another color,
+    or on an uncolored message, stays.
+    """
+    if not color:
+        return text
+    return re.sub(
+        rf"<color:{re.escape(color)}>(.*?)</color>", r"\1", text, flags=re.IGNORECASE
+    )
+
+
 def _clicked_message_line(puml: str, svg: str, svgelement: str) -> str | None:
     """Return the puml source line of the clicked message, or ``None``.
 
@@ -220,10 +252,16 @@ def _clicked_message_line(puml: str, svg: str, svgelement: str) -> str | None:
 
 
 def _message_text_from_line(line: str) -> str:
-    """Extract a message's display text from its puml line (pure)."""
+    """Extract a message's display text from its puml line (pure).
+
+    The ``<color>`` wrapper added for a colored message is stripped, so the
+    text reads back exactly as the user typed it.
+    """
     colon_pos = line.find(": ")
     text = line[colon_pos + 2 :] if colon_pos != -1 else ""
-    return unescape_multiline_text(text)
+    return unescape_multiline_text(
+        _unwrap_text_color(text, _arrow_color_from_line(line))
+    )
 
 
 def get_message_text(puml: str, svg: str, svgelement: str) -> str:
@@ -254,11 +292,12 @@ def get_message_label(puml: str, svg: str, svgelement: str) -> tuple[str, str]:
 def edit_message_text(
     puml: str, svg: str, svgelement: str, text: str, color: str | None = None
 ) -> str:
-    """Edit the label text of the clicked message, optionally its arrow color.
+    """Edit the label text of the clicked message, optionally its color.
 
-    color sets the message arrow's color as a ``[#color]`` token. ``None``
-    leaves any existing color unchanged; an empty value or ``"none"`` removes
-    it; any other value replaces it. Named colors and hex both work.
+    color colors the whole message: the arrow as a ``[#color]`` token and the
+    text as ``<color:color>`` (see ``_wrap_text_color``). ``None`` keeps the
+    existing (arrow) color; an empty value or ``"none"`` removes it; any other
+    value replaces it. Named colors and hex both work.
     """
     diagram = Diagram.from_svg(svg, puml)
     idx = index_of_clicked_message(svg, svgelement)
@@ -272,10 +311,11 @@ def edit_message_text(
     if colon_pos == -1:
         return puml
     prefix = line[:colon_pos]
-    if color is not None:
-        existing = _arrow_color_from_line(line)
-        prefix = _set_arrow_color(prefix, resolve_color(color, existing))
-    lines[message.index] = prefix + ": " + escape_multiline_text(text)
+    resolved = resolve_color(color, _arrow_color_from_line(line))
+    prefix = _set_arrow_color(prefix, resolved)
+    lines[message.index] = (
+        prefix + ": " + _wrap_text_color(escape_multiline_text(text), resolved)
+    )
     return "\n".join(lines)
 
 
@@ -303,9 +343,6 @@ def get_message_positions(puml: str, svg: str) -> List[Dict[str, object]]:
     lines = puml.splitlines()
     positions = []
     for msg in diagram.messages:
-        colon_pos = lines[msg.index].find(": ")
-        text = lines[msg.index][colon_pos + 2 :] if colon_pos != -1 else ""
-        positions.append(
-            {"cy": msg.cy, "index": msg.index, "text": unescape_multiline_text(text)}
-        )
+        text = _message_text_from_line(lines[msg.index])
+        positions.append({"cy": msg.cy, "index": msg.index, "text": text})
     return positions
