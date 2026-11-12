@@ -23,6 +23,24 @@ function findNearestLifeline(x, y, participantLifelines) {
     return null;
 }
 
+// Ghost arrow snaps to closest lifeline wherever the cursor is in the diagram.
+// Returns null only when there are no lifelines. Ties go to the first one.
+function findClosestLifeline(x, participantLifelines) {
+    let closest = null;
+    for (const lifeline of participantLifelines) {
+        if (!closest || Math.abs(x - lifeline.cx) < Math.abs(x - closest.cx)) {
+            closest = lifeline;
+        }
+    }
+    return closest;
+}
+
+// Clamp y to the lifeline's vertical extent, so a cursor above the headers or
+// below the lifelines still yields a message position on the lifeline.
+function clampYToLifeline(y, lifeline) {
+    return Math.min(Math.max(y, lifeline.yTop), lifeline.yBottom);
+}
+
 // --- Hover indicator (blue circle on lifeline) ---
 
 function showIndicatorCircle(svgElement, cx, y) {
@@ -244,9 +262,10 @@ function setupLifelineInteraction() {
         const y = transformed.y;
 
         if (isAddMessageActive) {
-            const dest = findNearestLifeline(x, y, participantLifelines);
-            if (dest) {
-                showGhostArrow(svgContainer, messageOrigin.cx, dest.cx, y);
+            const dest = findClosestLifeline(x, participantLifelines);
+            if (dest && messageOrigin) {
+                showGhostArrow(svgContainer, messageOrigin.cx, dest.cx,
+                    clampYToLifeline(y, dest));
             } else {
                 hideGhostArrow();
             }
@@ -305,11 +324,12 @@ function setupLifelineInteraction() {
         if (!isAddMessageActive || !messageOrigin) return;
 
         const transformed = svgPointFromEvent(e, svgContainer);
-        const x = transformed.x;
-        const y = transformed.y;
 
-        const dest = findNearestLifeline(x, y, participantLifelines);
+        // Same snapping as the ghost arrow, so the created message always
+        // matches the preview: closest lifeline, y clamped to its extent.
+        const dest = findClosestLifeline(transformed.x, participantLifelines);
         if (!dest) return;
+        const y = clampYToLifeline(transformed.y, dest);
 
         secondClickCoordinates = [dest.cx, y];
         firstClickCoordinates = [messageOrigin.cx, y];
