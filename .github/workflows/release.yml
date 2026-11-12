@@ -1,0 +1,121 @@
+name: Release
+
+# Releases when a version bump (scripts/bump_version.py) reaches main: builds
+# the .vsix with scripts/build_release.sh, tags the commit vX.Y.Z and creates a
+# GitHub Release with the .vsix attached and the version's CHANGELOG.md section
+# as its notes. A push to main that doesn't change the version does nothing.
+on:
+  push:
+    branches: [main]
+    paths:
+      - src/plantuml_gui/__about__.py
+
+permissions:
+  contents: read
+
+# One release at a time, and never cancel one halfway through.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write   # push the tag and create the release
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0   # the previous version and the existing tags
+
+    - name: Decide whether to release
+      id: decide
+      env:
+        BEFORE: ${{ github.event.before }}
+      run: |
+        # Fails here if the version files disagree.
+        version=$(python3 scripts/check_app_versions.py | sed -n 's/^OK all version files agree on //p')
+        tag="v$version"
+        previous=$(git show "$BEFORE:src/plantuml_gui/__about__.py" 2>/dev/null \
+          | sed -n 's/^__version__ = "\(.*\)"$/\1/p' || true)
+        if [[ $version == "$previous" ]]; then
+          echo "::notice::version still $version, nothing to release"
+          echo "release=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        # One version number never names two builds.
+        if tagged=$(git rev-parse -q --verify "refs/tags/$tag^{commit}"); then
+          if [[ $tagged != "$GITHUB_SHA" ]]; then
+            echo "::error::$version was already released from ${tagged:0:7}; bump the version (scripts/bump_version.py) again"
+            exit 1
+          fi
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "tag=$tag" >> "$GITHUB_OUTPUT"
+        echo "release=true" >> "$GITHUB_OUTPUT"
+
+    - name: Set up Python
+      if: steps.decide.outputs.release == 'true'
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+
+    - name: Set up Node
+      if: steps.decide.outputs.release == 'true'
+      uses: actions/setup-node@v4
+      with:
+        node-version: "24"
+        cache: npm
+        cache-dependency-path: plantuml-extension/package-lock.json
+
+    - name: Install uv
+      if: steps.decide.outputs.release == 'true'
+      run: python -m pip install uv==0.12.3
+
+    - name: Build the .vsix
+      if: steps.decide.outputs.release == 'true'
+      run: scripts/build_release.sh
+
+    - name: Extract release notes
+      if: steps.decide.outputs.release == 'true'
+      env:
+        VERSION: ${{ steps.decide.outputs.version }}
+      run: |
+        # The "## [X.Y.Z] - <date>" section of CHANGELOG.md, without its heading.
+        awk -v v="$VERSION" '
+          /^## \[/ { inside = index($0, "## [" v "]") == 1; next }
+          inside
+        ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+        if [[ ! -s $RUNNER_TEMP/notes.md ]]; then
+          echo "::error::CHANGELOG.md has no [$VERSION] section; make the bump with scripts/bump_version.py"
+          exit 1
+        fi
+
+    # Tagged only after the build succeeded, so a failed build leaves no tag.
+    # Rerunning the job reuses the tag if it's already on this commit.
+    - name: Tag
+      if: steps.decide.outputs.release == 'true'
+      env:
+        TAG: ${{ steps.decide.outputs.tag }}
+        VERSION: ${{ steps.decide.outputs.version }}
+      run: |
+        if ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $VERSION"
+          git push origin "$TAG"
+        fi
+
+    - name: Create the GitHub Release
+      if: steps.decide.outputs.release == 'true'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TAG: ${{ steps.decide.outputs.tag }}
+      run: |
+        if gh release view "$TAG" >/dev/null 2>&1; then
+          echo "::notice::release $TAG already exists"
+          exit 0
+        fi
+        gh release create "$TAG" plantuml-extension/plantuml-editor-*.vsix \
+          --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"

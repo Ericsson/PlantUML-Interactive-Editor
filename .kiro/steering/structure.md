@@ -120,8 +120,8 @@
 │   ├── bump_version.py     # Release: bump the version (patch/minor/major) and date the changelog
 │   ├── check_app_versions.py # Pre-commit: every version file carries the same X.Y.Z
 │   ├── check_vendor_versions.py # Pre-commit: extension and web app vendor the same library versions
-│   └── build_release.sh    # Build the wheel and the .vsix; publishing tags vX.Y.Z and refuses a reused version
-├── .github/workflows/      # CI: pytest, pre-commit, scorecard
+│   └── build_release.sh    # Build the wheel and the .vsix, optionally copying it to a destination (run by the Release workflow)
+├── .github/workflows/      # CI: pytest, pre-commit, scorecard; release.yml tags vX.Y.Z and creates the GitHub Release when a version bump merges to main
 └── .kiro/steering/         # Kiro steering files
 ```
 

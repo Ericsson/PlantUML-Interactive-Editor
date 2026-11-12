@@ -69,8 +69,7 @@ Stage specific files rather than `git add .`, and check `git diff --cached` for 
 
 ## Releasing
 
-Versions follow [semver](https://semver.org) (`X.Y.Z`), and a release is a deliberate decision, not something every PR does.
-
+Versions follow [semver](https://semver.org) (`X.Y.Z`).
 1. Read the entries under `## [Unreleased]` in `CHANGELOG.md` and pick the step they call for, then run one of:
 
    ```
@@ -83,10 +82,6 @@ Versions follow [semver](https://semver.org) (`X.Y.Z`), and a release is a delib
 
 2. Get the bump merged to `main`, either in a PR of its own or inside a small fix PR you want released quickly.
 
-3. From a clean checkout of that commit, publish:
+That's all. When a commit that changes the version reaches `main`, the [Release workflow](.github/workflows/release.yml) builds the `.vsix` (backend wheel included) with `scripts/build_release.sh`, tags the commit `vX.Y.Z` and creates a GitHub Release with the `.vsix` attached and the version's `CHANGELOG.md` section as its notes. If `vX.Y.Z` already exists on another commit it fails before building: that version has been released, so bump again. A failed run can be rerun from the Actions tab; it reuses the tag if it's already on that commit.
 
-   ```
-   scripts/build_release.sh <destination>
-   ```
-
-   This builds the `.vsix` (backend wheel included), publishes it to `<destination>`, then tags the commit `vX.Y.Z` and pushes the tag. If `vX.Y.Z` already exists on another commit it stops before building: that version has been released, so bump again first.
+To copy a release somewhere else as well, such as an internal share, download the `.vsix` from the release, or build it yourself from a clean checkout of the tag with `scripts/build_release.sh <destination>`, which also moves the previous release there into `<destination>/old/`.
