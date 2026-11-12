@@ -220,6 +220,54 @@ class TestLifelineExtraction:
         assert result is not None
         assert result["cx"] == 50
 
+    def test_find_closest_lifeline_far_right(self, app_url, page):
+        """findClosestLifeline snaps to the closest lifeline at any distance."""
+        result = page.evaluate("""() => {
+            const lifelines = [
+                {cx: 50, yTop: 30, yBottom: 100},
+                {cx: 300, yTop: 30, yBottom: 100}
+            ];
+            return findClosestLifeline(500, lifelines);
+        }""")
+        assert result["cx"] == 300
+
+    def test_find_closest_lifeline_far_left(self, app_url, page):
+        """findClosestLifeline works when the cursor is left of every lifeline."""
+        result = page.evaluate("""() => {
+            const lifelines = [
+                {cx: 200, yTop: 30, yBottom: 100},
+                {cx: 400, yTop: 30, yBottom: 100}
+            ];
+            return findClosestLifeline(-100, lifelines);
+        }""")
+        assert result["cx"] == 200
+
+    def test_find_closest_lifeline_between(self, app_url, page):
+        """Between two far-apart lifelines, the nearer one wins."""
+        result = page.evaluate("""() => {
+            const lifelines = [
+                {cx: 50, yTop: 30, yBottom: 100},
+                {cx: 450, yTop: 30, yBottom: 100}
+            ];
+            return [findClosestLifeline(200, lifelines).cx,
+                    findClosestLifeline(300, lifelines).cx];
+        }""")
+        assert result == [50, 450]
+
+    def test_find_closest_lifeline_empty(self, app_url, page):
+        """findClosestLifeline returns null when there are no lifelines."""
+        result = page.evaluate("() => findClosestLifeline(100, [])")
+        assert result is None
+
+    def test_clamp_y_to_lifeline(self, app_url, page):
+        """clampYToLifeline clamps to [yTop, yBottom] and keeps inside values."""
+        result = page.evaluate("""() => {
+            const l = {cx: 50, yTop: 30, yBottom: 100};
+            return [clampYToLifeline(5, l), clampYToLifeline(60, l),
+                    clampYToLifeline(250, l)];
+        }""")
+        assert result == [30, 60, 100]
+
     def test_modal_title_shows_participant_names(self, app_url, page):
         """After full add-message flow, modal title shows 'Add message from X to Y'."""
         # Load a sequence diagram

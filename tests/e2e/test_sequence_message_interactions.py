@@ -392,3 +392,135 @@ class TestAddMessageColor:
             "Alice -[#Red]> Bob: <color:Red>colored</color>"
             in page.evaluate("editor.session.getValue()").splitlines()
         )
+
+
+# A long message label pushes Bob far from Alice, so points between the
+# lifelines are well outside LIFELINE_TOLERANCE.
+_WIDE_PUML = (
+    "@startuml\\nparticipant Alice\\nparticipant Bob\\n"
+    "Alice -> Bob: a deliberately long message label to spread the lifelines\\n"
+    "@enduml"
+)
+
+# Maps a diagram (svg user-space) point to client coordinates.
+_TO_CLIENT_JS = """([x, y]) => {
+    const svg = document.querySelector('#colb svg');
+    const pt = svg.createSVGPoint();
+    pt.x = x; pt.y = y;
+    const s = pt.matrixTransform(svg.getScreenCTM());
+    return [s.x, s.y];
+}"""
+
+
+class TestGhostMessageSnapsToClosestLifeline:
+    def _load_wide_diagram(self, page):
+        # The default demo renders once on load and can clobber our diagram;
+        # retry until the two lifelines and the one message are present.
+        for _ in range(12):
+            page.evaluate(f"() => editor.session.setValue('{_WIDE_PUML}')")
+            page.wait_for_timeout(2500)
+            ready = page.evaluate("""() =>
+                participantLifelines.map(l => l.name).join() === 'Alice,Bob'
+                && messagePositions.length === 1""")
+            if ready:
+                break
+        else:
+            raise AssertionError("wide sequence diagram never rendered")
+        alice, bob = page.evaluate("() => participantLifelines")
+        # Guard the test premise: the lifelines are far apart.
+        assert bob["cx"] - alice["cx"] > 100
+        return alice, bob
+
+    def _move_to(self, page, x, y):
+        cx, cy = page.evaluate(_TO_CLIENT_JS, [x, y])
+        page.mouse.move(cx, cy)
+
+    def _enter_add_message_mode(self, page, alice):
+        mid_y = (alice["yTop"] + alice["yBottom"]) / 2
+        cx, cy = page.evaluate(_TO_CLIENT_JS, [alice["cx"], mid_y])
+        page.mouse.click(cx, cy, button="right")
+        page.click("#addMessageSolid")
+        assert page.evaluate("() => isAddMessageActive") is True
+
+    def _ghost_state(self, page):
+        return page.evaluate("""() => ({
+            line: Boolean(ghostLine && ghostLine.parentNode),
+            self: Boolean(ghostSelfPath && ghostSelfPath.parentNode),
+            x1: ghostLine && parseFloat(ghostLine.getAttribute('x1')),
+            x2: ghostLine && parseFloat(ghostLine.getAttribute('x2')),
+            y1: ghostLine && parseFloat(ghostLine.getAttribute('y1'))
+        })""")
+
+    def test_ghost_snaps_to_far_lifeline(self, app_url, page):
+        alice, bob = self._load_wide_diagram(page)
+        self._enter_add_message_mode(page, alice)
+
+        # 70% of the way to Bob: far from both lifelines, but closer to Bob.
+        x = alice["cx"] + 0.7 * (bob["cx"] - alice["cx"])
+        self._move_to(page, x, (bob["yTop"] + bob["yBottom"]) / 2)
+
+        ghost = self._ghost_state(page)
+        assert ghost["line"] is True
+        assert ghost["x1"] == alice["cx"]
+        assert ghost["x2"] == bob["cx"]
+
+    def test_ghost_is_self_message_when_origin_is_closest(self, app_url, page):
+        alice, bob = self._load_wide_diagram(page)
+        self._enter_add_message_mode(page, alice)
+
+        x = alice["cx"] + 0.3 * (bob["cx"] - alice["cx"])
+        self._move_to(page, x, (alice["yTop"] + alice["yBottom"]) / 2)
+
+        ghost = self._ghost_state(page)
+        assert ghost["self"] is True
+        assert ghost["line"] is False
+
+    def test_ghost_y_is_clamped_above_lifeline(self, app_url, page):
+        alice, bob = self._load_wide_diagram(page)
+        self._enter_add_message_mode(page, alice)
+
+        self._move_to(page, bob["cx"] - 40, bob["yTop"] - 10)
+
+        ghost = self._ghost_state(page)
+        assert ghost["line"] is True
+        assert ghost["x2"] == bob["cx"]
+        assert ghost["y1"] == bob["yTop"]
+
+    def test_normal_mode_indicator_keeps_tolerance(self, app_url, page):
+        alice, bob = self._load_wide_diagram(page)
+
+        x = alice["cx"] + 0.5 * (bob["cx"] - alice["cx"])
+        self._move_to(page, x, (alice["yTop"] + alice["yBottom"]) / 2)
+
+        attached = page.evaluate(
+            "() => Boolean(indicatorCircle && indicatorCircle.parentNode)"
+        )
+        assert attached is False
+
+    def test_click_far_from_lifeline_adds_message_to_ghost_target(self, app_url, page):
+        alice, bob = self._load_wide_diagram(page)
+        self._enter_add_message_mode(page, alice)
+
+        y = (bob["yTop"] + bob["yBottom"]) / 2
+        x = alice["cx"] + 0.7 * (bob["cx"] - alice["cx"])
+        cx, cy = page.evaluate(_TO_CLIENT_JS, [x, y])
+        page.mouse.move(cx, cy)
+        page.mouse.click(cx, cy)
+
+        page.wait_for_selector("#participant-modalForm", state="visible")
+        state = page.evaluate("""() => ({
+            title: document.querySelector('#participant-modalForm .modal-title').textContent,
+            second: secondClickCoordinates,
+            first: firstClickCoordinates
+        })""")
+        assert state["title"] == "Add message from Alice to Bob"
+        assert state["second"][0] == bob["cx"]
+        assert state["first"][0] == alice["cx"]
+        assert bob["yTop"] <= state["second"][1] <= bob["yBottom"]
+
+        page.fill("#participant-message-text", "far click")
+        page.click("#submit-participant-message")
+        page.wait_for_function(
+            "() => editor.session.getValue().includes('Alice -> Bob: far click')",
+            timeout=15000,
+        )
