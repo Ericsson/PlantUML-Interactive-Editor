@@ -1,4 +1,4 @@
-// Sequence participant-box interaction: right-click a participant -> Box, then
+// Sequence participant-box interaction: right-click a participant -> Add Box, then
 // hover another participant to grow a horizontal ghost box across the range and
 // click to create it. Mirrors sequence-group.js but operates horizontally over
 // participants (by center-x) instead of vertically over messages.
@@ -224,7 +224,7 @@ function boxEventListeners() {
     // Submit button in the box edit modal
     $('#seq-submit-box').on('click', submitBoxEdit);
 
-    // "Box" item in the participant context menu enters box-add mode.
+    // "Add Box" item in the participant context menu enters box-add mode.
     document.getElementById('seq-addBox').addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
