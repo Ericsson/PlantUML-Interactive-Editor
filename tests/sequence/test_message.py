@@ -30,6 +30,10 @@ from flask import json
 from plantuml_gui.sequence.message import (
     _apply_arrow_color,
     _arrow_color_from_line,
+    _message_text_from_line,
+    _unwrap_text_color,
+    _wrap_text_color,
+    add_message,
     delete_message,
     edit_message_text,
     get_message_color,
@@ -378,7 +382,7 @@ class TestMessageColorRoundTrip:
         )
         svg, svgelement = self._first_polygon(puml)
         result = edit_message_text(puml, svg, svgelement, "Hi", "LightGreen")
-        assert "Alice -[#LightGreen]> Bob: Hi" in result
+        assert "Alice -[#LightGreen]> Bob: <color:LightGreen>Hi</color>" in result
 
     def test_edit_removes_color_with_none(self):
         puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -[#LightBlue]> Bob: Hi\n@enduml"
@@ -386,8 +390,108 @@ class TestMessageColorRoundTrip:
         result = edit_message_text(puml, svg, svgelement, "Hi", "none")
         assert "Alice -> Bob: Hi" in result
 
+    def test_edit_removes_text_color_with_none(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -[#LightBlue]> Bob: <color:LightBlue>Hi</color>\n@enduml"
+        svg, svgelement = self._first_polygon(puml)
+        result = edit_message_text(puml, svg, svgelement, "Hi", "none")
+        assert "Alice -> Bob: Hi\n" in result
+
     def test_edit_none_color_param_keeps_existing(self):
         puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -[#LightBlue]> Bob: Hi\n@enduml"
         svg, svgelement = self._first_polygon(puml)
         result = edit_message_text(puml, svg, svgelement, "Bye")
-        assert "Alice -[#LightBlue]> Bob: Bye" in result
+        assert "Alice -[#LightBlue]> Bob: <color:LightBlue>Bye</color>" in result
+
+    def test_get_text_strips_color_wrapper(self):
+        puml = "@startuml\nparticipant Alice\nparticipant Bob\nAlice -[#Red]> Bob: <color:Red>a</color>\\n<color:Red>b</color>\n@enduml"
+        svg, svgelement = self._first_polygon(puml)
+        assert get_message_text(puml, svg, svgelement) == "a\nb"
+
+    def test_colored_text_renders_in_color(self):
+        puml = (
+            "@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hi\n@enduml"
+        )
+        svg, svgelement = self._first_polygon(puml)
+        result = edit_message_text(puml, svg, svgelement, "a\nb", "Red")
+        texts = Pq(extract_g_inner(_create_svg_from_uml(result)))(
+            'text[font-size="13"]'
+        )
+        assert [t.attrib["fill"] for t in texts] == ["#FF0000", "#FF0000"]
+
+
+class TestMessageTextColorHelpers:
+    """Pure-string tests for wrapping message text in <color> tags."""
+
+    def test_wrap_single_line(self):
+        assert _wrap_text_color("hi", "Red") == "<color:Red>hi</color>"
+
+    def test_wrap_each_line_of_multiline(self):
+        assert (
+            _wrap_text_color("a\\nb", "Red")
+            == "<color:Red>a</color>\\n<color:Red>b</color>"
+        )
+
+    def test_wrap_no_color_is_noop(self):
+        assert _wrap_text_color("hi", "") == "hi"
+
+    def test_unwrap_round_trip(self):
+        assert _unwrap_text_color(_wrap_text_color("a\\nb", "Red"), "Red") == "a\\nb"
+
+    def test_unwrap_does_not_span_separate_tags(self):
+        text = "<color:Red>a</color> and <color:Red>b</color>"
+        assert _unwrap_text_color(text, "Red") == "a and b"
+
+    def test_unwrap_keeps_other_color_markup(self):
+        assert _unwrap_text_color("<color:Blue>hi</color>", "Red") == (
+            "<color:Blue>hi</color>"
+        )
+
+    def test_unwrap_without_arrow_color_keeps_markup(self):
+        assert _message_text_from_line("A -> B: <color:Red>hi</color>") == (
+            "<color:Red>hi</color>"
+        )
+
+
+class TestAddMessageColor:
+    """add_message colors the whole message (arrow and text)."""
+
+    PUML = "@startuml\nparticipant Alice\nparticipant Bob\n@enduml"
+
+    def _add(self, color, arrow="->", text="Hi"):
+        svg = extract_g_inner(_create_svg_from_uml(self.PUML))
+        xs = [int(float(x)) for x in re.findall(r'<line[^>]*x1="([\d.]+)"', svg)][:2]
+        return add_message(self.PUML, svg, text, [xs[0], 40], [xs[1], 40], arrow, color)
+
+    def test_add_with_color(self):
+        assert "Alice -[#Red]> Bob: <color:Red>Hi</color>" in self._add("Red")
+
+    def test_add_dashed_with_color(self):
+        assert "Alice -[#Red]-> Bob: <color:Red>Hi</color>" in self._add("Red", "-->")
+
+    def test_add_with_none_color(self):
+        assert "Alice -> Bob: Hi" in self._add("none")
+
+    def test_add_without_color(self):
+        assert "Alice -> Bob: Hi" in self._add(None)
+
+    def test_add_route_passes_color(self, client):
+        svg = extract_g_inner(_create_svg_from_uml(self.PUML))
+        xs = [int(float(x)) for x in re.findall(r'<line[^>]*x1="([\d.]+)"', svg)][:2]
+        response = client.post(
+            "/addMessage",
+            data=json.dumps(
+                {
+                    "plantuml": self.PUML,
+                    "svg": svg,
+                    "message": "Hi",
+                    "firstcoordinates": [xs[0], 40],
+                    "secondcoordinates": [xs[1], 40],
+                    "color": "LightBlue",
+                }
+            ),
+            content_type="application/json",
+        )
+        assert (
+            "Alice -[#LightBlue]> Bob: <color:LightBlue>Hi</color>"
+            in response.get_json()["plantuml"]
+        )

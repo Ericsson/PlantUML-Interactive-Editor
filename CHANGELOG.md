@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### External
 
 - Renamed the sequence-diagram note types H Note and R Note to Hexagonal and Rectangular.
+- Message color now colors the message text as well as the arrow, and can be chosen when adding a message.
 
 ### Internal
 
