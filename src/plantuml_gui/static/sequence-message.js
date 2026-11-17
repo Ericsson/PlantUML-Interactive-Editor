@@ -13,16 +13,6 @@ let ghostSelfPath = null;
 
 // --- Lifeline detection ---
 
-function findNearestLifeline(x, y, participantLifelines) {
-    for (const lifeline of participantLifelines) {
-        if (Math.abs(x - lifeline.cx) <= LIFELINE_TOLERANCE &&
-            y >= lifeline.yTop && y <= lifeline.yBottom) {
-            return lifeline;
-        }
-    }
-    return null;
-}
-
 // Ghost arrow snaps to closest lifeline wherever the cursor is in the diagram.
 // Returns null only when there are no lifelines. Ties go to the first one.
 function findClosestLifeline(x, participantLifelines) {
@@ -33,6 +23,19 @@ function findClosestLifeline(x, participantLifelines) {
         }
     }
     return closest;
+}
+
+// Lifeline under the cursor (hit test): the closest one, if it is within
+// LIFELINE_TOLERANCE horizontally and y is within its vertical extent.
+// Otherwise null.
+function findLifelineAt(x, y, participantLifelines) {
+    const lifeline = findClosestLifeline(x, participantLifelines);
+    if (lifeline &&
+        Math.abs(x - lifeline.cx) <= LIFELINE_TOLERANCE &&
+        y >= lifeline.yTop && y <= lifeline.yBottom) {
+        return lifeline;
+    }
+    return null;
 }
 
 // Clamp y to the lifeline's vertical extent, so a cursor above the headers or
@@ -212,7 +215,7 @@ function backgroundContextMenu(e, svgElement) {
 
     if (isSequenceAddMode()) return;
 
-    const lifeline = findNearestLifeline(cx, cy, participantLifelines);
+    const lifeline = findLifelineAt(cx, cy, participantLifelines);
     const enclosingBox =
         typeof findEnclosingBox === 'function' ? findEnclosingBox(cx, cy) : null;
 
@@ -281,7 +284,7 @@ function setupLifelineInteraction() {
             hideIndicatorCircle();
         } else {
             hideGhostArrow();
-            const lifeline = findNearestLifeline(x, y, participantLifelines);
+            const lifeline = findLifelineAt(x, y, participantLifelines);
             if (lifeline) {
                 showIndicatorCircle(svgContainer, lifeline.cx, y);
             } else {

@@ -22,20 +22,6 @@ const BOX_PADDING = 8;
 
 // --- Participant geometry helpers ---
 
-// Nearest participant lifeline to an x coordinate (by center-x).
-function findNearestParticipantByX(x) {
-    let best = null;
-    let bestDist = Infinity;
-    for (const p of participantLifelines) {
-        const dist = Math.abs(p.cx - x);
-        if (dist < bestDist) {
-            bestDist = dist;
-            best = p;
-        }
-    }
-    return best;
-}
-
 // Iterate participant header rects (rounded corners + the shared 0.5 stroke).
 function forEachParticipantHeaderRect(svgElement, callback) {
     svgElement.querySelectorAll('rect').forEach((rect) => {
@@ -175,7 +161,7 @@ function startBoxAddModeFromContext() {
 
 function handleBoxMouseMove(svgContainer, x) {
     if (!boxOrigin) return;
-    const dest = findNearestParticipantByX(x);
+    const dest = findClosestLifeline(x, participantLifelines);
     if (!dest) return;
     showGhostBox(svgContainer, boxOrigin.startCx, dest.cx);
 }
@@ -183,7 +169,7 @@ function handleBoxMouseMove(svgContainer, x) {
 function handleBoxClick(e, x) {
     if (!boxOrigin) return;
 
-    const dest = findNearestParticipantByX(x);
+    const dest = findClosestLifeline(x, participantLifelines);
     if (!dest) return;
 
     const startIndex = boxOrigin.startParticipantIndex;

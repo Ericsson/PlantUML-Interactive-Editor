@@ -15,7 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Internal
 
 - Renamed the participant context-menu item Box to Add Box.
-- Message-add mode in `sequence-message.js` now resolves its destination with the new `findClosestLifeline` (horizontally closest lifeline, no tolerance) and `clampYToLifeline`, used by both the ghost-arrow mousemove and the confirming click so preview and result agree. `findNearestLifeline` and its 15px `LIFELINE_TOLERANCE` are unchanged for the normal-mode hover indicator and the right-click menu. Covered by `TestGhostMessageSnapsToClosestLifeline` in `tests/e2e/test_sequence_message_interactions.py` and helper tests in `tests/e2e/test_sequence_participant.py`.
+- Message-add mode in `sequence-message.js` resolves its destination with the new `findClosestLifeline` (no tolerance) and `clampYToLifeline`, so the ghost arrow and the click agree. The hover/right-click hit test `findNearestLifeline` is renamed `findLifelineAt` and built on `findClosestLifeline`; `sequence-box.js` uses `findClosestLifeline` instead of its duplicate `findNearestParticipantByX`.
 
 ## [0.32.0] - 2026-11-12
 
