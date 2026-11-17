@@ -191,34 +191,101 @@ class TestLifelineExtraction:
         assert result[0]["yTop"] > 0
         assert result[0]["yBottom"] > result[0]["yTop"]
 
-    def test_find_nearest_lifeline_within_tolerance(self, app_url, page):
-        """findNearestLifeline returns lifeline when within 15px."""
+    def test_find_lifeline_at_within_tolerance(self, app_url, page):
+        """findLifelineAt returns lifeline when within 15px."""
         result = page.evaluate("""() => {
             const lifelines = [{cx: 50, yTop: 30, yBottom: 100}];
-            return findNearestLifeline(60, 50, lifelines);
+            return findLifelineAt(60, 50, lifelines);
         }""")
         assert result is not None
         assert result["cx"] == 50
 
-    def test_find_nearest_lifeline_outside_tolerance(self, app_url, page):
-        """findNearestLifeline returns null when outside 15px."""
+    def test_find_lifeline_at_outside_tolerance(self, app_url, page):
+        """findLifelineAt returns null when outside 15px."""
         result = page.evaluate("""() => {
             const lifelines = [{cx: 50, yTop: 30, yBottom: 100}];
-            return findNearestLifeline(70, 50, lifelines);
+            return findLifelineAt(70, 50, lifelines);
         }""")
         assert result is None
 
-    def test_find_nearest_lifeline_allows_self_target(self, app_url, page):
-        """findNearestLifeline without exclude allows targeting the same lifeline."""
+    def test_find_lifeline_at_allows_self_target(self, app_url, page):
+        """findLifelineAt without exclude allows targeting the same lifeline."""
         result = page.evaluate("""() => {
             const lifelines = [
                 {cx: 50, yTop: 30, yBottom: 100},
                 {cx: 80, yTop: 30, yBottom: 100}
             ];
-            return findNearestLifeline(55, 50, lifelines);
+            return findLifelineAt(55, 50, lifelines);
         }""")
         assert result is not None
         assert result["cx"] == 50
+
+    def test_find_lifeline_at_picks_closer_within_tolerance(self, app_url, page):
+        """With two lifelines inside tolerance, findLifelineAt picks the closer one, not the first."""
+        result = page.evaluate("""() => {
+            const lifelines = [
+                {cx: 50, yTop: 30, yBottom: 100},
+                {cx: 70, yTop: 30, yBottom: 100}
+            ];
+            return findLifelineAt(64, 50, lifelines);
+        }""")
+        assert result["cx"] == 70
+
+    def test_find_lifeline_at_outside_vertical_extent(self, app_url, page):
+        """findLifelineAt returns null above or below the lifeline even when x is on it."""
+        result = page.evaluate("""() => {
+            const lifelines = [{cx: 50, yTop: 30, yBottom: 100}];
+            return [findLifelineAt(50, 20, lifelines), findLifelineAt(50, 110, lifelines)];
+        }""")
+        assert result == [None, None]
+
+    def test_find_closest_lifeline_far_right(self, app_url, page):
+        """findClosestLifeline snaps to the closest lifeline at any distance."""
+        result = page.evaluate("""() => {
+            const lifelines = [
+                {cx: 50, yTop: 30, yBottom: 100},
+                {cx: 300, yTop: 30, yBottom: 100}
+            ];
+            return findClosestLifeline(500, lifelines);
+        }""")
+        assert result["cx"] == 300
+
+    def test_find_closest_lifeline_far_left(self, app_url, page):
+        """findClosestLifeline works when the cursor is left of every lifeline."""
+        result = page.evaluate("""() => {
+            const lifelines = [
+                {cx: 200, yTop: 30, yBottom: 100},
+                {cx: 400, yTop: 30, yBottom: 100}
+            ];
+            return findClosestLifeline(-100, lifelines);
+        }""")
+        assert result["cx"] == 200
+
+    def test_find_closest_lifeline_between(self, app_url, page):
+        """Between two far-apart lifelines, the nearer one wins."""
+        result = page.evaluate("""() => {
+            const lifelines = [
+                {cx: 50, yTop: 30, yBottom: 100},
+                {cx: 450, yTop: 30, yBottom: 100}
+            ];
+            return [findClosestLifeline(200, lifelines).cx,
+                    findClosestLifeline(300, lifelines).cx];
+        }""")
+        assert result == [50, 450]
+
+    def test_find_closest_lifeline_empty(self, app_url, page):
+        """findClosestLifeline returns null when there are no lifelines."""
+        result = page.evaluate("() => findClosestLifeline(100, [])")
+        assert result is None
+
+    def test_clamp_y_to_lifeline(self, app_url, page):
+        """clampYToLifeline clamps to [yTop, yBottom] and keeps inside values."""
+        result = page.evaluate("""() => {
+            const l = {cx: 50, yTop: 30, yBottom: 100};
+            return [clampYToLifeline(5, l), clampYToLifeline(60, l),
+                    clampYToLifeline(250, l)];
+        }""")
+        assert result == [30, 60, 100]
 
     def test_modal_title_shows_participant_names(self, app_url, page):
         """After full add-message flow, modal title shows 'Add message from X to Y'."""

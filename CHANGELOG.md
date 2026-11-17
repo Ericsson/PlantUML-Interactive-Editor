@@ -10,10 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Renamed the sequence-diagram note types H Note and R Note to Hexagonal and Rectangular.
 - Message color now colors the message text as well as the arrow, and can be chosen when adding a message.
+- When adding a sequence-diagram message, the ghost arrow now always points at the lifeline closest to the mouse, wherever the mouse is in the diagram, instead of only appearing within a few pixels of a lifeline. Clicking anywhere creates the message to that lifeline; above or below the lifelines, the message is placed at their top or bottom end.
 
 ### Internal
 
 - Renamed the participant context-menu item Box to Add Box.
+- Message-add mode in `sequence-message.js` resolves its destination with the new `findClosestLifeline` (no tolerance) and `clampYToLifeline`, so the ghost arrow and the click agree. The hover/right-click hit test `findNearestLifeline` is renamed `findLifelineAt` and built on `findClosestLifeline`; `sequence-box.js` uses `findClosestLifeline` instead of its duplicate `findNearestParticipantByX`.
 
 ## [0.32.0] - 2026-11-12
 

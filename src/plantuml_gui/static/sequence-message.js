@@ -13,14 +13,35 @@ let ghostSelfPath = null;
 
 // --- Lifeline detection ---
 
-function findNearestLifeline(x, y, participantLifelines) {
+// Ghost arrow snaps to closest lifeline wherever the cursor is in the diagram.
+// Returns null only when there are no lifelines. Ties go to the first one.
+function findClosestLifeline(x, participantLifelines) {
+    let closest = null;
     for (const lifeline of participantLifelines) {
-        if (Math.abs(x - lifeline.cx) <= LIFELINE_TOLERANCE &&
-            y >= lifeline.yTop && y <= lifeline.yBottom) {
-            return lifeline;
+        if (!closest || Math.abs(x - lifeline.cx) < Math.abs(x - closest.cx)) {
+            closest = lifeline;
         }
     }
+    return closest;
+}
+
+// Lifeline under the cursor (hit test): the closest one, if it is within
+// LIFELINE_TOLERANCE horizontally and y is within its vertical extent.
+// Otherwise null.
+function findLifelineAt(x, y, participantLifelines) {
+    const lifeline = findClosestLifeline(x, participantLifelines);
+    if (lifeline &&
+        Math.abs(x - lifeline.cx) <= LIFELINE_TOLERANCE &&
+        y >= lifeline.yTop && y <= lifeline.yBottom) {
+        return lifeline;
+    }
     return null;
+}
+
+// Clamp y to the lifeline's vertical extent, so a cursor above the headers or
+// below the lifelines still yields a message position on the lifeline.
+function clampYToLifeline(y, lifeline) {
+    return Math.min(Math.max(y, lifeline.yTop), lifeline.yBottom);
 }
 
 // --- Hover indicator (blue circle on lifeline) ---
@@ -194,7 +215,7 @@ function backgroundContextMenu(e, svgElement) {
 
     if (isSequenceAddMode()) return;
 
-    const lifeline = findNearestLifeline(cx, cy, participantLifelines);
+    const lifeline = findLifelineAt(cx, cy, participantLifelines);
     const enclosingBox =
         typeof findEnclosingBox === 'function' ? findEnclosingBox(cx, cy) : null;
 
@@ -244,9 +265,10 @@ function setupLifelineInteraction() {
         const y = transformed.y;
 
         if (isAddMessageActive) {
-            const dest = findNearestLifeline(x, y, participantLifelines);
-            if (dest) {
-                showGhostArrow(svgContainer, messageOrigin.cx, dest.cx, y);
+            const dest = findClosestLifeline(x, participantLifelines);
+            if (dest && messageOrigin) {
+                showGhostArrow(svgContainer, messageOrigin.cx, dest.cx,
+                    clampYToLifeline(y, dest));
             } else {
                 hideGhostArrow();
             }
@@ -262,7 +284,7 @@ function setupLifelineInteraction() {
             hideIndicatorCircle();
         } else {
             hideGhostArrow();
-            const lifeline = findNearestLifeline(x, y, participantLifelines);
+            const lifeline = findLifelineAt(x, y, participantLifelines);
             if (lifeline) {
                 showIndicatorCircle(svgContainer, lifeline.cx, y);
             } else {
@@ -305,11 +327,12 @@ function setupLifelineInteraction() {
         if (!isAddMessageActive || !messageOrigin) return;
 
         const transformed = svgPointFromEvent(e, svgContainer);
-        const x = transformed.x;
-        const y = transformed.y;
 
-        const dest = findNearestLifeline(x, y, participantLifelines);
+        // Same snapping as the ghost arrow, so the created message always
+        // matches the preview: closest lifeline, y clamped to its extent.
+        const dest = findClosestLifeline(transformed.x, participantLifelines);
         if (!dest) return;
+        const y = clampYToLifeline(transformed.y, dest);
 
         secondClickCoordinates = [dest.cx, y];
         firstClickCoordinates = [messageOrigin.cx, y];
