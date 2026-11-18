@@ -144,6 +144,10 @@ class TestCursorSync:
     def test_cursor_on_another_page_switches_to_it(self, app_url, page):
         _load(page, THREE_PAGES)
         expect(page.locator("#page-indicator")).to_have_text("Page 1 / 3")
+        # The indicator is set from the /render response, but cursor sync
+        # needs pageBoundaries from the later /getSequencePositions; moving
+        # the cursor before they arrive maps every row to page 1.
+        page.wait_for_function("pageBoundaries.length === 2")
         page.evaluate("editor.gotoLine(9, 0)")  # Alice -> Bob: p3m1
         expect(page.locator("#page-indicator")).to_have_text("Page 3 / 3")
         expect(_diagram_text(page)).to_contain_text("p3m1")

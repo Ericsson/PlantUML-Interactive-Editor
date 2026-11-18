@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Internal
 
+- Fixed a flaky e2e test (`test_cursor_on_another_page_switches_to_it`): it moved the editor cursor as soon as the page indicator appeared, before `/getSequencePositions` had delivered the page boundaries that cursor sync needs. It now waits for them.
 - Renamed the participant context-menu item Box to Add Box.
 - Message-add mode in `sequence-message.js` resolves its destination with the new `findClosestLifeline` (no tolerance) and `clampYToLifeline`, so the ghost arrow and the click agree. The hover/right-click hit test `findNearestLifeline` is renamed `findLifelineAt` and built on `findClosestLifeline`; `sequence-box.js` uses `findClosestLifeline` instead of its duplicate `findNearestParticipantByX`.
 
