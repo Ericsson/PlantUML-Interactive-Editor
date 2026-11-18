@@ -119,6 +119,7 @@ suite('extension: message protocol', () => {
 		);
 
 		assert.ok(posted.has('savePng'), 'the shims no longer post savePng');
+		assert.ok(posted.has('undo') && posted.has('redo'), 'the shims no longer post undo/redo');
 		assert.deepStrictEqual(
 			[...posted].filter((type) => !handled.has(type)),
 			[],

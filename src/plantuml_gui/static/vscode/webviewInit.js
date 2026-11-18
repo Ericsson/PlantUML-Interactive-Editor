@@ -51,6 +51,11 @@
 
 	const post = (message) => vscodeApi.postMessage(message);
 
+	/** Whether `target` is a text field, which keeps its own undo. */
+	const isEditable = (target) =>
+		target instanceof HTMLElement &&
+		(target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+
 	// fetchShim.js reports requests that never reached the sidecar, and cannot
 	// acquire the API itself: that may be done only once per page, and it is
 	// done just above.
@@ -80,11 +85,28 @@
 	// wires this from addUtilEventListeners(), which we skip, so call it here.
 	titleEventListeners();
 
-	// Ctrl+Enter to submit the focused modal. The web app gets this from
-	// commandEventListeners(), which also binds Ctrl+Z/Ctrl+Y to its own
-	// history array -- we want VS Code's native undo instead, since every edit
-	// goes through a WorkspaceEdit and is already on its undo stack.
+	// Ctrl+Enter submits the focused modal. Undo/redo keys go to the host,
+	// which runs VS Code's native undo; text fields keep their own.
 	document.addEventListener('keydown', (event) => {
+		if (!(event.ctrlKey || event.metaKey)) {
+			return;
+		}
+
+		const key = event.key.toLowerCase();
+
+		if (key === 'z' || key === 'y') {
+			if (isEditable(event.target)) {
+				return;
+			}
+			event.preventDefault();
+			if (key === 'z' && !event.shiftKey) {
+				post({ type: 'undo' });
+			} else {
+				post({ type: 'redo' });
+			}
+			return;
+		}
+
 		if (!(event.ctrlKey && event.key === 'Enter')) {
 			return;
 		}
