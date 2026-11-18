@@ -9,6 +9,12 @@ Changes to the diagram editing itself are listed in the repository's
 
 ## [Unreleased]
 
+- Fixed undo and redo while the diagram panel has focus. Ctrl+Z (Cmd+Z on
+  macOS) and Ctrl+Y / Ctrl+Shift+Z now undo and redo the document without
+  clicking into the code editor first; the history is the same one the code
+  editor uses. Inside a text field in the panel they still undo the typing.
+  In a Markdown file, undo covers the whole file, prose included.
+
 ## [0.32.0] - 2026-11-12
 
 - Added support for diagrams written in Markdown files. A `.md` file holding a

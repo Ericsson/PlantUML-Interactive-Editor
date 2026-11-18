@@ -219,6 +219,7 @@ instances do not. Every message carries a `type` discriminator.
 | webview → host | `setHighlight` | `{ rows }`, zero-based line numbers | The shim's marker table changed. |
 | webview → host | `savePng` | `{}` | The toolbar's PNG button was clicked. Carries no source: the host renders from the document. |
 | webview → host | `backendUnreachable` | `{ route, detail }` | A `fetch()` to the sidecar was rejected rather than answered. See [Failure reporting](#failure-reporting). |
+| webview → host | `undo` / `redo` | `{}` | An undo/redo shortcut was pressed outside a text field. See [Host ↔ the document](#6-host--the-document). |
 | webview → host | `ready` | `{}` | The page finished booting. |
 
 Four properties of the channel shape the code on both sides. There is **no
@@ -301,6 +302,13 @@ Not cross-process, but the link that closes the loop. The host reads with
 `document.getText()` and writes with a `WorkspaceEdit` — one edit, so one undo step, so
 Ctrl+Z undoes a diagram click. It is the **only** write path to the file; neither the
 webview nor the sidecar can reach it.
+
+Undo from the panel goes through the same stack. A webview has no document, and VS Code
+can only undo through a focused text editor, so on `undo`/`redo` the host focuses the
+document's editor (reopening it beside the panel if its tab was closed), runs the built-in
+command, and reveals the panel again (`runDocumentCommand`). Requests are queued so a held
+key cannot interleave the focus changes. The stack belongs to the whole document, so in a
+Markdown file an undo from the panel can also undo prose.
 
 Which document that is follows the active editor: clicking into another diagram file points
 the panel at it, resends its text and retitles the tab, so one panel serves every diagram in
@@ -876,8 +884,9 @@ It deliberately does not call the web app's own bootstrap:
 So the listeners `initeditor()` would have registered are re-registered explicitly —
 `session.on('change')` and `selection.on('changeCursor')` — without which the diagram would
 render once at boot and never again. It then calls `titleEventListeners()`, binds Ctrl+Enter
-for modal submit (Ctrl+Z is deliberately *not* rebound, since every edit is a `WorkspaceEdit`
-and already on VS Code's undo stack), binds `#png`, and posts `ready`.
+for modal submit, sends Ctrl/Cmd+Z, Ctrl+Y and Ctrl/Cmd+Shift+Z to the host as `undo`/`redo`
+(outside text fields, which keep their own undo; the web app's history array is not used),
+binds `#png`, and posts `ready`.
 
 `#png` is the one line here that adds behaviour rather than restoring it, and the only part of
 the toolbar this file owns: panning and the zoom buttons are already set up by
@@ -888,7 +897,7 @@ The context menus need no attention here: they are wired by `checkDiagramType()`
 
 ## Message protocol
 
-The six message types, their payloads and the guarantees the channel does and does not give
+The message types, their payloads and the guarantees the channel does and does not give
 are specified under *Host ↔ webview* in [Interfaces](#interfaces). What follows is the part
 that the message list does not show: why the two directions do not chase each other forever.
 
@@ -1098,7 +1107,7 @@ Each site carries a comment naming the other.
 | `/webview` | `src/webviewPage.js` (`WEBVIEW_PATH`) | `serve.py` (`WEBVIEW_ROUTE`) |
 | `/renderPNG` | `extension.js` (`savePng`) | `shared/routes.py` (`renderpng`) |
 | `PLANTUML_GUI_TOKEN`, `PLANTUML_GUI_JAR_OVERRIDE` | `src/sidecar.js` (`buildEnv`) | `serve.py` (`TOKEN_ENV`, `JAR_ENV`) |
-| The six message types | `extension.js` | `static/vscode/` shims |
+| The message types | `extension.js` | `static/vscode/` shims |
 | Python 3.10 as the floor | `src/backendInstall.js` (`MIN_PYTHON`) | `pyproject.toml` (`requires-python`) |
 
 The floor is asserted by a test: `test/backendInstall.test.js` reads `requires-python` out of

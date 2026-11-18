@@ -1024,6 +1024,26 @@ async function createDiagramPanel(context) {
 		debounceTimer = setTimeout(() => postDocument(), LIVE_UPDATE_DEBOUNCE_MS);
 	});
 
+	// Undo/redo requests from the panel, run one at a time.
+	let undoQueue = Promise.resolve();
+
+	/** @param {'undo' | 'redo'} command */
+	const undoFromPanel = async (command) => {
+		const target = document;
+		try {
+			const ran = await runDocumentCommand(target, command);
+			// Adopted unless the panel moved on meanwhile: a reopened file can
+			// be a new object, and the change listener matches by identity.
+			if (document === target) {
+				document = ran;
+			}
+		} catch (err) {
+			outputChannel?.appendLine(`[panel] ${command} failed: ${err.message}`);
+		}
+		// Focus back to the panel, where the shortcut was pressed.
+		panel.reveal(panel.viewColumn, false);
+	};
+
 	const messageListener = panel.webview.onDidReceiveMessage(async (message) => {
 		if (message.type === 'applyPuml') {
 			if (applyingEdit) {
@@ -1041,6 +1061,9 @@ async function createDiagramPanel(context) {
 			await savePng(document, currentRegion(), active, message.page, message.pageCount);
 		} else if (message.type === 'backendUnreachable') {
 			reportBackendUnreachable(message);
+		} else if (message.type === 'undo' || message.type === 'redo') {
+			// Queued, so a held-down key cannot interleave the focus changes.
+			undoQueue = undoQueue.then(() => undoFromPanel(message.type));
 		} else if (message.type === 'ready') {
 			outputChannel?.appendLine('[webview] frontend loaded');
 			// `ready` is the frontend's word that its `message` listener is
@@ -1140,6 +1163,41 @@ async function applyPuml(document, region, source) {
 	if (!(await vscode.workspace.applyEdit(edit))) {
 		vscode.window.showErrorMessage('Could not write the diagram change into the document.');
 	}
+}
+
+/** The only commands the panel may ask the host to run. */
+const DOCUMENT_COMMANDS = new Set(['undo', 'redo']);
+
+/**
+ * Undo or redo `document` with VS Code's native undo stack.
+ *
+ * VS Code can only undo through a focused text editor, so the document's
+ * editor is focused first (reopened beside the panel if its tab was closed).
+ * The caller gives focus back to the panel.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {'undo' | 'redo'} command
+ * @returns {Promise<vscode.TextDocument>} the document the command ran on; a
+ *   new object if the file had to be reopened
+ */
+async function runDocumentCommand(document, command) {
+	if (!DOCUMENT_COMMANDS.has(command)) {
+		return document;
+	}
+
+	// Matched by uri: a reopened file can be a new object.
+	const uri = document.uri.toString();
+	const visible = vscode.window.visibleTextEditors.find(
+		(editor) => editor.document.uri.toString() === uri
+	);
+
+	const editor = await vscode.window.showTextDocument(document, {
+		viewColumn: visible?.viewColumn ?? vscode.ViewColumn.Beside,
+		preserveFocus: false
+	});
+	await vscode.commands.executeCommand(command);
+
+	return editor.document;
 }
 
 /**
@@ -1458,5 +1516,7 @@ module.exports = {
 	// pass for success, since an install over a surviving venv does nothing.
 	removeManagedVenv,
 	// Exported for the tests: how an exported page of a newpage diagram is named.
-	pngFileName
+	pngFileName,
+	// Exported for the tests: undo/redo from the panel.
+	runDocumentCommand
 };

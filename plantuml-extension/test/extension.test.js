@@ -119,6 +119,7 @@ suite('extension: message protocol', () => {
 		);
 
 		assert.ok(posted.has('savePng'), 'the shims no longer post savePng');
+		assert.ok(posted.has('undo') && posted.has('redo'), 'the shims no longer post undo/redo');
 		assert.deepStrictEqual(
 			[...posted].filter((type) => !handled.has(type)),
 			[],
@@ -525,6 +526,106 @@ suite('extension: reinstalling the backend', () => {
 
 		return source.slice(start, end);
 	}
+});
+
+suite('extension: undo and redo from the panel', () => {
+	// Saved files on disk: closing a dirty editor would prompt, and closing an
+	// untitled one discards its undo stack.
+	const fs = require('fs');
+	const os = require('os');
+	const path = require('path');
+
+	const BEFORE = '@startuml\nBob -> Alice: hi\n@enduml\n';
+	const AFTER = '@startuml\nBob -> Alice: hello\n@enduml\n';
+
+	let dir;
+
+	setup(() => {
+		dir = fs.mkdtempSync(path.join(os.tmpdir(), 'plantuml-undo-'));
+	});
+
+	teardown(async () => {
+		// Revert first so closing doesn't prompt.
+		for (const editor of vscode.window.visibleTextEditors) {
+			if (editor.document.isDirty) {
+				await vscode.window.showTextDocument(editor.document);
+				await vscode.commands.executeCommand('workbench.action.files.revert');
+			}
+		}
+		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+		fs.rmSync(dir, { recursive: true, force: true });
+	});
+
+	/**
+	 * @param {string} name
+	 * @param {string} content
+	 * @returns {Promise<vscode.TextDocument>} the file, open in an editor
+	 */
+	async function openFile(name, content) {
+		const file = path.join(dir, name);
+		fs.writeFileSync(file, content);
+		const document = await vscode.workspace.openTextDocument(file);
+		await vscode.window.showTextDocument(document);
+		return document;
+	}
+
+	/** A file holding AFTER, saved, one undoable edit away from BEFORE. */
+	async function editedDocument() {
+		const document = await openFile('diagram.puml', BEFORE);
+
+		// One WorkspaceEdit, like applyPuml.
+		const edit = new vscode.WorkspaceEdit();
+		edit.replace(document.uri, new vscode.Range(0, 0, document.lineCount, 0), AFTER);
+		assert.ok(await vscode.workspace.applyEdit(edit), 'the edit was not applied');
+		assert.ok(await document.save(), 'the edit was not saved');
+		assert.strictEqual(document.getText(), AFTER);
+
+		return document;
+	}
+
+	/** @param {vscode.TextDocument} document */
+	const isOnScreen = (document) =>
+		vscode.window.visibleTextEditors.some(
+			(editor) => editor.document.uri.toString() === document.uri.toString()
+		);
+
+	test('undoes and redoes a document whose editor does not have focus', async () => {
+		const document = await editedDocument();
+
+		// Focus elsewhere, as the panel would take it.
+		const other = await openFile('other.puml', 'other');
+		await vscode.window.showTextDocument(other, vscode.ViewColumn.Beside);
+
+		const undone = await extension.runDocumentCommand(document, 'undo');
+		assert.strictEqual(undone, document, 'an open document came back as another object');
+		assert.strictEqual(document.getText(), BEFORE, 'undo did not reach the document');
+		assert.strictEqual(other.getText(), 'other', 'undo reached the focused document');
+
+		await extension.runDocumentCommand(document, 'redo');
+		assert.strictEqual(document.getText(), AFTER, 'redo did not reach the document');
+	});
+
+	test('reopens a document whose tab was closed, and undoes it', async () => {
+		const document = await editedDocument();
+
+		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+		assert.ok(!isOnScreen(document), 'the document is still on screen');
+
+		const undone = await extension.runDocumentCommand(document, 'undo');
+
+		assert.strictEqual(undone.uri.toString(), document.uri.toString());
+		assert.strictEqual(undone.getText(), BEFORE, 'undo did not reach the document');
+		assert.ok(isOnScreen(document), 'the document was not reopened');
+	});
+
+	test('runs nothing but undo and redo', async () => {
+		const document = await editedDocument();
+
+		await extension.runDocumentCommand(document, 'editor.action.selectAll');
+		await extension.runDocumentCommand(document, 'undo-ish');
+
+		assert.strictEqual(document.getText(), AFTER);
+	});
 });
 
 /**
