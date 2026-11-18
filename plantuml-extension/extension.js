@@ -1024,6 +1024,26 @@ async function createDiagramPanel(context) {
 		debounceTimer = setTimeout(() => postDocument(), LIVE_UPDATE_DEBOUNCE_MS);
 	});
 
+	// Undo/redo requests from the panel, run one at a time.
+	let undoQueue = Promise.resolve();
+
+	/** @param {'undo' | 'redo'} command */
+	const undoFromPanel = async (command) => {
+		const target = document;
+		try {
+			const ran = await runDocumentCommand(target, command);
+			// Adopted unless the panel moved on meanwhile: a reopened file can
+			// be a new object, and the change listener matches by identity.
+			if (document === target) {
+				document = ran;
+			}
+		} catch (err) {
+			outputChannel?.appendLine(`[panel] ${command} failed: ${err.message}`);
+		}
+		// Focus back to the panel, where the shortcut was pressed.
+		panel.reveal(panel.viewColumn, false);
+	};
+
 	const messageListener = panel.webview.onDidReceiveMessage(async (message) => {
 		if (message.type === 'applyPuml') {
 			if (applyingEdit) {
@@ -1041,6 +1061,9 @@ async function createDiagramPanel(context) {
 			await savePng(document, currentRegion(), active, message.page, message.pageCount);
 		} else if (message.type === 'backendUnreachable') {
 			reportBackendUnreachable(message);
+		} else if (message.type === 'undo' || message.type === 'redo') {
+			// Queued, so a held-down key cannot interleave the focus changes.
+			undoQueue = undoQueue.then(() => undoFromPanel(message.type));
 		} else if (message.type === 'ready') {
 			outputChannel?.appendLine('[webview] frontend loaded');
 			// `ready` is the frontend's word that its `message` listener is
