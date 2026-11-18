@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Internal
 
+- Dependabot now uses the `uv` ecosystem instead of `pip`, so its PRs update `uv.lock` along with `pyproject.toml`; previously the stale lock was re-locked by the first `uv run` in CI and failed pre-commit. The test job runs `uv run --locked`, so a stale lock fails with a clear message instead of being silently rewritten.
 - Renamed the participant context-menu item Box to Add Box.
 - Message-add mode in `sequence-message.js` resolves its destination with the new `findClosestLifeline` (no tolerance) and `clampYToLifeline`, so the ghost arrow and the click agree. The hover/right-click hit test `findNearestLifeline` is renamed `findLifelineAt` and built on `findClosestLifeline`; `sequence-box.js` uses `findClosestLifeline` instead of its duplicate `findNearestParticipantByX`.
 
