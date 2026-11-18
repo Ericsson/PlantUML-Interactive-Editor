@@ -1142,6 +1142,41 @@ async function applyPuml(document, region, source) {
 	}
 }
 
+/** The only commands the panel may ask the host to run. */
+const DOCUMENT_COMMANDS = new Set(['undo', 'redo']);
+
+/**
+ * Undo or redo `document` with VS Code's native undo stack.
+ *
+ * VS Code can only undo through a focused text editor, so the document's
+ * editor is focused first (reopened beside the panel if its tab was closed).
+ * The caller gives focus back to the panel.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {'undo' | 'redo'} command
+ * @returns {Promise<vscode.TextDocument>} the document the command ran on; a
+ *   new object if the file had to be reopened
+ */
+async function runDocumentCommand(document, command) {
+	if (!DOCUMENT_COMMANDS.has(command)) {
+		return document;
+	}
+
+	// Matched by uri: a reopened file can be a new object.
+	const uri = document.uri.toString();
+	const visible = vscode.window.visibleTextEditors.find(
+		(editor) => editor.document.uri.toString() === uri
+	);
+
+	const editor = await vscode.window.showTextDocument(document, {
+		viewColumn: visible?.viewColumn ?? vscode.ViewColumn.Beside,
+		preserveFocus: false
+	});
+	await vscode.commands.executeCommand(command);
+
+	return editor.document;
+}
+
 /**
  * Render the diagram as a PNG and write it wherever the user chooses.
  *
@@ -1458,5 +1493,7 @@ module.exports = {
 	// pass for success, since an install over a surviving venv does nothing.
 	removeManagedVenv,
 	// Exported for the tests: how an exported page of a newpage diagram is named.
-	pngFileName
+	pngFileName,
+	// Exported for the tests: undo/redo from the panel.
+	runDocumentCommand
 };
