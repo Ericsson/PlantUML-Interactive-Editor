@@ -440,10 +440,48 @@ class TestGroupModalRouting:
         assert route == "addSeqElse"
         assert body["beforeLineIndex"] == 5
         assert body["svgelement"].startswith("<rect")
-        assert result["modeAfter"] == "add"
 
     def test_rename_mode_posts_rename(self, app_url, page):
         assert page.evaluate(self._SUBMIT, "rename")["calls"][0][0] == "renameSeqGroup"
 
     def test_add_mode_posts_add_group(self, app_url, page):
         assert page.evaluate(self._SUBMIT, "add")["calls"][0][0] == "addGroup"
+
+    # The server rejects the first submit, so the modal stays open; the user
+    # presses Submit again. The second request must be the same kind.
+    _RESUBMIT = """async ([mode, responses]) => {
+        groupOperationEventListeners();
+        document.getElementById('colb').innerHTML =
+            '<svg><g><rect fill="none" x="1" y="2"></rect></g></svg>';
+        const rect = document.querySelector('#colb rect');
+        lastclickedsvgelement = rect;
+        pendingElse = {groupRect: rect, beforeLineIndex: 5};
+        groupModalMode = mode;
+        const calls = [];
+        const realFetch = window.fetch;
+        window.fetch = (url, opts) => {
+            calls.push([String(url), JSON.parse(opts.body)]);
+            const data = responses[calls.length - 1];
+            return Promise.resolve({json: () => Promise.resolve(data)});
+        };
+        await submitGroup();
+        await submitGroup();
+        window.fetch = realFetch;
+        return {calls, modeAfter: groupModalMode, pendingAfter: pendingElse};
+    }"""
+
+    @pytest.mark.parametrize(
+        ("mode", "route"), [("else", "addSeqElse"), ("rename", "renameSeqGroup")]
+    )
+    def test_resubmit_after_error_repeats_the_request(self, app_url, page, mode, route):
+        errors = [{"error": "rejected"}, {"error": "rejected"}]
+        result = page.evaluate(self._RESUBMIT, [mode, errors])
+        assert [c[0] for c in result["calls"]] == [route, route]
+        assert result["calls"][0][1] == result["calls"][1][1]
+
+    def test_success_resets_the_modal_state(self, app_url, page):
+        responses = [{"error": "rejected"}, {"plantuml": "@startuml\n@enduml"}]
+        result = page.evaluate(self._RESUBMIT, ["else", responses])
+        assert [c[0] for c in result["calls"]] == ["addSeqElse", "addSeqElse"]
+        assert result["modeAfter"] == "add"
+        assert result["pendingAfter"] is None

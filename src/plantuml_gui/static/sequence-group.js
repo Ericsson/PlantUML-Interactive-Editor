@@ -310,8 +310,6 @@ async function submitGroup() {
     try {
         var plantuml = trimlines(editor.session.getValue());
         var [route, body] = groupRequest(plantuml, svg, label);
-        groupModalMode = 'add';
-        pendingElse = null;
         var response = await fetch(route, {
             method: 'POST',
             headers: {
@@ -321,9 +319,13 @@ async function submitGroup() {
         });
         var data = await response.json();
         if (data.error) {
+            // The modal stays open; keep its state so Submit retries the
+            // same request.
             displayErrorMessage(data.error);
             return;
         }
+        groupModalMode = 'add';
+        pendingElse = null;
         $('#seq-group-modalForm').modal('hide');
         setPuml(data.plantuml);
     } catch (error) {

@@ -427,7 +427,7 @@ function groupBoxBounds(svgelements) {
     });
 }
 
-// Identifies an alt group's else separator: a dashed line spanning exactly the
+// Identifies a group's else separator: a dashed line spanning exactly the
 // full width of a group box. Its style is identical to a black dashed message
 // (-[#black]->), so geometry is what tells them apart - message lines start
 // and end at lifelines, never at a box edge.
