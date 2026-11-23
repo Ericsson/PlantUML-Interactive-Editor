@@ -321,10 +321,10 @@ def addseqelse():
     puml, restore = _page_view(puml, data)
     svg = data["svg"]
     svgelement = data["svgelement"]
-    before_message_index = data["beforeMessageIndex"]
+    before_line_index = data["beforeLineIndex"]
     label = data.get("label", "")
     try:
-        result = add_else(puml, svg, svgelement, before_message_index, label)
+        result = add_else(puml, svg, svgelement, before_line_index, label)
     except ValueError as e:
         return jsonify({"error": user_message(e)}), 400
     return jsonify({"plantuml": restore(result)})

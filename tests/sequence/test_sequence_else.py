@@ -210,13 +210,13 @@ class TestMessageDetectionWithElse:
 class TestGroupDetectionWithElse:
     def test_flat_group_positions(self, flat_svg):
         assert get_group_positions(FLAT_ALT_ELSE, flat_svg) == [
-            {"headerIndex": 3, "endIndex": 9, "elseSlots": []}
+            {"headerIndex": 3, "endIndex": 9, "elseSlots": [4, 6, 8, 9]}
         ]
 
     def test_nested_group_positions(self, nested_svg):
         assert get_group_positions(NESTED_ALT_ELSE, nested_svg) == [
-            {"headerIndex": 3, "endIndex": 10, "elseSlots": []},
-            {"headerIndex": 5, "endIndex": 7, "elseSlots": []},
+            {"headerIndex": 3, "endIndex": 10, "elseSlots": [4, 9, 10]},
+            {"headerIndex": 5, "endIndex": 7, "elseSlots": [6, 7]},
         ]
 
 
@@ -362,43 +362,35 @@ def _block(*body):
 
 
 class TestElseSlots:
-    def test_every_message_after_the_first(self):
-        assert _slots(THREE_MESSAGE_ALT, 3) == [5, 6]
+    def test_every_own_message_and_the_end(self):
+        # lines 4-6 are m1..m3, line 7 the end
+        assert _slots(THREE_MESSAGE_ALT, 3) == [4, 5, 6, 7]
 
-    def test_no_slot_directly_after_an_else(self):
-        # m2 and m3 each open their branch; splitting would leave it empty.
-        assert _slots(FLAT_ALT_ELSE, 3) == []
+    def test_single_message_group_has_slots(self):
+        # The reported case: one message - else before it or before the end.
+        assert _slots(_block("alice -> bob: m1"), 3) == [4, 5]
 
-    def test_slot_after_an_else_branch_has_content(self):
-        puml = _block(
-            "alice -> bob: m1", "else b", "bob -> alice: m2", "alice -> bob: m3"
-        )
-        assert _slots(puml, 3) == [7]
+    def test_empty_group_has_only_the_end_slot(self):
+        assert _slots(_block(), 3) == [4]
+
+    def test_existing_else_lines_are_not_slots(self):
+        # 4 m1 | 5 else | 6 m2 | 7 else | 8 m3 | 9 end
+        assert _slots(FLAT_ALT_ELSE, 3) == [4, 6, 8, 9]
 
     def test_nested_group_messages_are_not_slots(self):
-        puml = _block("alice -> bob: m1", "loop l", "bob -> alice: m2", "end")
-        assert _slots(puml, 3) == []
-
-    def test_message_after_a_nested_group_is_a_slot(self):
+        # 4 m1 | 5 loop | 6 m2 (in loop) | 7 end (loop's) | 8 m3 | 9 end
         puml = _block(
             "alice -> bob: m1", "loop l", "bob -> alice: m2", "end", "alice -> bob: m3"
         )
-        assert _slots(puml, 3) == [8]
+        assert _slots(puml, 3) == [4, 8, 9]
 
-    def test_nested_group_counts_as_branch_content(self):
-        puml = _block("loop l", "bob -> alice: m2", "end", "alice -> bob: m3")
-        assert _slots(puml, 3) == [7]
+    def test_notes_and_comments_are_not_slots(self):
+        # 4 note | 5 comment | 6 m1 | 7 end
+        puml = _block("note over alice: n", "' a comment", "alice -> bob: m1")
+        assert _slots(puml, 3) == [6, 7]
 
-    def test_note_counts_as_branch_content(self):
-        puml = _block("note over alice: n", "alice -> bob: m1")
-        assert _slots(puml, 3) == [5]
-
-    def test_blank_lines_and_comments_are_not_content(self):
-        puml = _block("' a comment", "", "alice -> bob: m1", "bob -> alice: m2")
-        assert _slots(puml, 3) == [7]
-
-    def test_inner_alt_slots_ignore_the_outer_alt(self):
-        assert _slots(NESTED_ALTS_WITH_ELSE, 5) == []
+    def test_nested_group_has_its_own_slots(self):
+        # 4 m1 | 5 alt inner | 6 m2 | 7 m3 | 8 end (inner) | 9 end (outer)
         puml = _block(
             "alice -> bob: m1",
             "alt inner",
@@ -406,12 +398,12 @@ class TestElseSlots:
             "alice -> bob: m3",
             "end",
         )
-        assert _slots(puml, 5) == [7]  # inner alt: m3 only
-        assert _slots(puml, 3) == []  # outer alt: no own-level message after m1
+        assert _slots(puml, 5) == [6, 7, 8]
+        assert _slots(puml, 3) == [4, 9]
 
-    def test_unclosed_block_does_not_crash(self):
+    def test_unclosed_block_has_no_end_slot(self):
         lines = ["alt a", "alice -> bob: m1", "bob -> alice: m2"]
-        assert _compute_else_slots(lines, 0) == [2]
+        assert _compute_else_slots(lines, 0) == [1, 2]
 
 
 def _add_else(puml, before, label, ordinal=0):
@@ -462,10 +454,27 @@ class TestAddElse:
         svg = _svg(result)
         assert len(_else_separators(svg)) == 1
         assert _renders_messages(result) == ["m1", "m2", "m3"]
-        # m3 (line 7) is now the only slot: m2 opens the new branch.
+        # 4 m1 | 5 else | 6 m2 | 7 m3 | 8 end
         assert get_group_positions(result, svg) == [
-            {"headerIndex": 3, "endIndex": 8, "elseSlots": [7]}
+            {"headerIndex": 3, "endIndex": 8, "elseSlots": [4, 6, 7, 8]}
         ]
+
+    def test_else_before_end_of_single_message_group(self):
+        # The reported case: add the failure branch after the only message.
+        puml = _block("alice -> bob: granted")
+        lines = _add_else(puml, 5, "failure").splitlines()
+        assert lines[3:7] == ["alt a", "alice -> bob: granted", "else failure", "end"]
+        assert len(_else_separators(_svg("\n".join(lines)))) == 1
+
+    def test_else_in_empty_group(self):
+        lines = _add_else(_block(), 4, "").splitlines()
+        assert lines[3:6] == ["alt a", "else", "end"]
+        assert len(_else_separators(_svg("\n".join(lines)))) == 1
+
+    def test_else_before_first_message_renders(self):
+        result = _add_else(THREE_MESSAGE_ALT, 4, "other")
+        assert result.splitlines()[4] == "else other"
+        assert _renders_messages(result) == ["m1", "m2", "m3"]
 
     def test_targets_the_clicked_alt(self):
         puml = _block(
@@ -495,9 +504,8 @@ class TestAddElse:
     @pytest.mark.parametrize(
         "before",
         [
-            4,  # first message: would leave the first branch empty
-            3,  # the alt header itself
-            7,  # the alt's end
+            3,  # the group header itself
+            8,  # @enduml, after the group
             99,  # out of range
             -1,
         ],
@@ -508,16 +516,18 @@ class TestAddElse:
         assert error.value.code == "invalid_else_position"
 
     def test_rejects_message_inside_nested_group(self):
+        # 4 m1 | 5 loop | 6 m2 | 7 m3 | 8 end (loop) | 9 end
         puml = _block(
             "alice -> bob: m1", "loop l", "bob -> alice: m2", "alice -> bob: m3", "end"
         )
         with pytest.raises(EditError) as error:
-            _add_else(puml, 8, "x")
+            _add_else(puml, 7, "x")
         assert error.value.code == "invalid_else_position"
 
-    def test_rejects_position_directly_after_existing_else(self):
+    def test_rejects_nested_groups_end(self):
+        puml = _block("alice -> bob: m1", "loop l", "bob -> alice: m2", "end")
         with pytest.raises(EditError) as error:
-            _add_else(FLAT_ALT_ELSE, 6, "x")
+            _add_else(puml, 7, "x")  # the loop's end, not the alt's
         assert error.value.code == "invalid_else_position"
 
 
@@ -558,7 +568,7 @@ class TestAddElseRoute:
             plantuml=THREE_MESSAGE_ALT,
             svg=svg,
             svgelement=_group_box(svg, 0),
-            beforeMessageIndex=5,
+            beforeLineIndex=5,
             label="failure",
         )
         assert response.status_code == 200
@@ -572,7 +582,7 @@ class TestAddElseRoute:
             plantuml=THREE_MESSAGE_ALT,
             svg=svg,
             svgelement=_group_box(svg, 0),
-            beforeMessageIndex=5,
+            beforeLineIndex=5,
         )
         assert response.get_json()["plantuml"].splitlines()[5] == "else"
 
@@ -584,7 +594,7 @@ class TestAddElseRoute:
             plantuml=THREE_MESSAGE_ALT,
             svg=svg,
             svgelement=_group_box(svg, 0),
-            beforeMessageIndex=4,
+            beforeLineIndex=3,
             label="<script>",
         )
         assert response.status_code == 400
@@ -598,7 +608,7 @@ class TestAddElseRoute:
             plantuml=TWO_PAGES,
             svg=page2,
             svgelement=_group_box(page2, 0),
-            beforeMessageIndex=10,
+            beforeLineIndex=10,
             label="x",
             page=1,
         )
@@ -616,7 +626,7 @@ class TestElseSlotsInSequencePositions:
         groups = _post(
             client, "/getSequencePositions", plantuml=THREE_MESSAGE_ALT, svg=svg
         ).get_json()["groups"]
-        assert groups == [{"headerIndex": 3, "endIndex": 7, "elseSlots": [5, 6]}]
+        assert groups == [{"headerIndex": 3, "endIndex": 7, "elseSlots": [4, 5, 6, 7]}]
 
     def test_else_slots_use_global_line_indexes_on_later_pages(self, client):
         groups = _post(
@@ -626,4 +636,4 @@ class TestElseSlotsInSequencePositions:
             svg=_page_svg(TWO_PAGES, 1),
             page=1,
         ).get_json()["groups"]
-        assert groups == [{"headerIndex": 8, "endIndex": 11, "elseSlots": [10]}]
+        assert groups == [{"headerIndex": 8, "endIndex": 11, "elseSlots": [9, 10, 11]}]

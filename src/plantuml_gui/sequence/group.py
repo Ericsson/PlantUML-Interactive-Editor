@@ -159,29 +159,18 @@ def _find_own_else_indexes(lines: List[str], header_index: int) -> List[int]:
 
 
 def _compute_else_slots(lines: List[str], header_index: int) -> List[int]:
-    """Return the message line indexes an 'else' may be inserted before.
+    """Return the line indexes an 'else' may be inserted before.
 
-    A slot is a message directly in the group (not inside a nested group)
-    whose branch - the lines since the header or the group's latest 'else' -
-    already has content, so the new 'else' never creates an empty branch.
-    Blank lines and ``'`` comments are not content.
+    A slot is a message directly in the group, or the group's closing 'end'
+    (adding a new last branch). Messages inside a nested group are excluded,
+    as an else there would belong to the nested group. Empty branches are
+    allowed - PlantUML renders them - so a group with one or no messages can
+    still get an else. An unclosed block has no 'end' slot.
     """
     slots = []
-    branch_has_content = False
     for i, depth in _block_lines(lines, header_index):
-        if depth == 0:
-            break
-        if depth > 1:
-            continue  # inside a nested group; its header/end were seen at depth 1
-        stripped = lines[i].strip()
-        if not stripped or stripped.startswith("'"):
-            continue
-        if _first_word(stripped) == "else":
-            branch_has_content = False
-            continue
-        if is_message_line(stripped) and branch_has_content:
+        if depth == 0 or (depth == 1 and is_message_line(lines[i].strip())):
             slots.append(i)
-        branch_has_content = True
     return slots
 
 
@@ -222,9 +211,10 @@ def get_group_positions(puml: str, svg: str) -> List[Dict[str, object]]:
 
     Groups are in SVG document order, matching puml source order (see
     index_of_clicked_group), so the frontend matches groups by ordinal.
-    ``elseSlots`` lists the message line indexes an else may be inserted
-    before (see _compute_else_slots); the frontend snaps the add-else ghost
-    line to them, so it never offers a position add_else would reject.
+    ``elseSlots`` lists the line indexes (own-level messages and the closing
+    'end') an else may be inserted before (see _compute_else_slots); the
+    frontend snaps the add-else ghost line to them, so it never offers a
+    position add_else would reject.
     """
     lines = puml.splitlines()
     group_count = _count_group_boxes(svg)
@@ -290,12 +280,12 @@ def delete_group(puml: str, svg: str, svgelement: str) -> str:
 
 
 def add_else(
-    puml: str, svg: str, svgelement: str, before_message_index: int, label: str
+    puml: str, svg: str, svgelement: str, before_line_index: int, label: str
 ) -> str:
-    """Split the clicked ``alt`` with an ``else`` line before a message.
+    """Split the clicked group with an ``else`` line.
 
-    ``before_message_index`` must be one of the group's else slots (see
-    _compute_else_slots). The line is indented like the group's header, as
+    ``before_line_index`` must be one of the group's else slots (a message
+    directly in the group, or its closing 'end'; see _compute_else_slots). The line is indented like the group's header, as
     'else' is a sibling of the header and 'end'. An empty label writes a bare
     ``else``; newlines in the label are kept as literal ``\\n``.
 
@@ -304,7 +294,7 @@ def add_else(
     """
     lines = puml.splitlines()
     header_index = _find_group_line_index(puml, index_of_clicked_group(svg, svgelement))
-    if header_index == -1 or before_message_index not in _compute_else_slots(
+    if header_index == -1 or before_line_index not in _compute_else_slots(
         lines, header_index
     ):
         raise EditError("invalid_else_position")
@@ -312,5 +302,5 @@ def add_else(
     header = lines[header_index]
     indent = header[: len(header) - len(header.lstrip())]
     text = escape_multiline_text(label.strip())
-    lines.insert(before_message_index, f"{indent}else {text}".rstrip())
+    lines.insert(before_line_index, f"{indent}else {text}".rstrip())
     return "\n".join(lines)
