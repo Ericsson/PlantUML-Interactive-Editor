@@ -409,12 +409,43 @@ function checkIfParticipant(svgelements, index) {
         el.hasAttribute('rx') && el.hasAttribute('ry');
 }
 
-// Identifies message elements (polygons and lines with stroke-width:1.0, and message text)
-function checkIfMessageElement(svgelement) {
+// Bounds of every group box (see checkIfGroupBox), computed once per render
+// and passed to isElseSeparator.
+function groupBoxBounds(svgelements) {
+    return Array.from(svgelements).filter(checkIfGroupBox).map((rect) => {
+        const x = parseFloat(rect.getAttribute('x'));
+        const y = parseFloat(rect.getAttribute('y'));
+        return {
+            x: x,
+            y: y,
+            right: x + parseFloat(rect.getAttribute('width')),
+            bottom: y + parseFloat(rect.getAttribute('height'))
+        };
+    });
+}
+
+// Identifies an alt group's else separator: a dashed line spanning exactly the
+// full width of a group box. Its style is identical to a black dashed message
+// (-[#black]->), so geometry is what tells them apart - message lines start
+// and end at lifelines, never at a box edge.
+function isElseSeparator(svgelement, groupBounds) {
+    if (svgelement.tagName.toLowerCase() !== 'line') return false;
+    if (!(svgelement.getAttribute('style') || '').includes('stroke-dasharray')) return false;
+    const x1 = parseFloat(svgelement.getAttribute('x1'));
+    const x2 = parseFloat(svgelement.getAttribute('x2'));
+    const y = parseFloat(svgelement.getAttribute('y1'));
+    const near = (a, b) => Math.abs(a - b) < 0.01; // tolerate float sums of x + width
+    return groupBounds.some((b) =>
+        near(x1, b.x) && near(x2, b.right) && y > b.y && y < b.bottom);
+}
+
+// Identifies message elements (polygons and lines with stroke-width:1.0, and
+// message text). groupBounds (from groupBoxBounds) excludes else separators.
+function checkIfMessageElement(svgelement, groupBounds = []) {
     const tag = svgelement.tagName.toLowerCase();
     const style = svgelement.getAttribute('style') || '';
     if ((tag === 'polygon' || tag === 'line') && style.includes('stroke-width:1.0')) {
-        return true;
+        return !isElseSeparator(svgelement, groupBounds);
     }
     if (tag === 'text' && svgelement.getAttribute('font-size') === '13') {
         // Exclude bold text: it's a group keyword/label, not a message
@@ -540,9 +571,10 @@ function setupGroupHandlers(svgelements) {
 // --- Message element handlers (hover, contextmenu) ---
 
 function setupMessageHandlers(svgelements, svg) {
+    const groupBounds = groupBoxBounds(svgelements);
     for (let index = 0; index < svgelements.length; index++) {
         let svgelement = svgelements[index];
-        if (!checkIfMessageElement(svgelement)) continue;
+        if (!checkIfMessageElement(svgelement, groupBounds)) continue;
 
         // Register this element for editor->diagram highlighting on its message's
         // row, assigning it to the nearest message (same rule the mouseover uses).
