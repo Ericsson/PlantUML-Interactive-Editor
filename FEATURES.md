@@ -96,7 +96,7 @@ but adding them to the PlantUML code should still work.
   - Range selection works in both directions (first click can be above or below second click)
   - Label entered via modal dialog after selecting the range
   - Rename a group's title (right-click the keyword tab or its header text → Rename); the keyword (group/alt/opt/loop) itself is unchanged
-  - Delete a group (right-click the keyword tab or its header text → Delete Group); unwraps the block, removing only the header and matching `end` line and keeping its contents in place
+  - Delete a group (right-click the keyword tab or its header text → Delete Group); unwraps the block, removing only the header, its own `else` lines and matching `end` line and keeping its contents in place
 - Participant boxes
   - Add a box from the participant context menu (right-click a participant → Add Box)
   - Hover another participant to grow a live ghost box across the range, then click to create it

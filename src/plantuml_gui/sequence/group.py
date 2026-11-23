@@ -128,6 +128,27 @@ def _find_group_end_index(lines: List[str], header_index: int) -> int:
     return -1
 
 
+def _find_own_else_indexes(
+    lines: List[str], header_index: int, end_index: int
+) -> List[int]:
+    """Find the 'else' lines belonging to the group between header and end.
+
+    Nesting depth is tracked so a nested group's 'else' lines are skipped.
+    """
+    own = []
+    depth = 1
+    for i in range(header_index + 1, end_index):
+        stripped = lines[i].strip()
+        first_word = stripped.split(" ", 1)[0] if stripped else ""
+        if first_word in VALID_GROUP_TYPES:
+            depth += 1
+        elif stripped == "end":
+            depth -= 1
+        elif first_word == "else" and depth == 1:
+            own.append(i)
+    return own
+
+
 def _count_group_boxes(svg: str) -> int:
     """Count real group boxes, skipping PlantUML's invisible duplicate rect.
 
@@ -201,11 +222,12 @@ def rename_group(puml: str, svg: str, svgelement: str, label: str) -> str:
 
 
 def delete_group(puml: str, svg: str, svgelement: str) -> str:
-    """Unwrap the clicked group: remove its header and matching 'end' line.
+    """Unwrap the clicked group: remove its header, 'else' and matching 'end' lines.
 
     The block's contents (messages, notes, nested groups) are left in place.
-    Nesting depth is tracked to find this group's own closing 'end' rather
-    than a nested group's.
+    Nesting depth is tracked so only this group's own 'else' and 'end' lines
+    are removed, never a nested group's; leaving an 'else' behind would no
+    longer be inside any group and break the render.
     """
     idx = index_of_clicked_group(svg, svgelement)
     line_index = _find_group_line_index(puml, idx)
@@ -215,6 +237,8 @@ def delete_group(puml: str, svg: str, svgelement: str) -> str:
     if end_line == -1:
         return puml
 
-    del lines[end_line]
-    del lines[line_index]
+    own_lines = [line_index, *_find_own_else_indexes(lines, line_index, end_line)]
+    # Delete bottom-up so earlier indexes stay valid.
+    for i in sorted([*own_lines, end_line], reverse=True):
+        del lines[i]
     return "\n".join(lines)

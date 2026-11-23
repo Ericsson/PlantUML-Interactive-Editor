@@ -35,7 +35,7 @@ only the line.
 import re
 
 import pytest
-from plantuml_gui.sequence.group import get_group_positions
+from plantuml_gui.sequence.group import delete_group, get_group_positions
 from plantuml_gui.sequence.message import (
     get_message_positions,
     index_of_clicked_message,
@@ -217,3 +217,114 @@ class TestNoteDetectionWithElse:
     def test_note_after_else_label(self, self_note_svg):
         notes = get_note_positions(SELF_AND_NOTE_ALT_ELSE, self_note_svg)
         assert [n["index"] for n in notes] == [6]
+
+
+# An alt nested in an alt, each with its own else.
+# Line indexes:
+#   3 alt outer | 4 m1 | 5 alt inner | 6 m2 | 7 else inner-else | 8 m3 | 9 end
+#   10 else outer-else | 11 m4 | 12 end
+NESTED_ALTS_WITH_ELSE = """@startuml
+participant alice
+participant bob
+alt outer
+alice -> bob: m1
+alt inner
+bob -> alice: m2
+else inner-else
+alice -> bob: m3
+end
+else outer-else
+bob -> alice: m4
+end
+@enduml"""
+
+INDENTED_ALT_ELSE = """@startuml
+participant alice
+participant bob
+alt success
+    alice -> bob: m1
+  else failure
+    bob -> alice: m2
+end
+@enduml"""
+
+
+def _group_box(svg, ordinal):
+    """Return the outerHTML of the nth real group box (the rect after its tab)."""
+    boxes = []
+    pending_tab = False
+    for el in Pq(svg).children().items():
+        tag = el[0].tag
+        if tag == "path" and el.attr("fill") == "#EEEEEE":
+            pending_tab = True
+            continue
+        if tag == "rect" and el.attr("fill") == "none" and pending_tab:
+            boxes.append(str(el))
+        pending_tab = False
+    return boxes[ordinal]
+
+
+def _delete(puml, ordinal):
+    svg = _svg(puml)
+    return delete_group(puml, svg, _group_box(svg, ordinal))
+
+
+def _renders_messages(puml):
+    """Return the message texts PlantUML renders - empty if it hit a syntax error."""
+    return [p["text"] for p in get_message_positions(puml, _svg(puml))]
+
+
+class TestDeleteGroupWithElse:
+    def test_removes_header_own_elses_and_end(self):
+        result = _delete(FLAT_ALT_ELSE, 0)
+        assert result.splitlines() == [
+            "@startuml",
+            "participant alice",
+            "participant bob",
+            "alice -> bob: m1",
+            "bob --> alice: m2",
+            "alice -> bob: m3",
+            "@enduml",
+        ]
+
+    def test_result_still_renders(self):
+        result = _delete(FLAT_ALT_ELSE, 0)
+        assert _renders_messages(result) == ["m1", "m2", "m3"]
+
+    def test_else_after_nested_non_alt_group_is_removed(self):
+        lines = _delete(NESTED_ALT_ELSE, 0).splitlines()
+        assert "alt outer" not in lines
+        assert "else other" not in lines
+        assert "loop retry" in lines
+        assert lines.count("end") == 1  # the loop's
+
+    def test_deleting_outer_alt_keeps_inner_else(self):
+        lines = _delete(NESTED_ALTS_WITH_ELSE, 0).splitlines()
+        assert "alt outer" not in lines
+        assert "else outer-else" not in lines
+        assert "alt inner" in lines
+        assert "else inner-else" in lines
+        assert lines.count("end") == 1
+
+    def test_deleting_inner_alt_keeps_outer_else(self):
+        lines = _delete(NESTED_ALTS_WITH_ELSE, 1).splitlines()
+        assert "alt inner" not in lines
+        assert "else inner-else" not in lines
+        assert "alt outer" in lines
+        assert "else outer-else" in lines
+        assert lines.count("end") == 1
+
+    def test_nested_results_still_render(self):
+        for ordinal in (0, 1):
+            result = _delete(NESTED_ALTS_WITH_ELSE, ordinal)
+            assert _renders_messages(result) == ["m1", "m2", "m3", "m4"]
+
+    def test_indented_else_is_removed(self):
+        lines = _delete(INDENTED_ALT_ELSE, 0).splitlines()
+        assert lines[3:5] == ["    alice -> bob: m1", "    bob -> alice: m2"]
+        assert not any(line.strip().startswith("else") for line in lines)
+
+    def test_message_text_starting_with_else_is_kept(self):
+        puml = FLAT_ALT_ELSE.replace("bob --> alice: m2", "bob --> alice: else m2")
+        lines = _delete(puml, 0).splitlines()
+        assert "bob --> alice: else m2" in lines

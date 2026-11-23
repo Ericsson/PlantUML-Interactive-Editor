@@ -139,7 +139,7 @@ Notes are located by shape (see the note-detection notes above) to a 1-based ord
 - **POST /addGroup** — Input: `plantuml`, `groupType` ('group'/'alt'/'opt'/'loop'), `label`, `startMessageIndex` (int), `endMessageIndex` (int). Returns: JSON `{"plantuml": modified_puml}`. Inserts a `<groupType> <label>` line before the message at the earlier index and an `end` line after the message at the later index. Indexes are puml line numbers obtained from the `messages` table of `/getSequencePositions`. The range is normalized so the order of start/end does not matter. Returns 400 with `{"error": message}` if the group type is invalid.
 - **POST /getSeqGroupLabel** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"type": keyword, "label": label_text}`. `svgelement` is the clicked group's box rect (`fill="none"`); named with a `Seq` prefix to avoid colliding with the activity diagram's `/getGroupText`-style routes.
 - **POST /renameSeqGroup** — Input: `plantuml`, `svg`, `svgelement`, `label`. Returns: JSON `{"plantuml": modified_puml}`. Replaces only the text after the keyword on the header line; the keyword itself is never changed.
-- **POST /deleteSeqGroup** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"plantuml": modified_puml}`. Unwraps the block: removes the header line and its matching `end` line (nesting-depth tracked), leaving the block's contents in place.
+- **POST /deleteSeqGroup** — Input: `plantuml`, `svg`, `svgelement`. Returns: JSON `{"plantuml": modified_puml}`. Unwraps the block: removes the header line, its own `else` lines and its matching `end` line (nesting-depth tracked, so a nested group's `else`/`end` lines are kept), leaving the block's contents in place.
 
 ## Sequence Diagram (Participant Boxes)
 
