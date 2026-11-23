@@ -371,6 +371,7 @@ async function setHandlersForSequenceDiagram(pumlcontent, element, renderId) {
         cancelMessageAddMode();
         cancelActivationAddMode();
         cancelGroupAddMode();
+        cancelElseAddMode();
         cancelBoxAddMode();
         cancelNoteAddMode();
 
@@ -1067,10 +1068,12 @@ function noteOperationEventListeners() {
 
 // --- Group operation event listeners ---
 
-let groupEditMode = false;
+// What the shared group label modal submits: 'add' (new group), 'rename'
+// (existing group's label) or 'else' (new else branch); see submitGroup.
+let groupModalMode = 'add';
 
 function groupOperationEventListeners() {
-    // Submit button in the group label modal (Add / Rename)
+    // Submit button in the group label modal (Add / Rename / Add else)
     $('#seq-submit-group').on('click', submitGroup);
 
     // "Rename" context menu item: fetch current label and show the group modal
@@ -1090,7 +1093,7 @@ function groupOperationEventListeners() {
                 })
             });
             var data = await response.json();
-            groupEditMode = true;
+            groupModalMode = 'rename';
             document.querySelector('#seq-group-modalForm .modal-title').textContent = 'Rename ' + data.type;
             document.getElementById('seq-group-label-text').value = data.label;
             $('#seq-group-modalForm').modal('show');
@@ -1147,11 +1150,22 @@ function groupOperationEventListeners() {
         startGroupAddModeFromContext(item.getAttribute('data-group-type'));
     });
 
-    // Escape cancels group-add mode
+    // Escape cancels group-add and else-add mode
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && isAddGroupActive) {
             cancelGroupAddMode();
         }
+        if (e.key === 'Escape' && isElseAddMode()) {
+            cancelElseAddMode();
+        }
+    });
+
+    // "Add else" in the group menu enters else-add mode for that group
+    document.getElementById('seq-addElse').addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        document.getElementById('seq-group-menu').style.display = 'none';
+        startElseAddMode(lastclickedsvgelement, groupPositions[contextGroupOrdinal]);
     });
 
 }

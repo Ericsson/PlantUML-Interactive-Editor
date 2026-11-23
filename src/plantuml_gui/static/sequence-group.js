@@ -130,7 +130,7 @@ function handleGroupClick(e, y) {
     groupOrigin = null;
 
     // Show the label modal
-    groupEditMode = false;
+    groupModalMode = 'add';
     document.querySelector('#seq-group-modalForm .modal-title').textContent =
         'Add ' + selectedGroupType;
     document.getElementById('seq-group-label-text').value = '';
@@ -144,7 +144,163 @@ function handleGroupClick(e, y) {
     document.getElementById('seq-submit-group').dataset.endIndex = endIndex;
 }
 
-// Global function called by onclick on the submit-group button
+// --- Else-add mode: a dashed ghost line inside the clicked group snaps to the
+// group's else slots (from the backend's elseSlots); a click picks one and
+// opens the group label modal. ---
+
+let isAddElseActive = false;
+let elseTarget = null; // {groupRect, slots: [{lineIndex, y}]}
+let pendingElse = null; // {groupRect, beforeLineIndex}, kept for submitGroup
+let ghostElseLine = null;
+
+// Height of a group header tab when it can't be measured.
+const GROUP_TAB_FALLBACK_HEIGHT = 17;
+
+function isElseAddMode() {
+    return isAddElseActive;
+}
+
+function cancelElseAddMode() {
+    isAddElseActive = false;
+    elseTarget = null;
+    hideGhostElseLine();
+}
+
+// Bottom edge of the group's header tab, the topmost y a branch can start at.
+function groupContentTop(groupRect) {
+    const tab = groupRect.previousElementSibling;
+    if (tab && tab.tagName.toLowerCase() === 'path' && tab.getBBox) {
+        const box = tab.getBBox();
+        if (box.height > 0) return box.y + box.height;
+    }
+    return parseFloat(groupRect.getAttribute('y')) + GROUP_TAB_FALLBACK_HEIGHT;
+}
+
+// Y for each else slot: midway between the slot's line and whatever is drawn
+// just above it inside the group (the previous message, or the header tab).
+// A message slot sits at that message's cy, the 'end' slot at the box bottom.
+// Messages of nested groups count as "above" too, so the line is drawn below
+// a nested group's last message rather than above it.
+function computeElseSlotYs(groupRect, group, messages) {
+    const top = groupContentTop(groupRect);
+    const bottom = parseFloat(groupRect.getAttribute('y')) +
+        parseFloat(groupRect.getAttribute('height'));
+    const inGroup = messages
+        .filter((m) => m.index > group.headerIndex && m.index < group.endIndex)
+        .sort((a, b) => a.index - b.index);
+    return group.elseSlots.map((lineIndex) => {
+        const own = inGroup.find((m) => m.index === lineIndex);
+        const slotY = own ? own.cy : bottom;
+        const above = inGroup.filter((m) => m.index < lineIndex);
+        const aboveY = above.length ? above[above.length - 1].cy : top;
+        return {lineIndex: lineIndex, y: (aboveY + slotY) / 2};
+    });
+}
+
+function nearestElseSlot(y) {
+    if (!elseTarget || elseTarget.slots.length === 0) return null;
+    return elseTarget.slots.reduce((best, slot) =>
+        Math.abs(slot.y - y) < Math.abs(best.y - y) ? slot : best);
+}
+
+function showGhostElseLine(svgElement, groupRect, y) {
+    const g = svgElement.querySelector('g');
+    if (!g) return;
+    if (!ghostElseLine) {
+        ghostElseLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        ghostElseLine.setAttribute('stroke', '#888');
+        ghostElseLine.setAttribute('stroke-width', '1.5');
+        ghostElseLine.setAttribute('stroke-dasharray', '5,3');
+        ghostElseLine.setAttribute('pointer-events', 'none');
+    }
+    const x = parseFloat(groupRect.getAttribute('x'));
+    ghostElseLine.setAttribute('x1', x);
+    ghostElseLine.setAttribute('x2', x + parseFloat(groupRect.getAttribute('width')));
+    ghostElseLine.setAttribute('y1', y);
+    ghostElseLine.setAttribute('y2', y);
+    if (!ghostElseLine.parentNode) g.appendChild(ghostElseLine);
+}
+
+function hideGhostElseLine() {
+    if (ghostElseLine && ghostElseLine.parentNode) {
+        ghostElseLine.parentNode.removeChild(ghostElseLine);
+    }
+}
+
+// Entered from the group context menu's "Add else" item.
+function startElseAddMode(groupRect, group) {
+    cancelElseAddMode();
+    if (!groupRect || !group || !group.elseSlots || group.elseSlots.length === 0) {
+        return false;
+    }
+    elseTarget = {
+        groupRect: groupRect,
+        slots: computeElseSlotYs(groupRect, group, messagePositions)
+    };
+    isAddElseActive = true;
+    hideIndicatorCircle();
+    const svgContainer = getLiveGroupSvg();
+    if (svgContainer) {
+        showGhostElseLine(svgContainer, groupRect, elseTarget.slots[0].y);
+    }
+    return true;
+}
+
+// Coordinator hooks (called from setupLifelineInteraction in sequence-message.js)
+
+function handleElseMouseMove(svgContainer, y) {
+    const slot = nearestElseSlot(y);
+    if (slot) showGhostElseLine(svgContainer, elseTarget.groupRect, slot.y);
+}
+
+function handleElseClick(e, y) {
+    const slot = nearestElseSlot(y);
+    if (!slot) return;
+    pendingElse = {groupRect: elseTarget.groupRect, beforeLineIndex: slot.lineIndex};
+    cancelElseAddMode();
+
+    groupModalMode = 'else';
+    document.querySelector('#seq-group-modalForm .modal-title').textContent = 'Add else';
+    document.getElementById('seq-group-label-text').value = '';
+    $('#seq-group-modalForm').modal('show');
+    $('#seq-group-modalForm').on('shown.bs.modal', function () {
+        $('#seq-group-label-text').trigger('focus');
+    });
+}
+
+// Route and body for the group modal's submit, by groupModalMode.
+function groupRequest(plantuml, svg, label) {
+    if (groupModalMode === 'rename') {
+        return ['renameSeqGroup', {
+            page: currentPage,
+            plantuml: plantuml,
+            svg: svg.innerHTML,
+            svgelement: lastclickedsvgelement.outerHTML,
+            label: label
+        }];
+    }
+    if (groupModalMode === 'else') {
+        return ['addSeqElse', {
+            page: currentPage,
+            plantuml: plantuml,
+            svg: svg.innerHTML,
+            svgelement: pendingElse.groupRect.outerHTML,
+            beforeLineIndex: pendingElse.beforeLineIndex,
+            label: label
+        }];
+    }
+    var submitBtn = document.getElementById('seq-submit-group');
+    return ['addGroup', {
+        plantuml: plantuml,
+        groupType: selectedGroupType,
+        label: label,
+        startMessageIndex: parseInt(submitBtn.dataset.startIndex, 10),
+        endMessageIndex: parseInt(submitBtn.dataset.endIndex, 10)
+    }];
+}
+
+// Global function called by onclick on the submit-group button.
+// The modal is shared by add group, rename group and add else (groupModalMode).
 async function submitGroup() {
     var label = document.getElementById('seq-group-label-text').value;
 
@@ -153,40 +309,16 @@ async function submitGroup() {
 
     try {
         var plantuml = trimlines(editor.session.getValue());
-        var response;
-        if (groupEditMode) {
-            groupEditMode = false;
-            response = await fetch("renameSeqGroup", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    page: currentPage,
-                    plantuml: plantuml,
-                    svg: svg.innerHTML,
-                    svgelement: lastclickedsvgelement.outerHTML,
-                    label: label
-                })
-            });
-        } else {
-            var submitBtn = document.getElementById('seq-submit-group');
-            var startIndex = parseInt(submitBtn.dataset.startIndex, 10);
-            var endIndex = parseInt(submitBtn.dataset.endIndex, 10);
-            response = await fetch("addGroup", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    plantuml: plantuml,
-                    groupType: selectedGroupType,
-                    label: label,
-                    startMessageIndex: startIndex,
-                    endMessageIndex: endIndex
-                })
-            });
-        }
+        var [route, body] = groupRequest(plantuml, svg, label);
+        groupModalMode = 'add';
+        pendingElse = null;
+        var response = await fetch(route, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+        });
         var data = await response.json();
         if (data.error) {
             displayErrorMessage(data.error);

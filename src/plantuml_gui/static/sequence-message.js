@@ -160,6 +160,7 @@ function isSequenceAddMode() {
     return isAddMessageActive ||
         (typeof isActivationAddMode === 'function' && isActivationAddMode()) ||
         (typeof isGroupAddMode === 'function' && isGroupAddMode()) ||
+        (typeof isElseAddMode === 'function' && isElseAddMode()) ||
         (typeof isBoxAddMode === 'function' && isBoxAddMode()) ||
         (typeof isNoteAddMode === 'function' && isNoteAddMode());
 }
@@ -279,6 +280,9 @@ function setupLifelineInteraction() {
         } else if (isGroupAddMode()) {
             handleGroupMouseMove(svgContainer, y);
             hideIndicatorCircle();
+        } else if (isElseAddMode()) {
+            handleElseMouseMove(svgContainer, y);
+            hideIndicatorCircle();
         } else if (typeof isBoxAddMode === 'function' && isBoxAddMode()) {
             handleBoxMouseMove(svgContainer, x);
             hideIndicatorCircle();
@@ -313,6 +317,14 @@ function setupLifelineInteraction() {
             const transformed = svgPointFromEvent(e, svgContainer);
             e.stopPropagation();
             handleGroupClick(e, transformed.y);
+            return;
+        }
+
+        // Else-add mode: click picks the nearest else slot and opens the label modal.
+        if (isElseAddMode()) {
+            const transformed = svgPointFromEvent(e, svgContainer);
+            e.stopPropagation();
+            handleElseClick(e, transformed.y);
             return;
         }
 

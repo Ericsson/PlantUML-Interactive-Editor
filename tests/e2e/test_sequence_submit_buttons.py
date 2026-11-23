@@ -44,7 +44,7 @@ class TestSequenceSubmitButtons:
                     });
                 };
 
-                groupEditMode = false;
+                groupModalMode = 'add';
                 selectedGroupType = 'group';
                 const submit = document.getElementById('seq-submit-group');
                 submit.dataset.startIndex = '2';
