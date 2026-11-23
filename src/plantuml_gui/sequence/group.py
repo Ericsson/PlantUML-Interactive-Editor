@@ -217,22 +217,31 @@ def _count_group_boxes(svg: str) -> int:
     return count
 
 
-def get_group_positions(puml: str, svg: str) -> List[Dict[str, int]]:
-    """Return header/end line indexes for each group in SVG document order.
+def get_group_positions(puml: str, svg: str) -> List[Dict[str, object]]:
+    """Return header/end line indexes and else slots for each group.
 
-    Group boxes render in document order matching puml source order (see
+    Groups are in SVG document order, matching puml source order (see
     index_of_clicked_group), so the frontend matches groups by ordinal.
+    ``elseSlots`` lists the message line indexes an else may be inserted
+    before (see _compute_else_slots); the frontend snaps the add-else ghost
+    line to them, so it never offers a position add_else would reject.
     """
     lines = puml.splitlines()
     group_count = _count_group_boxes(svg)
 
-    positions = []
+    positions: List[Dict[str, object]] = []
     for n in range(1, group_count + 1):
         header_index = _find_group_line_index(puml, n)
-        end_index = (
-            _find_group_end_index(lines, header_index) if header_index != -1 else -1
+        if header_index == -1:
+            positions.append({"headerIndex": -1, "endIndex": -1, "elseSlots": []})
+            continue
+        positions.append(
+            {
+                "headerIndex": header_index,
+                "endIndex": _find_group_end_index(lines, header_index),
+                "elseSlots": _compute_else_slots(lines, header_index),
+            }
         )
-        positions.append({"headerIndex": header_index, "endIndex": end_index})
     return positions
 
 

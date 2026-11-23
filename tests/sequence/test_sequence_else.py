@@ -32,10 +32,11 @@ label - by a bold font-size-11 ``<text>[label]</text>``. A bare ``else`` emits
 only the line.
 """
 
+import json
 import re
 
 import pytest
-from plantuml_gui.sequence.errors import EditError
+from plantuml_gui.sequence.errors import USER_MESSAGES, EditError
 from plantuml_gui.sequence.group import (
     _compute_else_slots,
     add_else,
@@ -209,13 +210,13 @@ class TestMessageDetectionWithElse:
 class TestGroupDetectionWithElse:
     def test_flat_group_positions(self, flat_svg):
         assert get_group_positions(FLAT_ALT_ELSE, flat_svg) == [
-            {"headerIndex": 3, "endIndex": 9}
+            {"headerIndex": 3, "endIndex": 9, "elseSlots": []}
         ]
 
     def test_nested_group_positions(self, nested_svg):
         assert get_group_positions(NESTED_ALT_ELSE, nested_svg) == [
-            {"headerIndex": 3, "endIndex": 10},
-            {"headerIndex": 5, "endIndex": 7},
+            {"headerIndex": 3, "endIndex": 10, "elseSlots": []},
+            {"headerIndex": 5, "endIndex": 7, "elseSlots": []},
         ]
 
 
@@ -461,7 +462,10 @@ class TestAddElse:
         svg = _svg(result)
         assert len(_else_separators(svg)) == 1
         assert _renders_messages(result) == ["m1", "m2", "m3"]
-        assert get_group_positions(result, svg) == [{"headerIndex": 3, "endIndex": 8}]
+        # m3 (line 7) is now the only slot: m2 opens the new branch.
+        assert get_group_positions(result, svg) == [
+            {"headerIndex": 3, "endIndex": 8, "elseSlots": [7]}
+        ]
 
     def test_targets_the_clicked_alt(self):
         puml = _block(
@@ -515,3 +519,111 @@ class TestAddElse:
         with pytest.raises(EditError) as error:
             _add_else(FLAT_ALT_ELSE, 6, "x")
         assert error.value.code == "invalid_else_position"
+
+
+def _post(client, route, **data):
+    return client.post(route, data=json.dumps(data), content_type="application/json")
+
+
+# Line indexes:
+#   3 alt first | 4 p1m1 | 5 p1m2 | 6 end | 7 newpage
+#   8 alt second | 9 p2m1 | 10 p2m2 | 11 end
+TWO_PAGES = """@startuml
+participant Alice
+participant Bob
+alt first
+Alice -> Bob: p1m1
+Bob -> Alice: p1m2
+end
+newpage Second
+alt second
+Alice -> Bob: p2m1
+Bob -> Alice: p2m2
+end
+@enduml"""
+
+
+def _page_svg(puml, page):
+    match = re.search(r"<g>(.*)</g>", _create_svg_from_uml(puml, page), re.DOTALL)
+    assert match
+    return match.group(1)
+
+
+class TestAddElseRoute:
+    def test_adds_else(self, client):
+        svg = _svg(THREE_MESSAGE_ALT)
+        response = _post(
+            client,
+            "/addSeqElse",
+            plantuml=THREE_MESSAGE_ALT,
+            svg=svg,
+            svgelement=_group_box(svg, 0),
+            beforeMessageIndex=5,
+            label="failure",
+        )
+        assert response.status_code == 200
+        assert response.get_json()["plantuml"].splitlines()[5] == "else failure"
+
+    def test_missing_label_writes_bare_else(self, client):
+        svg = _svg(THREE_MESSAGE_ALT)
+        response = _post(
+            client,
+            "/addSeqElse",
+            plantuml=THREE_MESSAGE_ALT,
+            svg=svg,
+            svgelement=_group_box(svg, 0),
+            beforeMessageIndex=5,
+        )
+        assert response.get_json()["plantuml"].splitlines()[5] == "else"
+
+    def test_invalid_position_is_a_400_with_the_fixed_message(self, client):
+        svg = _svg(THREE_MESSAGE_ALT)
+        response = _post(
+            client,
+            "/addSeqElse",
+            plantuml=THREE_MESSAGE_ALT,
+            svg=svg,
+            svgelement=_group_box(svg, 0),
+            beforeMessageIndex=4,
+            label="<script>",
+        )
+        assert response.status_code == 400
+        assert response.get_json() == {"error": USER_MESSAGES["invalid_else_position"]}
+
+    def test_adds_else_on_the_requested_page(self, client):
+        page2 = _page_svg(TWO_PAGES, 1)
+        response = _post(
+            client,
+            "/addSeqElse",
+            plantuml=TWO_PAGES,
+            svg=page2,
+            svgelement=_group_box(page2, 0),
+            beforeMessageIndex=10,
+            label="x",
+            page=1,
+        )
+        assert response.status_code == 200
+        lines = response.get_json()["plantuml"].splitlines()
+        original = TWO_PAGES.splitlines()
+        assert lines[:10] == original[:10]  # page 1 untouched
+        assert lines[10] == "else x"
+        assert lines[11:] == original[10:]
+
+
+class TestElseSlotsInSequencePositions:
+    def test_positions_route_returns_else_slots(self, client):
+        svg = _svg(THREE_MESSAGE_ALT)
+        groups = _post(
+            client, "/getSequencePositions", plantuml=THREE_MESSAGE_ALT, svg=svg
+        ).get_json()["groups"]
+        assert groups == [{"headerIndex": 3, "endIndex": 7, "elseSlots": [5, 6]}]
+
+    def test_else_slots_use_global_line_indexes_on_later_pages(self, client):
+        groups = _post(
+            client,
+            "/getSequencePositions",
+            plantuml=TWO_PAGES,
+            svg=_page_svg(TWO_PAGES, 1),
+            page=1,
+        ).get_json()["groups"]
+        assert groups == [{"headerIndex": 8, "endIndex": 11, "elseSlots": [10]}]
