@@ -9,6 +9,8 @@ else separator and its [label] must not be picked up as message elements."""
 
 import json
 
+import pytest
+
 # m2 is a black dashed message: its line style is identical to an else
 # separator's (stroke:#000000;stroke-width:1.0;stroke-dasharray:2.0,2.0), so
 # only geometry can tell them apart.
@@ -129,3 +131,108 @@ class TestIsElseSeparatorPredicate:
             "outsideBoxVertically": False,
             "solidFullWidth": False,
         }
+
+
+def _alt(keyword, *messages):
+    """A two-participant diagram with one group wrapping the given messages."""
+    return "\n".join(
+        ["@startuml", "participant alice", "participant bob", f"{keyword} g"]
+        + [f"alice -> bob: {m}" for m in messages]
+        + ["end", "@enduml"]
+    )
+
+
+# Opens the group menu by right-clicking the nth group's tab (or its header
+# text) and reports whether "Add else" is shown.
+_OPEN_GROUP_MENU = """([ordinal, target]) => {
+    const g = document.querySelector('#colb svg g');
+    const tabs = Array.from(g.querySelectorAll('path'))
+        .filter(p => p.getAttribute('fill') === '#EEEEEE');
+    let el = tabs[ordinal];
+    if (target === 'keyword') {
+        // the bold keyword text follows the tab and its box
+        el = el.nextElementSibling.nextElementSibling;
+    }
+    el.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true}));
+    const menu = document.getElementById('seq-group-menu');
+    const item = document.getElementById('seq-addElse-item');
+    return {
+        menuShown: menu.style.display === 'block',
+        addElseShown: item.style.display !== 'none',
+        ordinal: contextGroupOrdinal,
+    };
+}"""
+
+
+def _load(page, puml, groups):
+    page.evaluate(f"setPuml({json.dumps(puml)})")
+    page.wait_for_function(
+        f"() => groupPositions.length === {groups} && "
+        "document.querySelector('#colb svg g') !== null",
+        timeout=15000,
+    )
+
+
+def _open_group_menu(page, ordinal=0, target="tab"):
+    return page.evaluate(_OPEN_GROUP_MENU, [ordinal, target])
+
+
+class TestAddElseMenuItem:
+    def test_shown_for_group_with_an_else_position(self, app_url, page):
+        _load(page, _alt("alt", "m1", "m2"), 1)
+        result = _open_group_menu(page)
+        assert result["menuShown"] is True
+        assert result["addElseShown"] is True
+
+    @pytest.mark.parametrize("keyword", ["group", "opt", "loop"])
+    def test_shown_for_every_group_type(self, app_url, page, keyword):
+        _load(page, _alt(keyword, "m1", "m2"), 1)
+        assert _open_group_menu(page)["addElseShown"] is True
+
+    def test_shown_for_single_message_group(self, app_url, page):
+        # The manually reported case: alt success / Alice -> Bob: granted / end
+        _load(page, _alt("alt", "m1"), 1)
+        result = _open_group_menu(page)
+        assert result["menuShown"] is True
+        assert result["addElseShown"] is True
+
+    def test_shown_for_empty_group(self, app_url, page):
+        _load(page, _alt("alt"), 1)
+        assert _open_group_menu(page)["addElseShown"] is True
+
+    def test_shown_for_group_that_already_has_else_branches(self, app_url, page):
+        _load(page, ALT_ELSE_PUML, 1)
+        assert _open_group_menu(page)["addElseShown"] is True
+
+    def test_hidden_when_the_group_has_no_else_slots(self, app_url, page):
+        # Every rendered group has at least its 'end' slot; an unmatched
+        # group (headerIndex -1) comes back with none.
+        _load(page, _alt("alt", "m1"), 1)
+        page.evaluate("groupPositions[0].elseSlots = []")
+        assert _open_group_menu(page)["addElseShown"] is False
+
+    def test_right_clicking_the_keyword_text_also_toggles_it(self, app_url, page):
+        _load(page, _alt("alt", "m1", "m2"), 1)
+        assert _open_group_menu(page, target="keyword")["addElseShown"] is True
+
+    def test_follows_the_clicked_group(self, app_url, page):
+        puml = "\n".join(
+            [
+                "@startuml",
+                "participant alice",
+                "participant bob",
+                "alt outer",
+                "alice -> bob: m1",
+                "loop inner",
+                "bob -> alice: m2",
+                "end",
+                "end",
+                "@enduml",
+            ]
+        )
+        _load(page, puml, 2)
+        page.evaluate("groupPositions[1].elseSlots = []")
+        outer = _open_group_menu(page, 0)
+        inner = _open_group_menu(page, 1)
+        assert (outer["ordinal"], outer["addElseShown"]) == (0, True)
+        assert (inner["ordinal"], inner["addElseShown"]) == (1, False)

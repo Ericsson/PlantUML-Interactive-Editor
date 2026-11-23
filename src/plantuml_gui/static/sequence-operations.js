@@ -5,7 +5,9 @@ const LIFELINE_TOLERANCE = 15;
 
 // Note/group positions fetched from backend (refreshed each render)
 let notePositions = []; // [{cy, index}, ...]
-let groupPositions = []; // [{headerIndex, endIndex}, ...]
+let groupPositions = []; // [{headerIndex, endIndex, elseSlots}, ...]
+// Ordinal (index into groupPositions) of the group whose menu was last opened
+let contextGroupOrdinal = -1;
 let boxPositions = []; // [{headerIndex, endIndex}, ...]
 
 // Elements highlighted from the editor side, with how to restore them
@@ -478,11 +480,17 @@ function checkIfGroupHeaderText(svgelement) {
 
 // Opens the group context menu, identifying the group by its box rect
 // (the backend matches groups by the box's x/y, regardless of which part
-// of the header - tab or label text - was actually right-clicked).
-function openGroupContextMenu(groupRect, e) {
+// of the header - tab or label text - was actually right-clicked) and by its
+// ordinal into groupPositions. "Add else" only shows when the group has a
+// position an else can go (elseSlots, computed by the backend).
+function openGroupContextMenu(groupRect, ordinal, e) {
     lastclickedsvgelement = groupRect;
+    contextGroupOrdinal = ordinal;
     e.preventDefault();
     e.stopPropagation();
+    const group = groupPositions[ordinal];
+    const canAddElse = !!(group && group.elseSlots && group.elseSlots.length > 0);
+    document.getElementById('seq-addElse-item').style.display = canAddElse ? '' : 'none';
     var contextMenu = document.getElementById('seq-group-menu');
     contextMenu.style.display = 'block';
     contextMenu.style.left = e.pageX + 'px';
@@ -534,7 +542,8 @@ function setupGroupHandlers(svgelements) {
                 currentGroupRect = svgelement;
                 let tabPath = pendingTabPath;
                 let groupRectForTab = currentGroupRect;
-                tabPath.addEventListener('contextmenu', (e) => openGroupContextMenu(groupRectForTab, e));
+                const ordinalForTab = groupOrdinal;
+                tabPath.addEventListener('contextmenu', (e) => openGroupContextMenu(groupRectForTab, ordinalForTab, e));
                 addGroupHoverMarkers(tabPath, groupOrdinal);
                 // Register the box and its tab for editor->diagram highlighting
                 // under both the group's header and end lines (mirrors the
@@ -556,7 +565,8 @@ function setupGroupHandlers(svgelements) {
         if (checkIfGroupHeaderText(svgelement)) {
             if (headerTextsRemaining > 0 && currentGroupRect) {
                 let groupRect = currentGroupRect;
-                svgelement.addEventListener('contextmenu', (e) => openGroupContextMenu(groupRect, e));
+                const ordinal = groupOrdinal;
+                svgelement.addEventListener('contextmenu', (e) => openGroupContextMenu(groupRect, ordinal, e));
                 addGroupHoverMarkers(svgelement, groupOrdinal);
                 headerTextsRemaining--;
             }
