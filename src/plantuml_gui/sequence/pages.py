@@ -45,7 +45,7 @@ from typing import Dict, List, Set, Tuple
 
 from .classes import parse_participant_declaration
 from .group import VALID_GROUP_TYPES
-from .util import is_page_break, note_regions
+from .util import is_page_break, note_line_indexes
 
 _BOX_RE = re.compile(r"^box(?:\s|$)")
 
@@ -55,21 +55,13 @@ _SENTINEL_PREFIX = "'@@page-mask:"
 _SENTINEL_RE = re.compile(r"^'@@page-mask:(\d+)@@$")
 
 
-def _note_lines(lines: List[str]) -> Set[int]:
-    """Line indexes inside any note (header, body and ``end note``)."""
-    inside: Set[int] = set()
-    for start, end in note_regions("\n".join(lines)):
-        inside.update(range(start, end + 1))
-    return inside
-
-
 def page_boundaries(puml: str) -> List[int]:
     """Line indexes of the ``newpage`` lines that split the diagram.
 
     A ``newpage`` inside a note body is note text, not a page break.
     """
     lines = puml.splitlines()
-    in_note = _note_lines(lines)
+    in_note = note_line_indexes(lines)
     return [
         i
         for i, line in enumerate(lines)
@@ -140,7 +132,7 @@ def mask_other_pages(puml: str, page: int) -> Tuple[str, Dict[int, str]]:
         return puml, {}
 
     lines = puml.splitlines()
-    in_note = _note_lines(lines)
+    in_note = note_line_indexes(lines)
     start, end = page_span(puml, page)
 
     keep: Set[int] = set(range(start, end))

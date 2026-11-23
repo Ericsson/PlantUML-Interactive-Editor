@@ -39,6 +39,9 @@ import pytest
 from plantuml_gui.sequence.errors import USER_MESSAGES, EditError
 from plantuml_gui.sequence.group import (
     _compute_else_slots,
+    _find_group_end_index,
+    _find_group_line_index,
+    _find_own_else_indexes,
     add_else,
     delete_group,
     get_group_positions,
@@ -637,3 +640,98 @@ class TestElseSlotsInSequencePositions:
             page=1,
         ).get_json()["groups"]
         assert groups == [{"headerIndex": 8, "endIndex": 11, "elseSlots": [9, 10, 11]}]
+
+
+# Block notes whose body lines look like puml statements. They are note text,
+# not statements, and must not affect nesting, else lines or slots.
+
+# A body 'end' that would close the alt early, plus a body 'else'.
+# Line indexes:
+#   3 alt a | 4 m1 | 5 note over alice | 6 else maybe | 7 end | 8 end note
+#   9 m2 | 10 end
+NOTE_BODY_END = """@startuml
+participant alice
+participant bob
+alt a
+alice -> bob: m1
+note over alice
+else maybe
+end
+end note
+bob -> alice: m2
+end
+@enduml"""
+
+# A body line starting with a group keyword, which would open a phantom group.
+# Line indexes:
+#   3 alt a | 4 m1 | 5 note over alice | 6 loop until done | 7 end note
+#   8 m2 | 9 end
+NOTE_BODY_HEADER = """@startuml
+participant alice
+participant bob
+alt a
+alice -> bob: m1
+note over alice
+loop until done
+end note
+bob -> alice: m2
+end
+@enduml"""
+
+
+class TestNoteBodiesAreNotStatements:
+    def test_body_end_does_not_close_the_group(self):
+        assert _find_group_end_index(NOTE_BODY_END.splitlines(), 3) == 10
+
+    def test_body_header_does_not_open_a_group(self):
+        assert _find_group_end_index(NOTE_BODY_HEADER.splitlines(), 3) == 9
+
+    def test_body_header_is_not_counted_as_a_group(self):
+        assert _find_group_line_index(NOTE_BODY_HEADER, 1) == 3
+        assert _find_group_line_index(NOTE_BODY_HEADER, 2) == -1
+
+    def test_body_else_is_not_an_own_else(self):
+        assert _find_own_else_indexes(NOTE_BODY_END.splitlines(), 3) == []
+
+    def test_else_slots_skip_note_bodies(self):
+        assert _slots(NOTE_BODY_END, 3) == [4, 9, 10]
+        assert _slots(NOTE_BODY_HEADER, 3) == [4, 8, 9]
+
+    def test_arrow_in_note_body_is_not_a_slot(self):
+        lines = [
+            "alt a",
+            "alice -> bob: m1",
+            "note over alice",
+            "alice -> bob: in note",
+            "end note",
+            "bob -> alice: m2",
+            "end",
+        ]
+        assert _compute_else_slots(lines, 0) == [1, 5, 6]
+
+    @pytest.mark.parametrize(
+        ("puml", "expected"),
+        [
+            (
+                NOTE_BODY_END,
+                {"headerIndex": 3, "endIndex": 10, "elseSlots": [4, 9, 10]},
+            ),
+            (
+                NOTE_BODY_HEADER,
+                {"headerIndex": 3, "endIndex": 9, "elseSlots": [4, 8, 9]},
+            ),
+        ],
+    )
+    def test_renders_and_positions_match(self, puml, expected):
+        assert _renders_messages(puml) == ["m1", "m2"]
+        assert get_group_positions(puml, _svg(puml)) == [expected]
+
+    def test_delete_keeps_the_note_intact(self):
+        lines = _delete(NOTE_BODY_END, 0).splitlines()
+        original = NOTE_BODY_END.splitlines()
+        assert lines == original[:3] + original[4:10] + original[11:]
+
+    def test_add_else_after_the_note(self):
+        lines = _add_else(NOTE_BODY_END, 9, "b").splitlines()
+        assert lines[8:11] == ["end note", "else b", "bob -> alice: m2"]
+        assert _renders_messages("\n".join(lines)) == ["m1", "m2"]

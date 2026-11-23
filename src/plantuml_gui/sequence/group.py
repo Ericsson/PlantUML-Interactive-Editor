@@ -36,7 +36,7 @@ from pyquery import PyQuery as Pq
 
 from .classes import is_message_line
 from .errors import EditError
-from .util import escape_multiline_text
+from .util import escape_multiline_text, note_line_indexes
 
 VALID_GROUP_TYPES = ("group", "alt", "opt", "loop")
 
@@ -105,11 +105,16 @@ def _first_word(line: str) -> str:
 
 
 def _find_group_line_index(puml: str, group_index: int) -> int:
-    """Find the puml line index of the nth group header (1-based)."""
+    """Find the puml line index of the nth group header (1-based).
+
+    Note lines are skipped: a block note's body is free text, so a body line
+    starting with a group keyword is not a header.
+    """
     lines = puml.splitlines()
+    in_note = note_line_indexes(lines)
     count = 0
     for i, line in enumerate(lines):
-        if _first_word(line) in VALID_GROUP_TYPES:
+        if i not in in_note and _first_word(line) in VALID_GROUP_TYPES:
             count += 1
             if count == group_index:
                 return i
@@ -117,16 +122,21 @@ def _find_group_line_index(puml: str, group_index: int) -> int:
 
 
 def _block_lines(lines: List[str], header_index: int) -> Iterator[Tuple[int, int]]:
-    """Yield ``(line_index, depth)`` for each line after a group header.
+    """Yield ``(line_index, depth)`` for each statement line after a group header.
 
     ``depth`` counts the groups enclosing the line, starting from this one:
     1 for lines directly in the group (including a nested group's header and
     'end'), 2 for lines inside that nested group, and so on. The walk ends
     with the group's own closing 'end', yielded at depth 0; if the block is
-    never closed it runs to the last line.
+    never closed it runs to the last line. Note lines are not yielded: a
+    block note's body is free text, so an 'end', 'else', group keyword or
+    arrow written there is not a statement.
     """
+    in_note = note_line_indexes(lines)
     depth = 1
     for i in range(header_index + 1, len(lines)):
+        if i in in_note:
+            continue
         if lines[i].strip() == "end":
             depth -= 1
             yield i, depth
