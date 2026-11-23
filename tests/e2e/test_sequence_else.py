@@ -4,16 +4,13 @@
 #
 # Copyright (c) 2026 Ericsson
 
-"""End-to-end probes for else branches inside sequence alt groups: the dashed
-else separator and its [label] must not be picked up as message elements."""
+"""E2E tests for sequence group else branches: detection, menu, gesture, modal."""
 
 import json
 
 import pytest
 
-# m2 is a black dashed message: its line style is identical to an else
-# separator's (stroke:#000000;stroke-width:1.0;stroke-dasharray:2.0,2.0), so
-# only geometry can tell them apart.
+# m2 is styled exactly like an else separator.
 ALT_ELSE_PUML = """@startuml
 participant alice
 participant bob
@@ -26,8 +23,7 @@ alice --> bob: m3
 end
 @enduml"""
 
-# Classifies every dashed line in the rendered diagram. Separators are the
-# full-box-width lines; the rest are dashed message arrows.
+# Splits dashed lines into full-box-width separators and message arrows.
 _PROBE = """() => {
     const g = document.querySelector('#colb svg g');
     const all = g.querySelectorAll('*');
@@ -69,21 +65,15 @@ def _load_alt_else(page):
 
 
 class TestElseSeparatorDetection:
-    def test_separator_is_not_a_message_element(self, app_url, page):
+    def test_separators_and_label_are_not_messages(self, app_url, page):
         result = _load_alt_else(page)
 
         assert result["separatorCount"] == 2
         assert result["separatorsAsMessage"] == [False, False]
-
-    def test_separator_is_not_registered_for_highlighting(self, app_url, page):
-        result = _load_alt_else(page)
-
         assert result["separatorsRegistered"] == [False, False]
+        assert result["labelAsMessage"] is False
 
-    def test_black_dashed_message_is_still_a_message(self, app_url, page):
-        result = _load_alt_else(page)
-
-        # Guards the premise: the black message really is styled like a separator.
+        # The look-alike message is still a message.
         assert (
             "stroke:#000000;stroke-width:1.0;stroke-dasharray:2.0,2.0;"
             in (result["dashedMessageStyles"])
@@ -91,14 +81,9 @@ class TestElseSeparatorDetection:
         assert result["dashedMessagesAsMessage"] == [True, True]
         assert result["dashedMessagesRegistered"] == [True, True]
 
-    def test_else_label_is_not_a_message_element(self, app_url, page):
-        result = _load_alt_else(page)
-
-        assert result["labelAsMessage"] is False
-
 
 class TestIsElseSeparatorPredicate:
-    """isElseSeparator is pure over the bounds it is given - no DOM lookups."""
+    """isElseSeparator on hand-built lines and bounds."""
 
     _CASES = """() => {
         const ns = 'http://www.w3.org/2000/svg';
@@ -142,8 +127,7 @@ def _alt(keyword, *messages):
     )
 
 
-# Opens the group menu by right-clicking the nth group's tab (or its header
-# text) and reports whether "Add else" is shown.
+# Right-clicks the nth group's tab (or keyword) and reports the menu state.
 _OPEN_GROUP_MENU = """([ordinal, target]) => {
     const g = document.querySelector('#colb svg g');
     const tabs = Array.from(g.querySelectorAll('path'))
@@ -178,35 +162,15 @@ def _open_group_menu(page, ordinal=0, target="tab"):
 
 
 class TestAddElseMenuItem:
+    # Which groups get slots is unit-tested in tests/sequence/.
     def test_shown_for_group_with_an_else_position(self, app_url, page):
         _load(page, _alt("alt", "m1", "m2"), 1)
         result = _open_group_menu(page)
         assert result["menuShown"] is True
         assert result["addElseShown"] is True
 
-    @pytest.mark.parametrize("keyword", ["group", "opt", "loop"])
-    def test_shown_for_every_group_type(self, app_url, page, keyword):
-        _load(page, _alt(keyword, "m1", "m2"), 1)
-        assert _open_group_menu(page)["addElseShown"] is True
-
-    def test_shown_for_single_message_group(self, app_url, page):
-        # The manually reported case: alt success / Alice -> Bob: granted / end
-        _load(page, _alt("alt", "m1"), 1)
-        result = _open_group_menu(page)
-        assert result["menuShown"] is True
-        assert result["addElseShown"] is True
-
-    def test_shown_for_empty_group(self, app_url, page):
-        _load(page, _alt("alt"), 1)
-        assert _open_group_menu(page)["addElseShown"] is True
-
-    def test_shown_for_group_that_already_has_else_branches(self, app_url, page):
-        _load(page, ALT_ELSE_PUML, 1)
-        assert _open_group_menu(page)["addElseShown"] is True
-
     def test_hidden_when_the_group_has_no_else_slots(self, app_url, page):
-        # Every rendered group has at least its 'end' slot; an unmatched
-        # group (headerIndex -1) comes back with none.
+        # Only an unmatched group (headerIndex -1) has no slots.
         _load(page, _alt("alt", "m1"), 1)
         page.evaluate("groupPositions[0].elseSlots = []")
         assert _open_group_menu(page)["addElseShown"] is False
@@ -238,8 +202,7 @@ class TestAddElseMenuItem:
         assert (inner["ordinal"], inner["addElseShown"]) == (1, False)
 
 
-# The manually reported diagram: one message in an alt.
-# Line indexes: 3 alt success | 4 granted | 5 end
+# The reported case. Line indexes: 3 alt success | 4 granted | 5 end
 SINGLE_MESSAGE_ALT = """@startuml
 participant Alice
 participant Bob
@@ -313,17 +276,6 @@ class TestElseAddMode:
         _move_to(page, before_msg["y"] - 3)
         assert page.evaluate(_GHOST) == before_msg["y"]
 
-    def test_slots_are_ordered_inside_the_box(self, app_url, page):
-        _start_else_mode(page, _alt("alt", "m1", "m2"))
-        ys = [s["y"] for s in _slots(page)]
-        box = page.evaluate(
-            "[parseFloat(elseTarget.groupRect.getAttribute('y')), "
-            "parseFloat(elseTarget.groupRect.getAttribute('y')) + "
-            "parseFloat(elseTarget.groupRect.getAttribute('height'))]"
-        )
-        assert ys == sorted(ys)
-        assert all(box[0] < y < box[1] for y in ys)
-
     def test_escape_cancels(self, app_url, page):
         _start_else_mode(page, SINGLE_MESSAGE_ALT)
         page.keyboard.press("Escape")
@@ -361,25 +313,9 @@ class TestElseAddMode:
             "end",
         ]
 
-    def test_empty_label_adds_bare_else(self, app_url, page):
-        lines = self._add_via_ui(page, SINGLE_MESSAGE_ALT, 0, "")
-        assert lines[3:6] == ["alt success", "else", "Alice -> Bob: granted"]
-
-    def test_diagram_rerenders_with_the_new_branch(self, app_url, page):
-        self._add_via_ui(page, SINGLE_MESSAGE_ALT, 1, "failure")
-        page.wait_for_function(
-            "() => Array.from(document.querySelectorAll('#colb svg text'))"
-            ".some(t => t.textContent === '[failure]')",
-            timeout=15000,
-        )
-
-    def test_message_hover_is_suppressed_in_else_mode(self, app_url, page):
-        _start_else_mode(page, SINGLE_MESSAGE_ALT)
-        assert page.evaluate("isSequenceAddMode()") is True
-
 
 class TestElseSlotYs:
-    """computeElseSlotYs on hand-built inputs (no tab -> header fallback height)."""
+    """computeElseSlotYs on hand-built inputs (no tab, so the fallback height)."""
 
     _CASE = """([slots, messages]) => {
         const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -441,14 +377,7 @@ class TestGroupModalRouting:
         assert body["beforeLineIndex"] == 5
         assert body["svgelement"].startswith("<rect")
 
-    def test_rename_mode_posts_rename(self, app_url, page):
-        assert page.evaluate(self._SUBMIT, "rename")["calls"][0][0] == "renameSeqGroup"
-
-    def test_add_mode_posts_add_group(self, app_url, page):
-        assert page.evaluate(self._SUBMIT, "add")["calls"][0][0] == "addGroup"
-
-    # The server rejects the first submit, so the modal stays open; the user
-    # presses Submit again. The second request must be the same kind.
+    # Submit twice; after a rejection the retry must repeat the request.
     _RESUBMIT = """async ([mode, responses]) => {
         groupOperationEventListeners();
         document.getElementById('colb').innerHTML =

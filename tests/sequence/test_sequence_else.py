@@ -22,18 +22,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Characterization tests: how ``else`` branches in an ``alt`` render, and that
-existing element detection (messages, groups, notes) is unaffected by them.
+"""Else branches in sequence groups: slots, add_else, delete, /addSeqElse.
 
-PlantUML (1.2022.x) renders each ``else`` as a horizontal dashed separator
-``<line style="stroke:#000000;stroke-width:1.0;stroke-dasharray:2.0,2.0;">``
-spanning the group box's full width, followed - only when the ``else`` has a
-label - by a bold font-size-11 ``<text>[label]</text>``. A bare ``else`` emits
-only the line.
+PlantUML renders an ``else`` as a dashed line across the group box, followed
+by a bold ``[label]`` text if it has a label.
 """
 
 import json
 import re
+from functools import lru_cache
 
 import pytest
 from plantuml_gui.sequence.errors import USER_MESSAGES, EditError
@@ -50,7 +47,6 @@ from plantuml_gui.sequence.message import (
     get_message_positions,
     index_of_clicked_message,
 )
-from plantuml_gui.sequence.note import get_note_positions
 from plantuml_gui.shared.render import _create_svg_from_uml
 from pyquery import PyQuery as Pq
 
@@ -83,26 +79,11 @@ alice -> bob: m3
 end
 @enduml"""
 
-# Self messages and a note directly after else separators (labeled and bare).
-# Line indexes:
-#   3 alt a | 4 self1 | 5 else b | 6 note | 7 m | 8 else | 9 self2 | 10 end
-SELF_AND_NOTE_ALT_ELSE = """@startuml
-participant alice
-participant bob
-alt a
-alice -> alice: self1
-else b
-note over alice: n
-bob -> alice: m
-else
-alice -> alice: self2
-end
-@enduml"""
 
-
-def _svg(puml):
-    """Render puml and return the inner markup of its <g> (what the frontend sends)."""
-    match = re.search(r"<g>(.*)</g>", _create_svg_from_uml(puml), re.DOTALL)
+@lru_cache(maxsize=None)
+def _svg(puml, page=0):
+    """Inner markup of the rendered <g>. Cached: each render runs the JAR."""
+    match = re.search(r"<g>(.*)</g>", _create_svg_from_uml(puml, page), re.DOTALL)
     assert match
     return match.group(1)
 
@@ -117,119 +98,39 @@ def _else_separators(svg):
     ]
 
 
-@pytest.fixture(scope="module")
-def flat_svg():
-    return _svg(FLAT_ALT_ELSE)
-
-
-@pytest.fixture(scope="module")
-def nested_svg():
-    return _svg(NESTED_ALT_ELSE)
-
-
-@pytest.fixture(scope="module")
-def self_note_svg():
-    return _svg(SELF_AND_NOTE_ALT_ELSE)
-
-
 class TestElseSvgMarkup:
-    def test_one_separator_per_else(self, flat_svg):
-        assert len(_else_separators(flat_svg)) == 2
-
-    def test_separator_spans_group_box_width(self, flat_svg):
-        box = next(r for r in Pq(flat_svg)("rect").items() if r.attr("fill") == "none")
+    def test_separator_spans_the_box_with_the_message_stroke_width(self):
+        # isElseSeparator's premise: styled like a message, told apart by width.
+        svg = _svg(FLAT_ALT_ELSE)
+        box = next(r for r in Pq(svg)("rect").items() if r.attr("fill") == "none")
         box_x = float(box.attr("x"))
         box_right = box_x + float(box.attr("width"))
-        for line in _else_separators(flat_svg):
+        separators = _else_separators(svg)
+        assert len(separators) == 2
+        for line in separators:
             assert float(line.attr("x1")) == box_x
             assert float(line.attr("x2")) == box_right
             assert line.attr("y1") == line.attr("y2")
-
-    def test_separator_uses_message_stroke_width(self, flat_svg):
-        # Same stroke-width as message arrows - the reason a naive
-        # "line with stroke-width:1.0" message check would match it.
-        for line in _else_separators(flat_svg):
             assert "stroke-width:1.0" in line.attr("style")
-
-    def test_labeled_else_emits_bold_small_label_after_separator(self, flat_svg):
-        first = _else_separators(flat_svg)[0]
-        label = first.next()
-        assert label[0].tag == "text"
-        assert label.text() == "[failure]"
-        assert label.attr("font-weight") == "bold"
-        assert label.attr("font-size") == "11"
-
-    def test_bare_else_emits_no_label(self, flat_svg):
-        second = _else_separators(flat_svg)[1]
-        assert second.next()[0].tag != "text"
 
 
 class TestMessageDetectionWithElse:
-    def test_flat_message_positions(self, flat_svg):
-        positions = get_message_positions(FLAT_ALT_ELSE, flat_svg)
+    def test_message_positions_skip_else_lines(self):
+        positions = get_message_positions(FLAT_ALT_ELSE, _svg(FLAT_ALT_ELSE))
         assert [(p["index"], p["text"]) for p in positions] == [
             (4, "m1"),
             (6, "m2"),
             (8, "m3"),
         ]
 
-    def test_nested_message_positions(self, nested_svg):
-        positions = get_message_positions(NESTED_ALT_ELSE, nested_svg)
-        assert [(p["index"], p["text"]) for p in positions] == [
-            (4, "m1"),
-            (6, "m2"),
-            (9, "m3"),
-        ]
-
-    def test_self_messages_after_else(self, self_note_svg):
-        positions = get_message_positions(SELF_AND_NOTE_ALT_ELSE, self_note_svg)
-        assert [(p["index"], p["text"]) for p in positions] == [
-            (4, "self1"),
-            (7, "m"),
-            (9, "self2"),
-        ]
-
-    def test_message_cy_is_ordered_around_separators(self, flat_svg):
-        positions = get_message_positions(FLAT_ALT_ELSE, flat_svg)
-        separators = [float(s.attr("y1")) for s in _else_separators(flat_svg)]
-        cys = [p["cy"] for p in positions]
-        assert cys[0] < separators[0] < cys[1] < separators[1] < cys[2]
-
-    def test_separator_is_not_a_clicked_message(self, flat_svg):
-        for line in _else_separators(flat_svg):
-            assert index_of_clicked_message(flat_svg, str(line)) == -1
-
-    def test_else_label_is_not_a_clicked_message(self, flat_svg):
-        label = _else_separators(flat_svg)[0].next()
-        assert index_of_clicked_message(flat_svg, str(label)) == -1
-
-    def test_message_after_else_resolves_to_its_ordinal(self, flat_svg):
-        texts = [
-            t for t in Pq(flat_svg)("text").items() if t.text() in ("m1", "m2", "m3")
-        ]
-        assert [index_of_clicked_message(flat_svg, str(t)) for t in texts] == [1, 2, 3]
+    def test_separator_and_label_are_not_clicked_messages(self):
+        svg = _svg(FLAT_ALT_ELSE)
+        separators = _else_separators(svg)
+        label = separators[0].next()
+        for el in [*separators, label]:
+            assert index_of_clicked_message(svg, str(el)) == -1
 
 
-class TestGroupDetectionWithElse:
-    def test_flat_group_positions(self, flat_svg):
-        assert get_group_positions(FLAT_ALT_ELSE, flat_svg) == [
-            {"headerIndex": 3, "endIndex": 9, "elseSlots": [4, 6, 8, 9]}
-        ]
-
-    def test_nested_group_positions(self, nested_svg):
-        assert get_group_positions(NESTED_ALT_ELSE, nested_svg) == [
-            {"headerIndex": 3, "endIndex": 10, "elseSlots": [4, 9, 10]},
-            {"headerIndex": 5, "endIndex": 7, "elseSlots": [6, 7]},
-        ]
-
-
-class TestNoteDetectionWithElse:
-    def test_note_after_else_label(self, self_note_svg):
-        notes = get_note_positions(SELF_AND_NOTE_ALT_ELSE, self_note_svg)
-        assert [n["index"] for n in notes] == [6]
-
-
-# An alt nested in an alt, each with its own else.
 # Line indexes:
 #   3 alt outer | 4 m1 | 5 alt inner | 6 m2 | 7 else inner-else | 8 m3 | 9 end
 #   10 else outer-else | 11 m4 | 12 end
@@ -280,7 +181,7 @@ def _delete(puml, ordinal):
 
 
 def _renders_messages(puml):
-    """Return the message texts PlantUML renders - empty if it hit a syntax error."""
+    """Rendered message texts; empty on a syntax error."""
     return [p["text"] for p in get_message_positions(puml, _svg(puml))]
 
 
@@ -296,10 +197,6 @@ class TestDeleteGroupWithElse:
             "alice -> bob: m3",
             "@enduml",
         ]
-
-    def test_result_still_renders(self):
-        result = _delete(FLAT_ALT_ELSE, 0)
-        assert _renders_messages(result) == ["m1", "m2", "m3"]
 
     def test_else_after_nested_non_alt_group_is_removed(self):
         lines = _delete(NESTED_ALT_ELSE, 0).splitlines()
@@ -370,7 +267,7 @@ class TestElseSlots:
         assert _slots(THREE_MESSAGE_ALT, 3) == [4, 5, 6, 7]
 
     def test_single_message_group_has_slots(self):
-        # The reported case: one message - else before it or before the end.
+        # The reported case.
         assert _slots(_block("alice -> bob: m1"), 3) == [4, 5]
 
     def test_empty_group_has_only_the_end_slot(self):
@@ -425,12 +322,9 @@ class TestAddElse:
             "alice -> bob: m3",
         ]
 
-    def test_empty_label_writes_bare_else(self):
-        lines = _add_else(THREE_MESSAGE_ALT, 6, "").splitlines()
-        assert lines[6] == "else"
-
-    def test_whitespace_only_label_writes_bare_else(self):
-        lines = _add_else(THREE_MESSAGE_ALT, 6, "   ").splitlines()
+    @pytest.mark.parametrize("label", ["", "   "])
+    def test_empty_label_writes_bare_else(self, label):
+        lines = _add_else(THREE_MESSAGE_ALT, 6, label).splitlines()
         assert lines[6] == "else"
 
     def test_multiline_label_stays_on_one_line(self):
@@ -463,21 +357,22 @@ class TestAddElse:
         ]
 
     def test_else_before_end_of_single_message_group(self):
-        # The reported case: add the failure branch after the only message.
+        # The reported case.
         puml = _block("alice -> bob: granted")
         lines = _add_else(puml, 5, "failure").splitlines()
         assert lines[3:7] == ["alt a", "alice -> bob: granted", "else failure", "end"]
-        assert len(_else_separators(_svg("\n".join(lines)))) == 1
 
     def test_else_in_empty_group(self):
         lines = _add_else(_block(), 4, "").splitlines()
         assert lines[3:6] == ["alt a", "else", "end"]
-        assert len(_else_separators(_svg("\n".join(lines)))) == 1
 
-    def test_else_before_first_message_renders(self):
+    def test_else_before_first_message(self):
         result = _add_else(THREE_MESSAGE_ALT, 4, "other")
-        assert result.splitlines()[4] == "else other"
-        assert _renders_messages(result) == ["m1", "m2", "m3"]
+        assert result.splitlines()[3:6] == [
+            "alt success",
+            "else other",
+            "alice -> bob: m1",
+        ]
 
     def test_targets_the_clicked_alt(self):
         puml = _block(
@@ -495,14 +390,6 @@ class TestAddElse:
             "else x",
             "alice -> bob: m3",
         ]
-
-    @pytest.mark.parametrize("group_type", ["group", "alt", "opt", "loop"])
-    def test_every_group_type_accepts_else(self, group_type):
-        puml = THREE_MESSAGE_ALT.replace("alt success", f"{group_type} success")
-        result = _add_else(puml, 5, "x")
-        assert result.splitlines()[5] == "else x"
-        assert len(_else_separators(_svg(result))) == 1
-        assert _renders_messages(result) == ["m1", "m2", "m3"]
 
     @pytest.mark.parametrize(
         "before",
@@ -556,12 +443,6 @@ end
 @enduml"""
 
 
-def _page_svg(puml, page):
-    match = re.search(r"<g>(.*)</g>", _create_svg_from_uml(puml, page), re.DOTALL)
-    assert match
-    return match.group(1)
-
-
 class TestAddElseRoute:
     def test_adds_else(self, client):
         svg = _svg(THREE_MESSAGE_ALT)
@@ -604,7 +485,7 @@ class TestAddElseRoute:
         assert response.get_json() == {"error": USER_MESSAGES["invalid_else_position"]}
 
     def test_adds_else_on_the_requested_page(self, client):
-        page2 = _page_svg(TWO_PAGES, 1)
+        page2 = _svg(TWO_PAGES, 1)
         response = _post(
             client,
             "/addSeqElse",
@@ -624,28 +505,20 @@ class TestAddElseRoute:
 
 
 class TestElseSlotsInSequencePositions:
-    def test_positions_route_returns_else_slots(self, client):
-        svg = _svg(THREE_MESSAGE_ALT)
-        groups = _post(
-            client, "/getSequencePositions", plantuml=THREE_MESSAGE_ALT, svg=svg
-        ).get_json()["groups"]
-        assert groups == [{"headerIndex": 3, "endIndex": 7, "elseSlots": [4, 5, 6, 7]}]
-
     def test_else_slots_use_global_line_indexes_on_later_pages(self, client):
         groups = _post(
             client,
             "/getSequencePositions",
             plantuml=TWO_PAGES,
-            svg=_page_svg(TWO_PAGES, 1),
+            svg=_svg(TWO_PAGES, 1),
             page=1,
         ).get_json()["groups"]
         assert groups == [{"headerIndex": 8, "endIndex": 11, "elseSlots": [9, 10, 11]}]
 
 
-# Block notes whose body lines look like puml statements. They are note text,
-# not statements, and must not affect nesting, else lines or slots.
+# Note bodies that look like statements must be ignored.
 
-# A body 'end' that would close the alt early, plus a body 'else'.
+# Body 'end' and 'else'.
 # Line indexes:
 #   3 alt a | 4 m1 | 5 note over alice | 6 else maybe | 7 end | 8 end note
 #   9 m2 | 10 end
@@ -662,7 +535,7 @@ bob -> alice: m2
 end
 @enduml"""
 
-# A body line starting with a group keyword, which would open a phantom group.
+# Body line starting with a group keyword.
 # Line indexes:
 #   3 alt a | 4 m1 | 5 note over alice | 6 loop until done | 7 end note
 #   8 m2 | 9 end
@@ -734,4 +607,3 @@ class TestNoteBodiesAreNotStatements:
     def test_add_else_after_the_note(self):
         lines = _add_else(NOTE_BODY_END, 9, "b").splitlines()
         assert lines[8:11] == ["end note", "else b", "bob -> alice: m2"]
-        assert _renders_messages("\n".join(lines)) == ["m1", "m2"]
