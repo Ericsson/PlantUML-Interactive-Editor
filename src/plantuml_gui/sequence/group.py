@@ -26,14 +26,17 @@
 
 Supports the keywords ``group``, ``alt``, ``opt``, and ``loop``.  A group
 wraps a range of messages (identified by their puml line indexes) in a
-``<keyword> <label> ... end`` block.
+``<keyword> <label> ... end`` block. Any group can be split into branches
+with ``else <label>`` lines.
 """
 
-from typing import Dict, List
+from typing import Dict, Iterator, List, Tuple
 
 from pyquery import PyQuery as Pq
 
+from .classes import is_message_line
 from .errors import EditError
+from .util import escape_multiline_text
 
 VALID_GROUP_TYPES = ("group", "alt", "opt", "loop")
 
@@ -95,58 +98,91 @@ def index_of_clicked_group(svg: str, svgelement: str) -> int:
     return -1
 
 
+def _first_word(line: str) -> str:
+    """Return the first space-separated word of a puml line ("" if blank)."""
+    stripped = line.strip()
+    return stripped.split(" ", 1)[0] if stripped else ""
+
+
 def _find_group_line_index(puml: str, group_index: int) -> int:
     """Find the puml line index of the nth group header (1-based)."""
     lines = puml.splitlines()
     count = 0
     for i, line in enumerate(lines):
-        stripped = line.strip()
-        first_word = stripped.split(" ", 1)[0] if stripped else ""
-        if first_word in VALID_GROUP_TYPES:
+        if _first_word(line) in VALID_GROUP_TYPES:
             count += 1
             if count == group_index:
                 return i
     return -1
 
 
-def _find_group_end_index(lines: List[str], header_index: int) -> int:
-    """Find the line index of the 'end' closing the group opened at header_index.
+def _block_lines(lines: List[str], header_index: int) -> Iterator[Tuple[int, int]]:
+    """Yield ``(line_index, depth)`` for each line after a group header.
 
-    Nesting depth is tracked so nested groups' 'end' lines are skipped.
-    Returns -1 if no matching 'end' exists.
+    ``depth`` counts the groups enclosing the line, starting from this one:
+    1 for lines directly in the group (including a nested group's header and
+    'end'), 2 for lines inside that nested group, and so on. The walk ends
+    with the group's own closing 'end', yielded at depth 0; if the block is
+    never closed it runs to the last line.
     """
     depth = 1
     for i in range(header_index + 1, len(lines)):
-        stripped = lines[i].strip()
-        first_word = stripped.split(" ", 1)[0] if stripped else ""
-        if first_word in VALID_GROUP_TYPES:
-            depth += 1
-        elif stripped == "end":
+        if lines[i].strip() == "end":
             depth -= 1
+            yield i, depth
             if depth == 0:
-                return i
-    return -1
+                return
+        else:
+            yield i, depth
+            if _first_word(lines[i]) in VALID_GROUP_TYPES:
+                depth += 1
 
 
-def _find_own_else_indexes(
-    lines: List[str], header_index: int, end_index: int
-) -> List[int]:
-    """Find the 'else' lines belonging to the group between header and end.
+def _find_group_end_index(lines: List[str], header_index: int) -> int:
+    """Find the line index of the 'end' closing the group opened at header_index.
 
-    Nesting depth is tracked so a nested group's 'else' lines are skipped.
+    Returns -1 if no matching 'end' exists.
     """
-    own = []
-    depth = 1
-    for i in range(header_index + 1, end_index):
+    return next((i for i, depth in _block_lines(lines, header_index) if depth == 0), -1)
+
+
+def _find_own_else_indexes(lines: List[str], header_index: int) -> List[int]:
+    """Find the 'else' lines belonging to the group opened at header_index.
+
+    A nested group's 'else' lines are deeper, so they are not included.
+    """
+    return [
+        i
+        for i, depth in _block_lines(lines, header_index)
+        if depth == 1 and _first_word(lines[i]) == "else"
+    ]
+
+
+def _compute_else_slots(lines: List[str], header_index: int) -> List[int]:
+    """Return the message line indexes an 'else' may be inserted before.
+
+    A slot is a message directly in the group (not inside a nested group)
+    whose branch - the lines since the header or the group's latest 'else' -
+    already has content, so the new 'else' never creates an empty branch.
+    Blank lines and ``'`` comments are not content.
+    """
+    slots = []
+    branch_has_content = False
+    for i, depth in _block_lines(lines, header_index):
+        if depth == 0:
+            break
+        if depth > 1:
+            continue  # inside a nested group; its header/end were seen at depth 1
         stripped = lines[i].strip()
-        first_word = stripped.split(" ", 1)[0] if stripped else ""
-        if first_word in VALID_GROUP_TYPES:
-            depth += 1
-        elif stripped == "end":
-            depth -= 1
-        elif first_word == "else" and depth == 1:
-            own.append(i)
-    return own
+        if not stripped or stripped.startswith("'"):
+            continue
+        if _first_word(stripped) == "else":
+            branch_has_content = False
+            continue
+        if is_message_line(stripped) and branch_has_content:
+            slots.append(i)
+        branch_has_content = True
+    return slots
 
 
 def _count_group_boxes(svg: str) -> int:
@@ -237,8 +273,35 @@ def delete_group(puml: str, svg: str, svgelement: str) -> str:
     if end_line == -1:
         return puml
 
-    own_lines = [line_index, *_find_own_else_indexes(lines, line_index, end_line)]
+    own_lines = [line_index, *_find_own_else_indexes(lines, line_index)]
     # Delete bottom-up so earlier indexes stay valid.
     for i in sorted([*own_lines, end_line], reverse=True):
         del lines[i]
+    return "\n".join(lines)
+
+
+def add_else(
+    puml: str, svg: str, svgelement: str, before_message_index: int, label: str
+) -> str:
+    """Split the clicked ``alt`` with an ``else`` line before a message.
+
+    ``before_message_index`` must be one of the group's else slots (see
+    _compute_else_slots). The line is indented like the group's header, as
+    'else' is a sibling of the header and 'end'. An empty label writes a bare
+    ``else``; newlines in the label are kept as literal ``\\n``.
+
+    Raises ``EditError`` if the position is not a valid slot of the clicked
+    group (or no group matches the click).
+    """
+    lines = puml.splitlines()
+    header_index = _find_group_line_index(puml, index_of_clicked_group(svg, svgelement))
+    if header_index == -1 or before_message_index not in _compute_else_slots(
+        lines, header_index
+    ):
+        raise EditError("invalid_else_position")
+
+    header = lines[header_index]
+    indent = header[: len(header) - len(header.lstrip())]
+    text = escape_multiline_text(label.strip())
+    lines.insert(before_message_index, f"{indent}else {text}".rstrip())
     return "\n".join(lines)

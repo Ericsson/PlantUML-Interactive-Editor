@@ -35,7 +35,13 @@ only the line.
 import re
 
 import pytest
-from plantuml_gui.sequence.group import delete_group, get_group_positions
+from plantuml_gui.sequence.errors import EditError
+from plantuml_gui.sequence.group import (
+    _compute_else_slots,
+    add_else,
+    delete_group,
+    get_group_positions,
+)
 from plantuml_gui.sequence.message import (
     get_message_positions,
     index_of_clicked_message,
@@ -328,3 +334,184 @@ class TestDeleteGroupWithElse:
         puml = FLAT_ALT_ELSE.replace("bob --> alice: m2", "bob --> alice: else m2")
         lines = _delete(puml, 0).splitlines()
         assert "bob --> alice: else m2" in lines
+
+
+# Line indexes: 3 alt | 4 m1 | 5 m2 | 6 m3 | 7 end
+THREE_MESSAGE_ALT = """@startuml
+participant alice
+participant bob
+alt success
+alice -> bob: m1
+bob -> alice: m2
+alice -> bob: m3
+end
+@enduml"""
+
+
+def _slots(puml, header_index):
+    return _compute_else_slots(puml.splitlines(), header_index)
+
+
+def _block(*body):
+    """Wrap body lines in a two-participant alt; the alt header is line 3."""
+    return "\n".join(
+        ["@startuml", "participant alice", "participant bob", "alt a", *body]
+        + ["end", "@enduml"]
+    )
+
+
+class TestElseSlots:
+    def test_every_message_after_the_first(self):
+        assert _slots(THREE_MESSAGE_ALT, 3) == [5, 6]
+
+    def test_no_slot_directly_after_an_else(self):
+        # m2 and m3 each open their branch; splitting would leave it empty.
+        assert _slots(FLAT_ALT_ELSE, 3) == []
+
+    def test_slot_after_an_else_branch_has_content(self):
+        puml = _block(
+            "alice -> bob: m1", "else b", "bob -> alice: m2", "alice -> bob: m3"
+        )
+        assert _slots(puml, 3) == [7]
+
+    def test_nested_group_messages_are_not_slots(self):
+        puml = _block("alice -> bob: m1", "loop l", "bob -> alice: m2", "end")
+        assert _slots(puml, 3) == []
+
+    def test_message_after_a_nested_group_is_a_slot(self):
+        puml = _block(
+            "alice -> bob: m1", "loop l", "bob -> alice: m2", "end", "alice -> bob: m3"
+        )
+        assert _slots(puml, 3) == [8]
+
+    def test_nested_group_counts_as_branch_content(self):
+        puml = _block("loop l", "bob -> alice: m2", "end", "alice -> bob: m3")
+        assert _slots(puml, 3) == [7]
+
+    def test_note_counts_as_branch_content(self):
+        puml = _block("note over alice: n", "alice -> bob: m1")
+        assert _slots(puml, 3) == [5]
+
+    def test_blank_lines_and_comments_are_not_content(self):
+        puml = _block("' a comment", "", "alice -> bob: m1", "bob -> alice: m2")
+        assert _slots(puml, 3) == [7]
+
+    def test_inner_alt_slots_ignore_the_outer_alt(self):
+        assert _slots(NESTED_ALTS_WITH_ELSE, 5) == []
+        puml = _block(
+            "alice -> bob: m1",
+            "alt inner",
+            "bob -> alice: m2",
+            "alice -> bob: m3",
+            "end",
+        )
+        assert _slots(puml, 5) == [7]  # inner alt: m3 only
+        assert _slots(puml, 3) == []  # outer alt: no own-level message after m1
+
+    def test_unclosed_block_does_not_crash(self):
+        lines = ["alt a", "alice -> bob: m1", "bob -> alice: m2"]
+        assert _compute_else_slots(lines, 0) == [2]
+
+
+def _add_else(puml, before, label, ordinal=0):
+    svg = _svg(puml)
+    return add_else(puml, svg, _group_box(svg, ordinal), before, label)
+
+
+class TestAddElse:
+    def test_inserts_labeled_else_before_message(self):
+        lines = _add_else(THREE_MESSAGE_ALT, 5, "failure").splitlines()
+        assert lines[3:8] == [
+            "alt success",
+            "alice -> bob: m1",
+            "else failure",
+            "bob -> alice: m2",
+            "alice -> bob: m3",
+        ]
+
+    def test_empty_label_writes_bare_else(self):
+        lines = _add_else(THREE_MESSAGE_ALT, 6, "").splitlines()
+        assert lines[6] == "else"
+
+    def test_whitespace_only_label_writes_bare_else(self):
+        lines = _add_else(THREE_MESSAGE_ALT, 6, "   ").splitlines()
+        assert lines[6] == "else"
+
+    def test_multiline_label_stays_on_one_line(self):
+        lines = _add_else(THREE_MESSAGE_ALT, 5, "a\nb").splitlines()
+        assert lines[5] == "else a\\nb"
+
+    def test_else_is_indented_like_the_alt_header(self):
+        puml = "\n".join(
+            [
+                "@startuml",
+                "participant alice",
+                "participant bob",
+                "  alt a",
+                "      alice -> bob: m1",
+                "      bob -> alice: m2",
+                "  end",
+                "@enduml",
+            ]
+        )
+        assert _add_else(puml, 5, "b").splitlines()[5] == "  else b"
+
+    def test_result_renders_two_branches(self):
+        result = _add_else(THREE_MESSAGE_ALT, 5, "failure")
+        svg = _svg(result)
+        assert len(_else_separators(svg)) == 1
+        assert _renders_messages(result) == ["m1", "m2", "m3"]
+        assert get_group_positions(result, svg) == [{"headerIndex": 3, "endIndex": 8}]
+
+    def test_targets_the_clicked_alt(self):
+        puml = _block(
+            "alice -> bob: m1",
+            "alt inner",
+            "bob -> alice: m2",
+            "alice -> bob: m3",
+            "end",
+        )
+        lines = _add_else(puml, 7, "x", ordinal=1).splitlines()
+        assert lines[7] == "else x"
+        assert lines[5:9] == [
+            "alt inner",
+            "bob -> alice: m2",
+            "else x",
+            "alice -> bob: m3",
+        ]
+
+    @pytest.mark.parametrize("group_type", ["group", "alt", "opt", "loop"])
+    def test_every_group_type_accepts_else(self, group_type):
+        puml = THREE_MESSAGE_ALT.replace("alt success", f"{group_type} success")
+        result = _add_else(puml, 5, "x")
+        assert result.splitlines()[5] == "else x"
+        assert len(_else_separators(_svg(result))) == 1
+        assert _renders_messages(result) == ["m1", "m2", "m3"]
+
+    @pytest.mark.parametrize(
+        "before",
+        [
+            4,  # first message: would leave the first branch empty
+            3,  # the alt header itself
+            7,  # the alt's end
+            99,  # out of range
+            -1,
+        ],
+    )
+    def test_rejects_invalid_position(self, before):
+        with pytest.raises(EditError) as error:
+            _add_else(THREE_MESSAGE_ALT, before, "x")
+        assert error.value.code == "invalid_else_position"
+
+    def test_rejects_message_inside_nested_group(self):
+        puml = _block(
+            "alice -> bob: m1", "loop l", "bob -> alice: m2", "alice -> bob: m3", "end"
+        )
+        with pytest.raises(EditError) as error:
+            _add_else(puml, 8, "x")
+        assert error.value.code == "invalid_else_position"
+
+    def test_rejects_position_directly_after_existing_else(self):
+        with pytest.raises(EditError) as error:
+            _add_else(FLAT_ALT_ELSE, 6, "x")
+        assert error.value.code == "invalid_else_position"
