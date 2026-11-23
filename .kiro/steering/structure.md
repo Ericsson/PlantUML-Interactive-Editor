@@ -22,7 +22,7 @@
 │   │   ├── rename.py       # Participant rename logic (pure puml surgery: alias generation, token-aware reference rewriting, the three declaration cases)
 │   │   ├── message.py      # Message logic (add message, y-based insertion)
 │   │   ├── activation.py   # Activation bar logic (activate + deactivate/destroy pair)
-│   │   ├── group.py        # Group block logic (group, alt, opt, loop)
+│   │   ├── group.py        # Group block logic (group, alt, opt, loop): add, rename, delete, else branches (slots + insertion); note-aware nesting walk
 │   │   ├── box.py          # Participant box logic (add, delete, nesting via teoz, is_box_rect)
 │   │   ├── note.py         # Note logic (add, edit, delete notes)
 │   │   ├── pages.py        # Multi-page (newpage) diagrams: page boundaries, and masking other pages so element modules see only the current one
@@ -55,7 +55,7 @@
 │       ├── hover-highlight.js # Shared editor->diagram hover-highlight core (row map, highlight styles, and editor hover/cursor dispatch), used by activity.js and sequence-operations.js
 │       ├── sequence-message.js  # Sequence add-message interaction (hover, ghost arrow, modal)
 │       ├── sequence-activation.js # Sequence activation-bar interaction (ghost bar, two-click)
-│       ├── sequence-group.js    # Sequence group-block interaction (ghost box, two-click, modal)
+│       ├── sequence-group.js    # Sequence group-block interaction (ghost box, two-click, modal) and the add-else gesture (ghost line snapping to else slots)
 │       ├── sequence-box.js      # Sequence participant-box interaction (horizontal ghost box, two-click add; edit title/color and delete via the lifeline context menu)
 │       ├── sequence-operations.js # Sequence participant operations and orchestration
 │       ├── mode-plantuml.js # Ace editor PlantUML mode
@@ -98,6 +98,7 @@
 │   │   ├── test_message.py
 │   │   ├── test_activation.py
 │   │   ├── test_sequence_group.py
+│   │   ├── test_sequence_else.py          # Else branches: how they render, detection around them, slots, add_else, delete, /addSeqElse, note bodies
 │   │   ├── test_box.py
 │   │   ├── test_newpage.py                # Multi-page (newpage): page model, masking, paged render and routes
 │   │   └── test_sequence_note.py
@@ -109,6 +110,7 @@
 │       ├── test_ribbon.py     # Toolbar ribbon UI tests
 │       ├── test_sequence_activation.py       # Activation bar e2e tests
 │       ├── test_sequence_box.py              # Participant box add/delete/hover e2e tests
+│       ├── test_sequence_else.py             # Else branches: separator not a message, Add else menu item, ghost-line gesture, modal submit/retry
 │       ├── test_sequence_hover_highlight.py  # Editor <-> diagram hover highlighting e2e tests
 │       ├── test_sequence_message_interactions.py # Message add/edit/delete e2e tests
 │       ├── test_sequence_note_menu.py         # Note type menu, modal type selector & create/edit flow e2e tests
