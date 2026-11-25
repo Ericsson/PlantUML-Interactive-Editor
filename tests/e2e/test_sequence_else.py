@@ -1,0 +1,416 @@
+# SPDX-License-Identifier: MIT
+#
+# MIT License
+#
+# Copyright (c) 2026 Ericsson
+
+"""E2E tests for sequence group else branches: detection, menu, gesture, modal."""
+
+import json
+
+import pytest
+
+# m2 is styled exactly like an else separator.
+ALT_ELSE_PUML = """@startuml
+participant alice
+participant bob
+alt success
+alice -> bob: m1
+else failure
+bob -[#black]-> alice: m2
+else
+alice --> bob: m3
+end
+@enduml"""
+
+# Splits dashed lines into full-box-width separators and message arrows.
+_PROBE = """() => {
+    const g = document.querySelector('#colb svg g');
+    const all = g.querySelectorAll('*');
+    const bounds = groupBoxBounds(all);
+    const dashed = Array.from(g.querySelectorAll('line')).filter(l =>
+        (l.getAttribute('style') || '').includes('stroke-width:1.0;stroke-dasharray'));
+    const box = bounds[0];
+    const isFullWidth = l =>
+        parseFloat(l.getAttribute('x1')) === box.x &&
+        parseFloat(l.getAttribute('x2')) === box.right;
+    const separators = dashed.filter(isFullWidth);
+    const dashedMessages = dashed.filter(l => !isFullWidth(l));
+    const elseLabel = Array.from(g.querySelectorAll('text'))
+        .find(t => t.textContent === '[failure]');
+    const registered = new Set();
+    for (const entries of sequenceRowMap.values()) {
+        for (const entry of entries) registered.add(entry.el);
+    }
+    return {
+        separatorCount: separators.length,
+        separatorsAsMessage: separators.map(s => checkIfMessageElement(s, bounds)),
+        separatorsRegistered: separators.map(s => registered.has(s)),
+        dashedMessageStyles: dashedMessages.map(l => l.getAttribute('style')),
+        dashedMessagesAsMessage: dashedMessages.map(l => checkIfMessageElement(l, bounds)),
+        dashedMessagesRegistered: dashedMessages.map(l => registered.has(l)),
+        labelAsMessage: elseLabel ? checkIfMessageElement(elseLabel, bounds) : null,
+    };
+}"""
+
+
+def _load_alt_else(page):
+    page.evaluate(f"setPuml({json.dumps(ALT_ELSE_PUML)})")
+    page.wait_for_function(
+        "() => messagePositions.length === 3 && "
+        "document.querySelector('#colb svg g') !== null",
+        timeout=15000,
+    )
+    return page.evaluate(_PROBE)
+
+
+class TestElseSeparatorDetection:
+    def test_separators_and_label_are_not_messages(self, app_url, page):
+        result = _load_alt_else(page)
+
+        assert result["separatorCount"] == 2
+        assert result["separatorsAsMessage"] == [False, False]
+        assert result["separatorsRegistered"] == [False, False]
+        assert result["labelAsMessage"] is False
+
+        # The look-alike message is still a message.
+        assert (
+            "stroke:#000000;stroke-width:1.0;stroke-dasharray:2.0,2.0;"
+            in (result["dashedMessageStyles"])
+        )
+        assert result["dashedMessagesAsMessage"] == [True, True]
+        assert result["dashedMessagesRegistered"] == [True, True]
+
+
+class TestIsElseSeparatorPredicate:
+    """isElseSeparator on hand-built lines and bounds."""
+
+    _CASES = """() => {
+        const ns = 'http://www.w3.org/2000/svg';
+        const line = (x1, x2, y) => {
+            const l = document.createElementNS(ns, 'line');
+            l.setAttribute('style', 'stroke:#000000;stroke-width:1.0;stroke-dasharray:2.0,2.0;');
+            l.setAttribute('x1', x1); l.setAttribute('x2', x2);
+            l.setAttribute('y1', y); l.setAttribute('y2', y);
+            return l;
+        };
+        const bounds = [{x: 10, y: 50, right: 155, bottom: 175}];
+        const solid = line(10, 155, 100);
+        solid.setAttribute('style', 'stroke:#000000;stroke-width:1.0;');
+        return {
+            fullWidth: isElseSeparator(line(10, 155, 100), bounds),
+            noBounds: isElseSeparator(line(10, 155, 100), []),
+            lifelineToLifeline: isElseSeparator(line(42.5, 89.5, 100), bounds),
+            outsideBoxVertically: isElseSeparator(line(10, 155, 200), bounds),
+            solidFullWidth: isElseSeparator(solid, bounds),
+        };
+    }"""
+
+    def test_predicate_cases(self, app_url, page):
+        result = page.evaluate(self._CASES)
+
+        assert result == {
+            "fullWidth": True,
+            "noBounds": False,
+            "lifelineToLifeline": False,
+            "outsideBoxVertically": False,
+            "solidFullWidth": False,
+        }
+
+
+def _alt(keyword, *messages):
+    """A two-participant diagram with one group wrapping the given messages."""
+    return "\n".join(
+        ["@startuml", "participant alice", "participant bob", f"{keyword} g"]
+        + [f"alice -> bob: {m}" for m in messages]
+        + ["end", "@enduml"]
+    )
+
+
+# Right-clicks the nth group's tab (or keyword) and reports the menu state.
+_OPEN_GROUP_MENU = """([ordinal, target]) => {
+    const g = document.querySelector('#colb svg g');
+    const tabs = Array.from(g.querySelectorAll('path'))
+        .filter(p => p.getAttribute('fill') === '#EEEEEE');
+    let el = tabs[ordinal];
+    if (target === 'keyword') {
+        // the bold keyword text follows the tab and its box
+        el = el.nextElementSibling.nextElementSibling;
+    }
+    el.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true}));
+    const menu = document.getElementById('seq-group-menu');
+    const item = document.getElementById('seq-addElse-item');
+    return {
+        menuShown: menu.style.display === 'block',
+        addElseShown: item.style.display !== 'none',
+        ordinal: contextGroupOrdinal,
+    };
+}"""
+
+
+def _load(page, puml, groups):
+    page.evaluate(f"setPuml({json.dumps(puml)})")
+    page.wait_for_function(
+        f"() => groupPositions.length === {groups} && "
+        "document.querySelector('#colb svg g') !== null",
+        timeout=15000,
+    )
+
+
+def _open_group_menu(page, ordinal=0, target="tab"):
+    return page.evaluate(_OPEN_GROUP_MENU, [ordinal, target])
+
+
+class TestAddElseMenuItem:
+    # Which groups get slots is unit-tested in tests/sequence/.
+    def test_shown_for_group_with_an_else_position(self, app_url, page):
+        _load(page, _alt("alt", "m1", "m2"), 1)
+        result = _open_group_menu(page)
+        assert result["menuShown"] is True
+        assert result["addElseShown"] is True
+
+    def test_hidden_when_the_group_has_no_else_slots(self, app_url, page):
+        # Only an unmatched group (headerIndex -1) has no slots.
+        _load(page, _alt("alt", "m1"), 1)
+        page.evaluate("groupPositions[0].elseSlots = []")
+        assert _open_group_menu(page)["addElseShown"] is False
+
+    def test_right_clicking_the_keyword_text_also_toggles_it(self, app_url, page):
+        _load(page, _alt("alt", "m1", "m2"), 1)
+        assert _open_group_menu(page, target="keyword")["addElseShown"] is True
+
+    def test_follows_the_clicked_group(self, app_url, page):
+        puml = "\n".join(
+            [
+                "@startuml",
+                "participant alice",
+                "participant bob",
+                "alt outer",
+                "alice -> bob: m1",
+                "loop inner",
+                "bob -> alice: m2",
+                "end",
+                "end",
+                "@enduml",
+            ]
+        )
+        _load(page, puml, 2)
+        page.evaluate("groupPositions[1].elseSlots = []")
+        outer = _open_group_menu(page, 0)
+        inner = _open_group_menu(page, 1)
+        assert (outer["ordinal"], outer["addElseShown"]) == (0, True)
+        assert (inner["ordinal"], inner["addElseShown"]) == (1, False)
+
+
+# The reported case. Line indexes: 3 alt success | 4 granted | 5 end
+SINGLE_MESSAGE_ALT = """@startuml
+participant Alice
+participant Bob
+alt success
+Alice -> Bob: granted
+end
+@enduml"""
+
+# Screen point of an SVG-space coordinate in the live diagram.
+_TO_SCREEN = """([x, y]) => {
+    const svg = document.querySelector('#colb svg');
+    const p = svg.createSVGPoint();
+    p.x = x; p.y = y;
+    const s = p.matrixTransform(svg.getScreenCTM());
+    return [s.x, s.y];
+}"""
+
+_GHOST = """() => {
+    const line = ghostElseLine && ghostElseLine.parentNode ? ghostElseLine : null;
+    return line ? parseFloat(line.getAttribute('y1')) : null;
+}"""
+
+
+def _start_else_mode(page, puml, groups=1, ordinal=0):
+    """Load the diagram, right-click the group's tab and click "Add else"."""
+    _load(page, puml, groups)
+    assert _open_group_menu(page, ordinal)["addElseShown"] is True
+    page.click("#seq-addElse")
+    assert page.evaluate("isElseAddMode()") is True
+
+
+def _slots(page):
+    return page.evaluate("elseTarget.slots")
+
+
+def _move_to(page, y):
+    """Move the mouse to SVG-space y, horizontally inside the group box."""
+    x = page.evaluate(
+        "parseFloat(elseTarget.groupRect.getAttribute('x')) + "
+        "parseFloat(elseTarget.groupRect.getAttribute('width')) / 2"
+    )
+    sx, sy = page.evaluate(_TO_SCREEN, [x, y])
+    page.mouse.move(sx, sy)
+
+
+class TestElseAddMode:
+    def test_add_else_shows_the_ghost_line(self, app_url, page):
+        _start_else_mode(page, SINGLE_MESSAGE_ALT)
+        slots = _slots(page)
+        assert [s["lineIndex"] for s in slots] == [4, 5]
+        assert page.evaluate(_GHOST) == slots[0]["y"]
+
+    def test_ghost_line_spans_the_group_box(self, app_url, page):
+        _start_else_mode(page, SINGLE_MESSAGE_ALT)
+        span = page.evaluate(
+            """() => [
+                ghostElseLine.getAttribute('x1') ===
+                    elseTarget.groupRect.getAttribute('x'),
+                parseFloat(ghostElseLine.getAttribute('x2')) ===
+                    parseFloat(elseTarget.groupRect.getAttribute('x')) +
+                    parseFloat(elseTarget.groupRect.getAttribute('width')),
+            ]"""
+        )
+        assert span == [True, True]
+
+    def test_ghost_line_snaps_to_the_nearest_slot(self, app_url, page):
+        _start_else_mode(page, SINGLE_MESSAGE_ALT)
+        before_msg, before_end = _slots(page)
+        _move_to(page, before_end["y"] + 3)
+        assert page.evaluate(_GHOST) == before_end["y"]
+        _move_to(page, before_msg["y"] - 3)
+        assert page.evaluate(_GHOST) == before_msg["y"]
+
+    def test_escape_cancels(self, app_url, page):
+        _start_else_mode(page, SINGLE_MESSAGE_ALT)
+        page.keyboard.press("Escape")
+        assert page.evaluate("isElseAddMode()") is False
+        assert page.evaluate(_GHOST) is None
+
+    def test_click_opens_the_label_modal(self, app_url, page):
+        _start_else_mode(page, SINGLE_MESSAGE_ALT)
+        _move_to(page, _slots(page)[1]["y"])
+        page.mouse.down()
+        page.mouse.up()
+        page.wait_for_selector("#seq-group-modalForm.show")
+        assert page.text_content("#seq-group-modalForm .modal-title") == "Add else"
+        assert page.input_value("#seq-group-label-text") == ""
+        assert page.evaluate("isElseAddMode()") is False
+        assert page.evaluate(_GHOST) is None
+
+    def _add_via_ui(self, page, puml, slot, label):
+        _start_else_mode(page, puml)
+        _move_to(page, _slots(page)[slot]["y"])
+        page.mouse.down()
+        page.mouse.up()
+        page.wait_for_selector("#seq-group-modalForm.show")
+        page.fill("#seq-group-label-text", label)
+        page.click("#seq-submit-group")
+        page.wait_for_function("() => editor.session.getValue().includes('else')")
+        return page.evaluate("editor.session.getValue()").splitlines()
+
+    def test_adds_labeled_else_before_end(self, app_url, page):
+        lines = self._add_via_ui(page, SINGLE_MESSAGE_ALT, 1, "failure")
+        assert lines[3:7] == [
+            "alt success",
+            "Alice -> Bob: granted",
+            "else failure",
+            "end",
+        ]
+
+
+class TestElseSlotYs:
+    """computeElseSlotYs on hand-built inputs (no tab, so the fallback height)."""
+
+    _CASE = """([slots, messages]) => {
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', '10'); rect.setAttribute('y', '50');
+        rect.setAttribute('width', '100'); rect.setAttribute('height', '150');
+        const group = {headerIndex: 3, endIndex: 10, elseSlots: slots};
+        return computeElseSlotYs(rect, group, messages).map(s => [s.lineIndex, s.y]);
+    }"""
+
+    def test_message_and_end_slots(self, app_url, page):
+        # tab bottom = 50 + 17 = 67, box bottom = 200
+        messages = [{"index": 4, "cy": 90}, {"index": 6, "cy": 130}]
+        result = page.evaluate(self._CASE, [[4, 6, 10], messages])
+        assert result == [
+            [4, (67 + 90) / 2],
+            [6, (90 + 130) / 2],
+            [10, (130 + 200) / 2],
+        ]
+
+    def test_empty_group_end_slot(self, app_url, page):
+        assert page.evaluate(self._CASE, [[10], []]) == [[10, (67 + 200) / 2]]
+
+    def test_messages_outside_the_group_are_ignored(self, app_url, page):
+        messages = [
+            {"index": 1, "cy": 20},
+            {"index": 4, "cy": 90},
+            {"index": 12, "cy": 300},
+        ]
+        result = page.evaluate(self._CASE, [[4, 10], messages])
+        assert result == [[4, (67 + 90) / 2], [10, (90 + 200) / 2]]
+
+
+class TestGroupModalRouting:
+    """submitGroup sends the request for the current groupModalMode."""
+
+    _SUBMIT = """async (mode) => {
+        groupOperationEventListeners();
+        document.getElementById('colb').innerHTML =
+            '<svg><g><rect fill="none" x="1" y="2"></rect></g></svg>';
+        const rect = document.querySelector('#colb rect');
+        lastclickedsvgelement = rect;
+        pendingElse = {groupRect: rect, beforeLineIndex: 5};
+        groupModalMode = mode;
+        const calls = [];
+        const realFetch = window.fetch;
+        window.fetch = (url, opts) => {
+            calls.push([String(url), JSON.parse(opts.body)]);
+            return Promise.resolve({json: () => Promise.resolve({error: 'stub'})});
+        };
+        await submitGroup();
+        window.fetch = realFetch;
+        return {calls, modeAfter: groupModalMode};
+    }"""
+
+    def test_else_mode_posts_add_seq_else(self, app_url, page):
+        result = page.evaluate(self._SUBMIT, "else")
+        route, body = result["calls"][0]
+        assert route == "addSeqElse"
+        assert body["beforeLineIndex"] == 5
+        assert body["svgelement"].startswith("<rect")
+
+    # Submit twice; after a rejection the retry must repeat the request.
+    _RESUBMIT = """async ([mode, responses]) => {
+        groupOperationEventListeners();
+        document.getElementById('colb').innerHTML =
+            '<svg><g><rect fill="none" x="1" y="2"></rect></g></svg>';
+        const rect = document.querySelector('#colb rect');
+        lastclickedsvgelement = rect;
+        pendingElse = {groupRect: rect, beforeLineIndex: 5};
+        groupModalMode = mode;
+        const calls = [];
+        const realFetch = window.fetch;
+        window.fetch = (url, opts) => {
+            calls.push([String(url), JSON.parse(opts.body)]);
+            const data = responses[calls.length - 1];
+            return Promise.resolve({json: () => Promise.resolve(data)});
+        };
+        await submitGroup();
+        await submitGroup();
+        window.fetch = realFetch;
+        return {calls, modeAfter: groupModalMode, pendingAfter: pendingElse};
+    }"""
+
+    @pytest.mark.parametrize(
+        ("mode", "route"), [("else", "addSeqElse"), ("rename", "renameSeqGroup")]
+    )
+    def test_resubmit_after_error_repeats_the_request(self, app_url, page, mode, route):
+        errors = [{"error": "rejected"}, {"error": "rejected"}]
+        result = page.evaluate(self._RESUBMIT, [mode, errors])
+        assert [c[0] for c in result["calls"]] == [route, route]
+        assert result["calls"][0][1] == result["calls"][1][1]
+
+    def test_success_resets_the_modal_state(self, app_url, page):
+        responses = [{"error": "rejected"}, {"plantuml": "@startuml\n@enduml"}]
+        result = page.evaluate(self._RESUBMIT, ["else", responses])
+        assert [c[0] for c in result["calls"]] == ["addSeqElse", "addSeqElse"]
+        assert result["modeAfter"] == "add"
+        assert result["pendingAfter"] is None

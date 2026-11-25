@@ -29,7 +29,7 @@ from flask import Blueprint, jsonify, request
 from .activation import add_activation, delete_activation
 from .box import add_box, delete_box, edit_box, get_box_label
 from .errors import user_message
-from .group import add_group, delete_group, get_group_label, rename_group
+from .group import add_else, add_group, delete_group, get_group_label, rename_group
 from .message import (
     add_message,
     delete_message,
@@ -312,6 +312,22 @@ def renameseqgroup():
     svgelement = data["svgelement"]
     label = data["label"]
     return jsonify({"plantuml": restore(rename_group(puml, svg, svgelement, label))})
+
+
+@sequence_bp.route("/addSeqElse", methods=["POST"])
+def addseqelse():
+    data = request.get_json()
+    puml = data["plantuml"]
+    puml, restore = _page_view(puml, data)
+    svg = data["svg"]
+    svgelement = data["svgelement"]
+    before_line_index = data["beforeLineIndex"]
+    label = data.get("label", "")
+    try:
+        result = add_else(puml, svg, svgelement, before_line_index, label)
+    except ValueError as e:
+        return jsonify({"error": user_message(e)}), 400
+    return jsonify({"plantuml": restore(result)})
 
 
 @sequence_bp.route("/deleteSeqGroup", methods=["POST"])

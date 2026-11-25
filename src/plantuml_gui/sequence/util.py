@@ -23,7 +23,7 @@
 # SOFTWARE.
 
 import re
-from typing import List, Optional
+from typing import List, Optional, Set
 
 from pyquery import PyQuery as Pq
 
@@ -247,6 +247,18 @@ def note_regions(puml: str) -> List[tuple[int, int]]:
         regions.append((i, end))
         i = end + 1
     return regions
+
+
+def note_line_indexes(lines: List[str]) -> Set[int]:
+    """Line indexes inside any note (header, body and ``end note``).
+
+    A block note's body is free text, so callers walking puml statements
+    (group nesting, page masking) skip these lines.
+    """
+    inside: Set[int] = set()
+    for start, end in note_regions("\n".join(lines)):
+        inside.update(range(start, end + 1))
+    return inside
 
 
 def find_note_region(puml: str, note_index: int) -> tuple[int, int]:

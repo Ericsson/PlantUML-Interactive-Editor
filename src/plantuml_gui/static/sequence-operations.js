@@ -5,7 +5,9 @@ const LIFELINE_TOLERANCE = 15;
 
 // Note/group positions fetched from backend (refreshed each render)
 let notePositions = []; // [{cy, index}, ...]
-let groupPositions = []; // [{headerIndex, endIndex}, ...]
+let groupPositions = []; // [{headerIndex, endIndex, elseSlots}, ...]
+// Ordinal (index into groupPositions) of the group whose menu was last opened
+let contextGroupOrdinal = -1;
 let boxPositions = []; // [{headerIndex, endIndex}, ...]
 
 // Elements highlighted from the editor side, with how to restore them
@@ -369,6 +371,7 @@ async function setHandlersForSequenceDiagram(pumlcontent, element, renderId) {
         cancelMessageAddMode();
         cancelActivationAddMode();
         cancelGroupAddMode();
+        cancelElseAddMode();
         cancelBoxAddMode();
         cancelNoteAddMode();
 
@@ -409,12 +412,43 @@ function checkIfParticipant(svgelements, index) {
         el.hasAttribute('rx') && el.hasAttribute('ry');
 }
 
-// Identifies message elements (polygons and lines with stroke-width:1.0, and message text)
-function checkIfMessageElement(svgelement) {
+// Bounds of every group box (see checkIfGroupBox), computed once per render
+// and passed to isElseSeparator.
+function groupBoxBounds(svgelements) {
+    return Array.from(svgelements).filter(checkIfGroupBox).map((rect) => {
+        const x = parseFloat(rect.getAttribute('x'));
+        const y = parseFloat(rect.getAttribute('y'));
+        return {
+            x: x,
+            y: y,
+            right: x + parseFloat(rect.getAttribute('width')),
+            bottom: y + parseFloat(rect.getAttribute('height'))
+        };
+    });
+}
+
+// Identifies a group's else separator: a dashed line spanning exactly the
+// full width of a group box. Its style is identical to a black dashed message
+// (-[#black]->), so geometry is what tells them apart - message lines start
+// and end at lifelines, never at a box edge.
+function isElseSeparator(svgelement, groupBounds) {
+    if (svgelement.tagName.toLowerCase() !== 'line') return false;
+    if (!(svgelement.getAttribute('style') || '').includes('stroke-dasharray')) return false;
+    const x1 = parseFloat(svgelement.getAttribute('x1'));
+    const x2 = parseFloat(svgelement.getAttribute('x2'));
+    const y = parseFloat(svgelement.getAttribute('y1'));
+    const near = (a, b) => Math.abs(a - b) < 0.01; // tolerate float sums of x + width
+    return groupBounds.some((b) =>
+        near(x1, b.x) && near(x2, b.right) && y > b.y && y < b.bottom);
+}
+
+// Identifies message elements (polygons and lines with stroke-width:1.0, and
+// message text). groupBounds (from groupBoxBounds) excludes else separators.
+function checkIfMessageElement(svgelement, groupBounds = []) {
     const tag = svgelement.tagName.toLowerCase();
     const style = svgelement.getAttribute('style') || '';
     if ((tag === 'polygon' || tag === 'line') && style.includes('stroke-width:1.0')) {
-        return true;
+        return !isElseSeparator(svgelement, groupBounds);
     }
     if (tag === 'text' && svgelement.getAttribute('font-size') === '13') {
         // Exclude bold text: it's a group keyword/label, not a message
@@ -447,11 +481,17 @@ function checkIfGroupHeaderText(svgelement) {
 
 // Opens the group context menu, identifying the group by its box rect
 // (the backend matches groups by the box's x/y, regardless of which part
-// of the header - tab or label text - was actually right-clicked).
-function openGroupContextMenu(groupRect, e) {
+// of the header - tab or label text - was actually right-clicked) and by its
+// ordinal into groupPositions. "Add else" only shows when the group has a
+// position an else can go (elseSlots, computed by the backend).
+function openGroupContextMenu(groupRect, ordinal, e) {
     lastclickedsvgelement = groupRect;
+    contextGroupOrdinal = ordinal;
     e.preventDefault();
     e.stopPropagation();
+    const group = groupPositions[ordinal];
+    const canAddElse = !!(group && group.elseSlots && group.elseSlots.length > 0);
+    document.getElementById('seq-addElse-item').style.display = canAddElse ? '' : 'none';
     var contextMenu = document.getElementById('seq-group-menu');
     contextMenu.style.display = 'block';
     contextMenu.style.left = e.pageX + 'px';
@@ -503,7 +543,8 @@ function setupGroupHandlers(svgelements) {
                 currentGroupRect = svgelement;
                 let tabPath = pendingTabPath;
                 let groupRectForTab = currentGroupRect;
-                tabPath.addEventListener('contextmenu', (e) => openGroupContextMenu(groupRectForTab, e));
+                const ordinalForTab = groupOrdinal;
+                tabPath.addEventListener('contextmenu', (e) => openGroupContextMenu(groupRectForTab, ordinalForTab, e));
                 addGroupHoverMarkers(tabPath, groupOrdinal);
                 // Register the box and its tab for editor->diagram highlighting
                 // under both the group's header and end lines (mirrors the
@@ -525,7 +566,8 @@ function setupGroupHandlers(svgelements) {
         if (checkIfGroupHeaderText(svgelement)) {
             if (headerTextsRemaining > 0 && currentGroupRect) {
                 let groupRect = currentGroupRect;
-                svgelement.addEventListener('contextmenu', (e) => openGroupContextMenu(groupRect, e));
+                const ordinal = groupOrdinal;
+                svgelement.addEventListener('contextmenu', (e) => openGroupContextMenu(groupRect, ordinal, e));
                 addGroupHoverMarkers(svgelement, groupOrdinal);
                 headerTextsRemaining--;
             }
@@ -540,9 +582,10 @@ function setupGroupHandlers(svgelements) {
 // --- Message element handlers (hover, contextmenu) ---
 
 function setupMessageHandlers(svgelements, svg) {
+    const groupBounds = groupBoxBounds(svgelements);
     for (let index = 0; index < svgelements.length; index++) {
         let svgelement = svgelements[index];
-        if (!checkIfMessageElement(svgelement)) continue;
+        if (!checkIfMessageElement(svgelement, groupBounds)) continue;
 
         // Register this element for editor->diagram highlighting on its message's
         // row, assigning it to the nearest message (same rule the mouseover uses).
@@ -1025,10 +1068,12 @@ function noteOperationEventListeners() {
 
 // --- Group operation event listeners ---
 
-let groupEditMode = false;
+// What the shared group label modal submits: 'add' (new group), 'rename'
+// (existing group's label) or 'else' (new else branch); see submitGroup.
+let groupModalMode = 'add';
 
 function groupOperationEventListeners() {
-    // Submit button in the group label modal (Add / Rename)
+    // Submit button in the group label modal (Add / Rename / Add else)
     $('#seq-submit-group').on('click', submitGroup);
 
     // "Rename" context menu item: fetch current label and show the group modal
@@ -1048,7 +1093,7 @@ function groupOperationEventListeners() {
                 })
             });
             var data = await response.json();
-            groupEditMode = true;
+            groupModalMode = 'rename';
             document.querySelector('#seq-group-modalForm .modal-title').textContent = 'Rename ' + data.type;
             document.getElementById('seq-group-label-text').value = data.label;
             $('#seq-group-modalForm').modal('show');
@@ -1105,11 +1150,22 @@ function groupOperationEventListeners() {
         startGroupAddModeFromContext(item.getAttribute('data-group-type'));
     });
 
-    // Escape cancels group-add mode
+    // Escape cancels group-add and else-add mode
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && isAddGroupActive) {
             cancelGroupAddMode();
         }
+        if (e.key === 'Escape' && isElseAddMode()) {
+            cancelElseAddMode();
+        }
+    });
+
+    // "Add else" in the group menu enters else-add mode for that group
+    document.getElementById('seq-addElse').addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        document.getElementById('seq-group-menu').style.display = 'none';
+        startElseAddMode(lastclickedsvgelement, groupPositions[contextGroupOrdinal]);
     });
 
 }

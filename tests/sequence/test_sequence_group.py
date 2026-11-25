@@ -448,9 +448,9 @@ class TestGetGroupPositions:
         svg = extract_g_inner(_create_svg_from_uml(NESTED_GROUP_PUML))
         positions = get_group_positions(NESTED_GROUP_PUML, svg)
         assert positions == [
-            {"headerIndex": 3, "endIndex": 8},
-            {"headerIndex": 5, "endIndex": 7},
-            {"headerIndex": 9, "endIndex": 11},
+            {"headerIndex": 3, "endIndex": 8, "elseSlots": [4, 8]},
+            {"headerIndex": 5, "endIndex": 7, "elseSlots": [6, 7]},
+            {"headerIndex": 9, "endIndex": 11, "elseSlots": [10, 11]},
         ]
 
     def test_no_groups_returns_empty(self):
@@ -470,4 +470,8 @@ class TestGetGroupPositions:
             assert response.status_code == 200
             positions = response.get_json()["groups"]
             assert len(positions) == 3
-            assert positions[0] == {"headerIndex": 3, "endIndex": 8}
+            assert positions[0] == {
+                "headerIndex": 3,
+                "endIndex": 8,
+                "elseSlots": [4, 8],
+            }

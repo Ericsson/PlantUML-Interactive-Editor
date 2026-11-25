@@ -33,6 +33,10 @@ response (CodeQL ``py/stack-trace-exposure``).
 
 USER_MESSAGES = {
     "invalid_group_type": ("Invalid group type. Must be one of: group, alt, opt, loop"),
+    "invalid_else_position": (
+        "Can't add an else here. Pick a point inside the group, "
+        "not inside a group nested in it."
+    ),
     "box_crosses_box": ("Box overlaps an existing box. Boxes may nest but not cross."),
     "box_participant_undeclared": (
         "A participant can only be put in a box if it is declared on its "

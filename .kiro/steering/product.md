@@ -35,7 +35,7 @@ Enterprise developers and technical teams (primarily at Ericsson and similar com
 - Add messages between participants; edit message text and arrow color
 - Notes (add with a choice of type - Note, Hexagonal, Rectangular; edit text, type, and background color; delete)
 - Activation bars (activate, deactivate, destroy participants)
-- Group blocks (group, alt, opt, loop): add, rename title, delete (unwraps, keeping contents)
+- Group blocks (group, alt, opt, loop): add, rename title, add else branches (ghost-line gesture), delete (unwraps, keeping contents)
 - Participant boxes: add around contiguous participants (ghost-box gesture), edit title/color, delete (unwraps, keeping participants); nested boxes supported via the teoz engine
 - Bidirectional hover highlighting between the editor and messages, participants, notes, group blocks, and participant boxes
 - Multi-page diagrams (`newpage`): previous/next page navigation, every page fully editable, the editor cursor switches page, PNG of the current page
