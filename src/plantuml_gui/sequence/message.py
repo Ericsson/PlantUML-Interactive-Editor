@@ -28,9 +28,9 @@ from typing import Dict, List
 from pyquery import PyQuery as Pq
 
 from .classes import Diagram, Participant, find_arrow
+from .insertion import find_insertion_index
 from .util import (
     escape_multiline_text,
-    find_insertion_index,
     resolve_color,
     unescape_multiline_text,
 )
@@ -73,7 +73,7 @@ def add_message(
     reciever = _find_closest_participant(diagram.participants, second_x)
 
     lines = puml.splitlines()
-    insert_at = find_insertion_index(diagram.messages, svg, puml, first_y, lines)
+    insert_at = find_insertion_index(diagram.messages, svg, puml, first_y)
     resolved = resolve_color(color, "")
     arrow = _apply_arrow_color(arrow_type, resolved)
     message = _wrap_text_color(escape_multiline_text(message), resolved)

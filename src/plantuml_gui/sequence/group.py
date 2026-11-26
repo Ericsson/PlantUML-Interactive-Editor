@@ -30,7 +30,7 @@ wraps a range of messages (identified by their puml line indexes) in a
 with ``else <label>`` lines.
 """
 
-from typing import Dict, Iterator, List, Tuple
+from typing import Dict, Iterator, List, NamedTuple, Tuple
 
 from pyquery import PyQuery as Pq
 
@@ -184,8 +184,8 @@ def _compute_else_slots(lines: List[str], header_index: int) -> List[int]:
     return slots
 
 
-def _count_group_boxes(svg: str) -> int:
-    """Count real group boxes, skipping PlantUML's invisible duplicate rect.
+def _group_box_rects(svg: str) -> List[Pq]:
+    """Return the real group box rects, skipping PlantUML's invisible duplicate.
 
     Alongside the visible bordered box (rect fill="none") that follows each
     group's keyword tab (path fill="#EEEEEE"), PlantUML also emits an
@@ -197,7 +197,7 @@ def _count_group_boxes(svg: str) -> int:
     same rule the frontend uses in setupGroupHandlers) avoids that.
     """
     d = Pq(svg)
-    count = 0
+    rects: List[Pq] = []
     pending_tab = False
     for el in d.children().items():
         tag = el[0].tag
@@ -209,11 +209,88 @@ def _count_group_boxes(svg: str) -> int:
             continue
         if tag == "rect" and el.attr("fill") == "none":
             if pending_tab:
-                count += 1
+                rects.append(el)
             pending_tab = False
             continue
         pending_tab = False
-    return count
+    return rects
+
+
+class _Box(NamedTuple):
+    """A group box's edges in SVG coordinates."""
+
+    left: float
+    right: float
+    top: float
+    bottom: float
+
+    @classmethod
+    def from_rect(cls, rect: Pq) -> "_Box":
+        x = float(rect.attr("x") or 0)
+        y = float(rect.attr("y") or 0)
+        return cls(
+            x,
+            x + float(rect.attr("width") or 0),
+            y,
+            y + float(rect.attr("height") or 0),
+        )
+
+
+# Tolerance for comparing an else separator's endpoints to its box's edges,
+# which PlantUML computes as float sums (x + width).
+_EDGE_TOLERANCE = 0.01
+
+
+def _else_separator_ys(svg: str, box: _Box) -> List[float]:
+    """Return the y of each else separator in ``box``, top to bottom.
+
+    An else separator is a dashed line spanning exactly the box's full width
+    (the rule isElseSeparator uses in the frontend; its style alone matches a
+    black dashed message). Nested boxes are inset, so a separator only ever
+    spans the box it belongs to.
+    """
+    ys = []
+    for line in Pq(svg)("line").items():
+        if "stroke-dasharray" not in (line.attr("style") or ""):
+            continue
+        y = float(line.attr("y1") or 0)
+        if (
+            abs(float(line.attr("x1") or 0) - box.left) < _EDGE_TOLERANCE
+            and abs(float(line.attr("x2") or 0) - box.right) < _EDGE_TOLERANCE
+            and box.top < y < box.bottom
+        ):
+            ys.append(y)
+    return sorted(ys)
+
+
+def group_boundary_positions(puml: str, svg: str) -> List[Tuple[float, int]]:
+    """Return ``(y, line_index)`` for every group's header, else and 'end' line.
+
+    The header sits at its box's top edge, each else at its separator and the
+    'end' at the bottom edge. Ordered by y alongside messages and notes (see
+    insertion.py), they keep a y-based insertion on the right side of a group
+    boundary.
+
+    Groups are matched to puml headers by ordinal, as in get_group_positions.
+    Separators are only used when their count matches the group's own else
+    lines, so a mismatch can never place an element in the wrong branch.
+    """
+    lines = puml.splitlines()
+    positions: List[Tuple[float, int]] = []
+    for n, rect in enumerate(_group_box_rects(svg), start=1):
+        header_index = _find_group_line_index(puml, n)
+        if header_index == -1:
+            continue
+        box = _Box.from_rect(rect)
+        positions.append((box.top, header_index))
+        else_ys = _else_separator_ys(svg, box)
+        else_indexes = _find_own_else_indexes(lines, header_index)
+        if len(else_ys) == len(else_indexes):
+            positions.extend(zip(else_ys, else_indexes))
+        end_index = _find_group_end_index(lines, header_index)
+        if end_index != -1:
+            positions.append((box.bottom, end_index))
+    return positions
 
 
 def get_group_positions(puml: str, svg: str) -> List[Dict[str, object]]:
@@ -227,7 +304,7 @@ def get_group_positions(puml: str, svg: str) -> List[Dict[str, object]]:
     position add_else would reject.
     """
     lines = puml.splitlines()
-    group_count = _count_group_boxes(svg)
+    group_count = len(_group_box_rects(svg))
 
     positions: List[Dict[str, object]] = []
     for n in range(1, group_count + 1):
