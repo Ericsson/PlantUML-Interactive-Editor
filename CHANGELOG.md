@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### External
+
+- Updated the sequence-diagram demo
+
 ## [0.32.1] - 2026-11-23
 
 ### External
