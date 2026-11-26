@@ -104,6 +104,92 @@ placeholder4 *-> obj2
         }""")
         assert result["success"] is True
 
+    def test_indents_sequence_blocks(self, app_url, page):
+        """Boxes and groups nest, else sits at its group's level, end closes it."""
+        puml = "\n".join(
+            [
+                "@startuml",
+                "participant A",
+                'box "B" #LightBlue',
+                "participant B",
+                "end box",
+                "group outer",
+                "A -> B: one",
+                "alt inner",
+                "B -> A: two",
+                "else other",
+                "B -> A: three",
+                "end",
+                "end",
+                "activate A",
+                "A -> A: self",
+                "deactivate A",
+                "@enduml",
+            ]
+        )
+        result = page.evaluate("puml => indentPuml(puml)", puml)
+        assert result.split("\n") == [
+            "@startuml",
+            "participant A",
+            'box "B" #LightBlue',
+            "    participant B",
+            "end box",
+            "group outer",
+            "    A -> B: one",
+            "    alt inner",
+            "        B -> A: two",
+            "    else other",
+            "        B -> A: three",
+            "    end",
+            "end",
+            "activate A",
+            "A -> A: self",
+            "deactivate A",
+            "@enduml",
+        ]
+
+    def test_activity_end_is_not_a_block_close(self, app_url, page):
+        """In an activity diagram 'end' is a stop marker, so the activity rules still apply."""
+        puml = "@startuml\nstart\nif (a) then (yes)\n:b;\nend\nendif\n@enduml"
+        result = page.evaluate("puml => indentPuml(puml)", puml)
+        assert result.split("\n") == [
+            "@startuml",
+            "start",
+            "if (a) then (yes)",
+            "    :b;",
+            "    end",
+            "endif",
+            "@enduml",
+        ]
+
+    def test_keywords_match_whole_words(self, app_url, page):
+        """'elseif' is still a branch, while a participant named 'boxer' opens nothing."""
+        activity = "@startuml\nstart\nif (a) then (yes)\n:b;\nelseif (c) then (yes)\n:d;\nendif\n@enduml"
+        assert page.evaluate("puml => indentPuml(puml)", activity).split("\n") == [
+            "@startuml",
+            "start",
+            "if (a) then (yes)",
+            "    :b;",
+            "elseif (c) then (yes)",
+            "    :d;",
+            "endif",
+            "@enduml",
+        ]
+        sequence = "@startuml\nparticipant boxer\nboxer -> boxer: hi\nboxer -> boxer: again\n@enduml"
+        assert page.evaluate("puml => indentPuml(puml)", sequence) == sequence
+
+    def test_sequence_demo_keeps_its_indentation(self, app_url, page):
+        """The demo is written already indented; loading it must not change that."""
+        result = page.evaluate("""() => {
+            setSequence();
+            return editor.getValue();
+        }""")
+        lines = result.split("\n")
+        assert "    participant Participant3" in lines
+        assert "        Participant2 -> Participant3: message" in lines
+        assert "    else Right-click a group label to add an else" in lines
+        assert lines[-1] == "@enduml"
+
 
 # Tests diagram type detection (activity vs sequence) from PlantUML source text.
 class TestCheckDiagramType:

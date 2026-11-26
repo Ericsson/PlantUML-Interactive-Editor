@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Updated the sequence-diagram demo
 
+### Internal
+
+- `indentPuml` (`script.js`) now also indents on `alt`, `opt`, `loop` and `box`, closes on `end box`, and closes on a bare `end` only in sequence diagrams (in activity diagrams `end` is a stop marker). Keywords now match whole words (`elseif` was added to keep its branch indentation). The classification in `checkDiagramType` moved into the side-effect-free `detectDiagramType`, so `indentPuml` can use it without registering event listeners. Covered by `tests/e2e/test_js_logic.py`.
+
 ## [0.32.1] - 2026-11-23
 
 ### External

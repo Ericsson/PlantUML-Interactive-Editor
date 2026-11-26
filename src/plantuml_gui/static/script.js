@@ -301,7 +301,7 @@ note right of Participant2 #Khaki : Notes can be placed left\\nor right of a par
 hnote over Participant3 #LightGreen : I am a hexagonal note
 rnote over Participant3, Participant4 : Notes can span participants
 group Right-click my label to rename or delete me
-    Participant1 -> Participant2: message
+    Participant1 -> Participant2: Right-click where a group should start to Add Group,\\nthen left-click where it should end
     alt Groups can be group, alt, opt or loop, and can be nested
         Participant2 -> Participant3: message
     else Right-click a group label to add an else
@@ -797,13 +797,17 @@ function indentPuml(pumlcontent) {
     const lines = pumlcontent.split('\n');
     let indentedLines = [];
     let level = 0;
+    // A bare "end" closes a sequence block, but is a stop marker in an activity diagram.
+    const isSequence = detectDiagramType(pumlcontent) === "sequence";
 
-    // Keywords that increase indentation level
-    const increaseIndentKeywords = ["If", "if", "while", "group", "partition", "fork", "repeat", "switch"]
+    // Keywords that increase indentation level (alt/opt/loop/box: sequence diagrams)
+    const increaseIndentKeywords = ["If", "if", "while", "group", "partition", "fork", "repeat", "switch", "alt", "opt", "loop", "box"]
     // Keywords that should go back one level and then keep same level
-    const sameIndentKeywords = ["else", "fork again", "case"]
+    const sameIndentKeywords = ["else", "elseif", "fork again", "case"]
     // Keywords that decrease indentation level
-    const decreaseIndentKeywords = ["endif", "endwhile", "end group", "}", "end fork", "endfork", "end merge", "repeat while", "repeatwhile", "endswitch"]
+    const decreaseIndentKeywords = ["endif", "endwhile", "end group", "}", "end fork", "endfork", "end merge", "repeat while", "repeatwhile", "endswitch", "end box"]
+    // Whole-word match, so e.g. "par..." in "participant" or "else" in "elseif" don't count.
+    const startsWithKeyword = (line, keyword) => line.startsWith(keyword) && !/\w/.test(line.charAt(keyword.length));
 
     lines.forEach(line => {
         const trimmedLine = line.trim();
@@ -822,11 +826,11 @@ function indentPuml(pumlcontent) {
 
 
         // Adjust indentation before appending the line if it is an end statement
-        if (decreaseIndentKeywords.some(keyword => trimmedLine.startsWith(keyword))) {
+        if (decreaseIndentKeywords.some(keyword => startsWithKeyword(trimmedLine, keyword)) || (isSequence && trimmedLine === "end")) {
             level--;
         }
 
-        if (sameIndentKeywords.some(keyword => trimmedLine.startsWith(keyword))) {
+        if (sameIndentKeywords.some(keyword => startsWithKeyword(trimmedLine, keyword))) {
             indentedLines.push('    '.repeat(Math.max(0, level - 1)) + trimmedLine);
             return
 
@@ -835,7 +839,7 @@ function indentPuml(pumlcontent) {
         }
 
         // Adjust indentation after appending the line if it is a start statement
-        if (increaseIndentKeywords.some(keyword => trimmedLine.startsWith(keyword))) {
+        if (increaseIndentKeywords.some(keyword => startsWithKeyword(trimmedLine, keyword))) {
             level++;
         }
     });
@@ -903,7 +907,19 @@ function restoreeditor() {
 }
 
 
+// Detects the diagram type and wires up that type's event listeners.
 function checkDiagramType(puml) {
+    const type = detectDiagramType(puml);
+    if (type === "sequence") {
+        addSequenceEventListeners();
+    } else if (type === "activity") {
+        addActivityEventListeners();
+    }
+    return type;
+}
+
+// Classifies puml as "sequence", "activity" or "unknown", without side effects.
+function detectDiagramType(puml) {
     const activityKeywords = ["if", "while", "fork", "repeat", "switch", "start", "stop", ":"];
     const sequenceKeywords = ["state", "actor", "boundary", "control", "entity", "database", "collections", "queue", "participant"];
 
@@ -974,13 +990,11 @@ function checkDiagramType(puml) {
     }
 
     if (foundSequence) {
-        addSequenceEventListeners();
         return "sequence";
     }
 
     for (const line of filteredLines) {
         if (activityKeywords.some(keyword => line.startsWith(keyword))) {
-            addActivityEventListeners();
             return "activity";
         }
     }
