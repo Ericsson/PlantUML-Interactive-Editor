@@ -130,7 +130,11 @@
 │   ├── check_vendor_versions.py # Pre-commit: extension and web app vendor the same library versions
 │   └── build_release.sh    # Build the wheel and the .vsix, optionally copying it to a destination (run by the Release workflow)
 ├── .github/workflows/      # CI: pytest, pre-commit, scorecard; release.yml tags vX.Y.Z and creates the GitHub Release when a version bump merges to main
-└── .kiro/steering/         # Kiro steering files
+└── .kiro/
+    ├── steering/           # Kiro steering files
+    └── skills/             # Kiro skills (good-code-design, pre-commit-checklist)
+        └── scripts/
+            └── record_demo_gif.py # Record the README and Help-modal demo GIFs (Playwright + ImageMagick)
 ```
 
 ## Module Organization
