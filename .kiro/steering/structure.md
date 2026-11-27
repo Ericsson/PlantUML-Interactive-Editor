@@ -48,6 +48,7 @@
 │   │   ├── index.html      # Single-page app template (shared layout)
 │   │   └── partials/       # Included template fragments
 │   │       ├── activity_menus.html  # Activity context menus and modals
+│   │       ├── help_modal.html      # Help (?) modal: Getting started walkthroughs, Mouse & keyboard, Docs & support
 │   │       └── sequence_menus.html  # Sequence context menus and modals
 │   └── static/             # Frontend assets
 │       ├── script.js       # Main activity diagram JS
@@ -60,6 +61,7 @@
 │       ├── sequence-box.js      # Sequence participant-box interaction (horizontal ghost box, two-click add; edit title/color and delete via the lifeline context menu)
 │       ├── sequence-operations.js # Sequence participant operations and orchestration
 │       ├── mode-plantuml.js # Ace editor PlantUML mode
+│       ├── help/           # Walkthrough GIFs shown in the Help modal
 │       ├── styles.css      # Main stylesheet (imports css/ modules)
 │       └── css/            # Modular CSS files
 │           ├── tokens.css  # Design tokens (CSS custom properties)
@@ -67,7 +69,8 @@
 │           ├── toolbars.css # Global bar, pane toolbars, button styles
 │           ├── panels.css  # Dropdown panels, legacy dropdown compat
 │           ├── editor.css  # Ace editor, diagram canvas, loading
-│           └── legacy.css  # Error popup, hover overlay
+│           ├── legacy.css  # Error popup, hover overlay
+│           └── help.css    # Help modal layout (walkthroughs, steps, shortcut table)
 ├── tests/
 │   ├── conftest.py         # pytest fixtures (client fixture)
 │   ├── activity/           # Activity diagram route & logic tests
@@ -107,6 +110,7 @@
 │   └── e2e/                # Playwright end-to-end tests
 │       ├── conftest.py     # Live server fixture
 │       ├── test_app_loads.py  # App loads correctly
+│       ├── test_help_modal.py # Help modal: opens on Getting started, GIFs load, tabs switch, closes
 │       ├── test_js_logic.py   # JS function logic tests
 │       ├── test_render_race.py # Render-generation race regression (slow render can't clobber a newer diagram)
 │       ├── test_ribbon.py     # Toolbar ribbon UI tests
