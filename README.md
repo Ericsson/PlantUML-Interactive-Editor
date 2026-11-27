@@ -22,7 +22,7 @@ The editor is available in two forms:
 </tr>
 </table>
 
-![Screenshot](images/screenshot.png)
+<img src="images/activity-demo-code-edit.gif" alt="Animated demo: editing the built-in Activity Demo by double-clicking, using the context menu, editing the code and hovering" width="100%">
 
 With PlantUML Interactive Editor, you can:
 
