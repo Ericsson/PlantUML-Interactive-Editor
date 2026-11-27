@@ -536,7 +536,7 @@ function setupGroupHandlers(svgelements) {
             // advances the ordinal. PlantUML also emits an invisible layout rect
             // with fill="none" but no preceding tab; it must not shift the
             // ordinal, or lookups into groupPositions (built by the backend's
-            // _count_group_boxes, which applies this same tab-pairing rule)
+            // _group_box_rects, which applies this same tab-pairing rule)
             // misalign.
             if (pendingTabPath) {
                 groupOrdinal++;
