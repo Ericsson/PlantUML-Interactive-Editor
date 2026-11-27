@@ -132,9 +132,13 @@
 ├── .github/workflows/      # CI: pytest, pre-commit, scorecard; release.yml tags vX.Y.Z and creates the GitHub Release when a version bump merges to main
 └── .kiro/
     ├── steering/           # Kiro steering files
-    └── skills/             # Kiro skills (good-code-design, pre-commit-checklist)
-        └── scripts/
-            └── record_demo_gif.py # Record the README and Help-modal demo GIFs (Playwright + ImageMagick)
+    └── skills/             # Kiro skills (Agent Skills format: <name>/SKILL.md, optional scripts/)
+        ├── good-code-design/
+        ├── pre-commit-checklist/
+        └── record-demo-gif/
+            ├── SKILL.md
+            └── scripts/
+                └── record_demo_gif.py # Record the README and Help-modal demo GIFs (Playwright + ImageMagick)
 ```
 
 ## Module Organization

@@ -42,7 +42,7 @@ app's Help modal, which go to ``src/plantuml_gui/static/help/<name>.gif``):
 Requires the PlantUML JAR configured in ``.env`` (as for running the app),
 Playwright's Chromium (``uv run playwright install chromium``) and ImageMagick.
 
-    uv run python .kiro/skills/scripts/record_demo_gif.py [scenario ...]
+    uv run python .kiro/skills/record-demo-gif/scripts/record_demo_gif.py [scenario ...]
 """
 
 from __future__ import annotations
@@ -59,8 +59,9 @@ from pathlib import Path
 
 from playwright.sync_api import Page, ViewportSize, sync_playwright
 
-# This file lives in .kiro/skills/scripts/, three directories below the repo root.
-ROOT = Path(__file__).resolve().parents[3]
+# This file lives in .kiro/skills/record-demo-gif/scripts/, four directories
+# below the repo root.
+ROOT = Path(__file__).resolve().parents[4]
 IMAGES = ROOT / "images"
 # The app's Help modal shows these scenarios, so they are written where Flask
 # serves static files (and the wheel packages them) instead of to images/.
