@@ -282,36 +282,43 @@ function setSequence() {
     resetPage();
     puml = `@startuml
 title
-This is the Sequence Diagram demo!
-Try double-click me to change the title!
+This is not an ordinary PlantUML editor!
+Double-click me to change the title.
 endtitle
-box "Right-click this box to edit\\nits title, color, or delete it" #LightBlue
-participant Alice
-participant Bob
+participant "Right-click me to add participants.\\nDouble-click me to rename me." as Participant1
+participant Participant2
+box "Right-click me to edit or delete this box.\\nRight-click a participant to add a new box." #LightBlue
+    participant Participant3
+    participant Participant4
 end box
-participant Server
-participant Database
-Alice -> Bob: Right-click a participant to add another\\nbeside it, or double-click it to rename it
-Bob -[#green]> Server: Right-click a message (the arrow or its text)\\nto edit the text or change the arrow color
-activate Server
-Server -> Database: Right-click a lifeline for Add Message,\\nActivate, Add Note, or Add Group
-activate Database
-Database --> Server: result
-deactivate Database
-note right of Server #LightPink: Add a note from the lifeline menu.\\nRight-click a note to edit or delete it
-Server --> Bob: response
-destroy Server
-group Add Group from the lifeline menu, then click two messages to wrap them (group / alt / opt / loop)
-Bob -> Alice: request
-alt success
-Alice -> Bob: granted
-else failure
-Alice -> Bob: denied
+Participant1 -> Participant2: Right-click a lifeline to add a message like me
+Participant2 -> Participant3: Right-click me to edit or delete me
+Participant3 -[#Blue]> Participant4: <color:Blue>Right-click me to change my color</color>
+Participant4 --> Participant3: I am a dashed message
+Participant3 -> Participant3: Self-messages work too
+note left of Participant2 #LightPink : Right-click me to edit\\nor recolor me
+note right of Participant2 #Khaki : Notes can be placed left\\nor right of a participant
+hnote over Participant3 #LightGreen : I am a hexagonal note
+rnote over Participant3, Participant4 : Notes can span participants
+group Right-click my label to rename or delete me
+    Participant1 -> Participant2: Right-click where a group should start to Add Group,\\nthen left-click where it should end
+    alt Groups can be group, alt, opt or loop, and can be nested
+        Participant2 -> Participant3: message
+    else Right-click a group label to add an else
+        Participant2 -[#Red]> Participant4: <color:Red>message</color>
+    end
 end
-end
-Alice -> Alice: Self-messages are supported too!
-hnote over Bob #LightGreen: This is an "H Note"
-rnote over Alice, Bob: An "R Note" can span participants
+Participant1 -> Participant2: Right-click a lifeline and choose\\nActivate to start a bar here
+activate Participant2
+Participant2 -> Participant2: Bars can be nested
+activate Participant2
+Participant2 -> Participant3: Right-click a bar to delete it
+deactivate Participant2
+Participant2 --> Participant1: Click where bar should end and choose Deactivate
+deactivate Participant2
+Participant1 -> Participant2: Or choose Destroy to end the lifeline with an X
+activate Participant2
+destroy Participant2
 @enduml`;
         setPuml(puml)
 }
@@ -790,13 +797,17 @@ function indentPuml(pumlcontent) {
     const lines = pumlcontent.split('\n');
     let indentedLines = [];
     let level = 0;
+    // A bare "end" closes a sequence block, but is a stop marker in an activity diagram.
+    const isSequence = detectDiagramType(pumlcontent) === "sequence";
 
-    // Keywords that increase indentation level
-    const increaseIndentKeywords = ["If", "if", "while", "group", "partition", "fork", "repeat", "switch"]
+    // Keywords that increase indentation level (alt/opt/loop/box: sequence diagrams)
+    const increaseIndentKeywords = ["If", "if", "while", "group", "partition", "fork", "repeat", "switch", "alt", "opt", "loop", "box"]
     // Keywords that should go back one level and then keep same level
-    const sameIndentKeywords = ["else", "fork again", "case"]
+    const sameIndentKeywords = ["else", "elseif", "fork again", "case"]
     // Keywords that decrease indentation level
-    const decreaseIndentKeywords = ["endif", "endwhile", "end group", "}", "end fork", "endfork", "end merge", "repeat while", "repeatwhile", "endswitch"]
+    const decreaseIndentKeywords = ["endif", "endwhile", "end group", "}", "end fork", "endfork", "end merge", "repeat while", "repeatwhile", "endswitch", "end box"]
+    // Whole-word match, so e.g. "par..." in "participant" or "else" in "elseif" don't count.
+    const startsWithKeyword = (line, keyword) => line.startsWith(keyword) && !/\w/.test(line.charAt(keyword.length));
 
     lines.forEach(line => {
         const trimmedLine = line.trim();
@@ -815,11 +826,11 @@ function indentPuml(pumlcontent) {
 
 
         // Adjust indentation before appending the line if it is an end statement
-        if (decreaseIndentKeywords.some(keyword => trimmedLine.startsWith(keyword))) {
+        if (decreaseIndentKeywords.some(keyword => startsWithKeyword(trimmedLine, keyword)) || (isSequence && trimmedLine === "end")) {
             level--;
         }
 
-        if (sameIndentKeywords.some(keyword => trimmedLine.startsWith(keyword))) {
+        if (sameIndentKeywords.some(keyword => startsWithKeyword(trimmedLine, keyword))) {
             indentedLines.push('    '.repeat(Math.max(0, level - 1)) + trimmedLine);
             return
 
@@ -828,7 +839,7 @@ function indentPuml(pumlcontent) {
         }
 
         // Adjust indentation after appending the line if it is a start statement
-        if (increaseIndentKeywords.some(keyword => trimmedLine.startsWith(keyword))) {
+        if (increaseIndentKeywords.some(keyword => startsWithKeyword(trimmedLine, keyword))) {
             level++;
         }
     });
@@ -896,7 +907,19 @@ function restoreeditor() {
 }
 
 
+// Detects the diagram type and wires up that type's event listeners.
 function checkDiagramType(puml) {
+    const type = detectDiagramType(puml);
+    if (type === "sequence") {
+        addSequenceEventListeners();
+    } else if (type === "activity") {
+        addActivityEventListeners();
+    }
+    return type;
+}
+
+// Classifies puml as "sequence", "activity" or "unknown", without side effects.
+function detectDiagramType(puml) {
     const activityKeywords = ["if", "while", "fork", "repeat", "switch", "start", "stop", ":"];
     const sequenceKeywords = ["state", "actor", "boundary", "control", "entity", "database", "collections", "queue", "participant"];
 
@@ -967,13 +990,11 @@ function checkDiagramType(puml) {
     }
 
     if (foundSequence) {
-        addSequenceEventListeners();
         return "sequence";
     }
 
     for (const line of filteredLines) {
         if (activityKeywords.some(keyword => line.startsWith(keyword))) {
-            addActivityEventListeners();
             return "activity";
         }
     }
