@@ -31,9 +31,8 @@ Three tabs, switched by Bootstrap's own tab plugin (no app JS): Getting
 started walks through the two GIFs, Mouse & keyboard is the reference, and
 Docs & support holds the links. Styled by static/css/help.css.
 
-The walkthrough steps describe what the GIFs show, which is scripted in
-scripts/record_demo_gif.py (scenarios activity-editing and sequence-editing).
-Change both together. The GIFs load lazily, so they are only fetched once
+The walkthrough steps describe what the GIFs in static/help/ show; if either
+changes, update the other. The GIFs load lazily, so they are only fetched once
 their tab is first shown.
 -->
 <div class="modal fade help-modal" id="helpModal" tabindex="-1" role="dialog" aria-labelledby="helpModalTitle" aria-hidden="true">

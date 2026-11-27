@@ -60,7 +60,7 @@
 │       ├── sequence-box.js      # Sequence participant-box interaction (horizontal ghost box, two-click add; edit title/color and delete via the lifeline context menu)
 │       ├── sequence-operations.js # Sequence participant operations and orchestration
 │       ├── mode-plantuml.js # Ace editor PlantUML mode
-│       ├── help/           # Walkthrough GIFs shown in the Help modal (recorded by scripts/record_demo_gif.py)
+│       ├── help/           # Walkthrough GIFs shown in the Help modal
 │       ├── styles.css      # Main stylesheet (imports css/ modules)
 │       └── css/            # Modular CSS files
 │           ├── tokens.css  # Design tokens (CSS custom properties)
@@ -124,7 +124,6 @@
 │       └── test_sequence_title.py            # Double-click title editing e2e tests (shared by activity & sequence)
 ├── scripts/                # Repo tooling (tests in tests/scripts/)
 │   ├── bump_version.py     # Release: bump the version (patch/minor/major) and date the changelog
-│   ├── record_demo_gif.py  # Record the README and Help-modal demo GIFs (Playwright + ImageMagick)
 │   ├── check_app_versions.py # Pre-commit: every version file carries the same X.Y.Z
 │   ├── check_vendor_versions.py # Pre-commit: extension and web app vendor the same library versions
 │   └── build_release.sh    # Build the wheel and the .vsix, optionally copying it to a destination (run by the Release workflow)
