@@ -308,7 +308,7 @@ class TestElseAddMode:
         lines = self._add_via_ui(page, SINGLE_MESSAGE_ALT, 1, "failure")
         assert lines[3:7] == [
             "alt success",
-            "Alice -> Bob: granted",
+            "    Alice -> Bob: granted",
             "else failure",
             "end",
         ]

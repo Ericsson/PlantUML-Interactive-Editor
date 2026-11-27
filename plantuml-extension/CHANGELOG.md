@@ -9,6 +9,8 @@ Changes to the diagram editing itself are listed in the repository's
 
 ## [Unreleased]
 
+## [0.32.1] - 2026-11-23
+
 - Fixed undo and redo while the diagram panel has focus. Ctrl+Z (Cmd+Z on
   macOS) and Ctrl+Y / Ctrl+Shift+Z now undo and redo the document without
   clicking into the code editor first; the history is the same one the code
