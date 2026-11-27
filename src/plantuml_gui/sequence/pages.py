@@ -157,6 +157,24 @@ def mask_other_pages(puml: str, page: int) -> Tuple[str, Dict[int, str]]:
     return "\n".join(masked), originals
 
 
+def current_page_end(puml: str) -> int:
+    """Line index an element added past every other one is inserted at.
+
+    ``puml`` is a page view from :func:`mask_other_pages` (or an unpaged
+    diagram): the first unmasked ``newpage`` closes the current page;
+    otherwise it is ``@enduml`` (or the line count if there is none).
+    """
+    lines = puml.splitlines()
+    in_note = note_line_indexes(lines)
+    for i, line in enumerate(lines):
+        if i not in in_note and is_page_break(line.strip()):
+            return i
+    for i in range(len(lines) - 1, -1, -1):
+        if lines[i].strip() == "@enduml":
+            return i
+    return len(lines)
+
+
 def unmask(puml: str, originals: Dict[int, str]) -> str:
     """Restore the lines :func:`mask_other_pages` replaced.
 

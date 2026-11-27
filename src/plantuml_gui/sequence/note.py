@@ -28,11 +28,11 @@ from typing import Dict, List
 from pyquery import PyQuery as Pq
 
 from .classes import Diagram, Message, reference_name_for
+from .insertion import find_insertion_index
 from .util import (
     NOTE_KEYWORDS,
     escape_multiline_text,
     extract_note_positions,
-    find_insertion_index,
     find_note_region,
     iter_note_shapes,
     note_line_keyword,
@@ -133,7 +133,7 @@ def add_note(
             lines.insert(nearest.index + 1, note_line)
             return "\n".join(lines)
 
-    insert_at = find_insertion_index(diagram.messages, svg, puml, y_position, lines)
+    insert_at = find_insertion_index(diagram.messages, svg, puml, y_position)
     # The frontend only knows displayed names; note placement must name the
     # alias when the participant has one, or a name with spaces breaks the line.
     note_line = _build_note_line(

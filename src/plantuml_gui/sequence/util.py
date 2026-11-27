@@ -28,7 +28,7 @@ from typing import List, Optional, Set
 from pyquery import PyQuery as Pq
 
 from .box import is_box_rect
-from .classes import Message, participant_header_bounds
+from .classes import participant_header_bounds
 
 # PlantUML renders each note type as a visually distinct shape, independent
 # of fill color:
@@ -359,33 +359,3 @@ def escape_multiline_text(text: str) -> str:
 def unescape_multiline_text(text: str) -> str:
     """Convert literal \\n back to real newlines for display when editing."""
     return text.replace("\\n", "\n")
-
-
-def find_insertion_index(
-    messages: List[Message], svg: str, puml: str, y: float, lines: List[str]
-) -> int:
-    """Find the line index to insert a new element based on y-coordinate.
-
-    Considers both messages and existing notes ordered by their SVG Y-position.
-    """
-    elements: List[tuple[float, int]] = []
-    for msg in messages:
-        elements.append((msg.cy, msg.index))
-    elements.extend(extract_note_positions(svg, puml))
-    elements.sort(key=lambda x: x[0])
-
-    for cy, line_index in elements:
-        if cy > y:
-            return line_index
-
-    # After all elements: insert at the end of the page. With a multi-page
-    # diagram masked to one page (see pages.py), the first unmasked ``newpage``
-    # ends the current page; otherwise insert before @enduml.
-    in_note = {i for start, end in note_regions(puml) for i in range(start, end + 1)}
-    for i, line in enumerate(lines):
-        if i not in in_note and is_page_break(line.strip()):
-            return i
-    for i in range(len(lines) - 1, -1, -1):
-        if lines[i].strip() == "@enduml":
-            return i
-    return len(lines)

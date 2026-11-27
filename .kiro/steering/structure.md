@@ -26,8 +26,9 @@
 │   │   ├── box.py          # Participant box logic (add, delete, nesting via teoz, is_box_rect)
 │   │   ├── note.py         # Note logic (add, edit, delete notes)
 │   │   ├── pages.py        # Multi-page (newpage) diagrams: page boundaries, and masking other pages so element modules see only the current one
+│   │   ├── insertion.py    # Y-based insertion index for new messages/notes (messages, notes and group header/else/end boundaries, limited to the current page)
 │   │   ├── positions.py    # Per-render position aggregator (get_sequence_positions: one fetch for all element types' editor rows)
-│   │   └── util.py         # Shared utilities (insertion index, note position extraction, multi-line text escaping)
+│   │   └── util.py         # Shared utilities (note position extraction, multi-line text escaping)
 │   ├── activity/           # Activity diagram package
 │   │   ├── routes.py       # All activity routes (~64 endpoints)
 │   │   ├── classes.py      # RectElement, PolyElement, Ellipse, SvgChunk, TextElement
@@ -103,6 +104,7 @@
 │   │   ├── test_sequence_group.py
 │   │   ├── test_sequence_else.py          # Else branches: how they render, detection around them, slots, add_else, delete, /addSeqElse, note bodies
 │   │   ├── test_box.py
+│   │   ├── test_insertion.py              # Y-based insertion of messages/notes around group header, else and end boundaries (incl. nested and page-spanning groups)
 │   │   ├── test_newpage.py                # Multi-page (newpage): page model, masking, paged render and routes
 │   │   └── test_sequence_note.py
 │   └── e2e/                # Playwright end-to-end tests

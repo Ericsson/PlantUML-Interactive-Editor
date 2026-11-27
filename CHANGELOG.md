@@ -8,9 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### External
 
+- Updated the sequence-diagram demo
+- Fixed adding a sequence-diagram message or note below the last message of a group: it was placed after the group instead of inside it. Clicking inside a group's box now always adds inside the group (and in the branch you clicked, around `else` lines), and clicking above a group adds before it.
 - Redesigned the Help (`?`) modal. It now opens on a Getting started tab that walks through building an activity diagram and a sequence diagram, each with an animation and numbered steps beside it. The usage tips moved to a Mouse & keyboard tab, grouped by editing, moving around, code and diagram, and sharing. The documentation links and support contacts moved to a Docs & support tab, which also links to the list of supported features.
 
 ### Internal
+
+- Moved `find_insertion_index` from `sequence/util.py` to the new `sequence/insertion.py` (it now depends on `group` and `pages`, which import `util`) and dropped its unused `lines` parameter. Besides messages and notes it orders group boundaries from `group.group_boundary_positions` (header at the box top, each `else` at its separator, `end` at the box bottom), ignoring a group `end` past the current page (`pages.current_page_end`, which is also the fallback position). `group._group_box_rects` replaces `_count_group_boxes`. Covered by `tests/sequence/test_insertion.py`.
+
+- `indentPuml` (`script.js`) now also indents on `alt`, `opt`, `loop` and `box`, closes on `end box`, and closes on a bare `end` only in sequence diagrams (in activity diagrams `end` is a stop marker). Keywords now match whole words (`elseif` was added to keep its branch indentation). The classification in `checkDiagramType` moved into the side-effect-free `detectDiagramType`, so `indentPuml` can use it without registering event listeners. Covered by `tests/e2e/test_js_logic.py`.
 
 - Moved the Help modal out of `partials/activity_menus.html` into its own `partials/help_modal.html` (id `helpModal`, was `usageModal`), included only by `index.html`. The extension's webview has no Help button, so it no longer carries the modal. Styled by the new `static/css/help.css`. The walkthrough GIFs live in `static/help/`. Covered by `tests/e2e/test_help_modal.py`, which replaces the single help test in `test_ribbon.py`.
 
