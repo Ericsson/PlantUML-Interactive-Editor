@@ -1,0 +1,199 @@
+<!--
+SPDX-License-Identifier: MIT
+
+MIT License
+
+Copyright (c) 2026 Ericsson
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+The Help modal opened by the global bar's (?) button in index.html. Shared by
+both diagram types, so it lives here rather than in a diagram's menu partial.
+The extension's webview has no (?) button and does not include it.
+
+Three tabs, switched by Bootstrap's own tab plugin (no app JS): Getting
+started walks through the two GIFs, Mouse & keyboard is the reference, and
+Docs & support holds the links. Styled by static/css/help.css.
+
+The walkthrough steps describe what the GIFs show, which is scripted in
+scripts/record_demo_gif.py (scenarios activity-editing and sequence-editing).
+Change both together. The GIFs load lazily, so they are only fetched once
+their tab is first shown.
+-->
+<div class="modal fade help-modal" id="helpModal" tabindex="-1" role="dialog" aria-labelledby="helpModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+    <div class="modal-content">
+      <!-- Title and tabs form one header: the tabs sit on its bottom edge. -->
+      <div class="help-header">
+        <div class="help-header-top">
+          <img src="static/favicon.svg" alt="" class="help-header-icon">
+          <h5 class="modal-title" id="helpModalTitle">Help</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+
+        <ul class="nav help-tabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <a class="nav-link active" id="help-tab-start" data-toggle="tab" href="#help-start" role="tab" aria-controls="help-start" aria-selected="true">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M5 3.5v9l7-4.5z"/></svg>
+              Getting started
+            </a>
+          </li>
+          <li class="nav-item" role="presentation">
+            <a class="nav-link" id="help-tab-usage" data-toggle="tab" href="#help-usage" role="tab" aria-controls="help-usage" aria-selected="false">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="1.5" y="4" width="13" height="8" rx="1.5"/><path d="M4 7h1M7.5 7h1M11 7h1M5 9.5h6"/></svg>
+              Mouse &amp; keyboard
+            </a>
+          </li>
+          <li class="nav-item" role="presentation">
+            <a class="nav-link" id="help-tab-resources" data-toggle="tab" href="#help-resources" role="tab" aria-controls="help-resources" aria-selected="false">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M2 3.5h4a2 2 0 0 1 2 2V13a1.5 1.5 0 0 0-1.5-1.5H2zM14 3.5h-4a2 2 0 0 0-2 2V13a1.5 1.5 0 0 1 1.5-1.5H14z"/></svg>
+              Docs &amp; support
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <div class="modal-body tab-content">
+
+        <!-- Getting started -->
+        <div class="tab-pane fade show active" id="help-start" role="tabpanel" aria-labelledby="help-tab-start">
+          <p class="help-lead">
+            Build diagrams by working on the picture itself: right-click an element to add
+            something next to it, and double-click it to change its text. The PlantUML code on
+            the left is written for you, and you can edit it directly at any time. Code and
+            diagram always stay in sync.
+          </p>
+
+          <section class="help-walkthrough" aria-labelledby="help-activity-heading">
+            <h6 class="help-walkthrough-title" id="help-activity-heading">Activity diagrams</h6>
+            <div class="help-walkthrough-body">
+              <img class="help-gif" src="static/help/activity-editing.gif" width="960" height="540" loading="lazy"
+                alt="Animation: an activity is added below Receive order and renamed Check stock, an if statement In stock? with yes and no branches is added below it, and hovering the activities highlights their code lines.">
+              <ol class="help-steps">
+                <li>
+                  <strong>Add a step.</strong> Right-click an activity and choose
+                  <em>Add Below &rsaquo; Activity</em>.
+                </li>
+                <li>
+                  <strong>Name it.</strong> Double-click the new activity, type its text and press
+                  <em>Submit</em> or <kbd>Ctrl</kbd>+<kbd>Enter</kbd>.
+                </li>
+                <li>
+                  <strong>Add a decision.</strong> Choose <em>Add Below &rsaquo; If Statement</em>,
+                  then double-click it to enter the condition and the label of each branch.
+                </li>
+                <li>
+                  <strong>Find the code.</strong> Hover any element: its line is highlighted in
+                  the editor.
+                </li>
+              </ol>
+            </div>
+          </section>
+
+          <section class="help-walkthrough" aria-labelledby="help-sequence-heading">
+            <h6 class="help-walkthrough-title" id="help-sequence-heading">Sequence diagrams</h6>
+            <div class="help-walkthrough-body">
+              <img class="help-gif" src="static/help/sequence-editing.gif" width="960" height="540" loading="lazy"
+                alt="Animation: a participant is added to the right of Server and renamed Database, a message query order is drawn from Server to Database, the whole exchange is wrapped in a loop named until done, and hovering the message highlights its code line.">
+              <ol class="help-steps">
+                <li>
+                  <strong>Add a participant.</strong> Right-click a participant's box and choose
+                  <em>Add Participant</em>; it appears to the right. Right-click it again and
+                  choose <em>Rename</em>.
+                </li>
+                <li>
+                  <strong>Draw a message.</strong> Right-click a lifeline at the height the message
+                  should go and choose <em>Add Message</em>. An arrow follows the mouse: click the
+                  receiving lifeline and type the message text.
+                </li>
+                <li>
+                  <strong>Group messages.</strong> Right-click where the group should start, choose
+                  <em>Add Group</em> and a type such as <em>loop</em>, then click where it should
+                  end and give it a label.
+                </li>
+                <li>
+                  <strong>Find the code.</strong> Hover a message, participant, note or group: its
+                  line is highlighted in the editor.
+                </li>
+              </ol>
+            </div>
+          </section>
+
+          <div class="help-tip">
+            <strong>Try it yourself:</strong> open <em>New &rsaquo; Activity Demo</em> or
+            <em>New &rsaquo; Sequence Demo</em> for a ready-made diagram to experiment on.
+            Made a mistake? <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes it. To share your diagram, copy
+            the URL in the address bar.
+          </div>
+        </div>
+
+        <!-- Mouse and keyboard -->
+        <div class="tab-pane fade" id="help-usage" role="tabpanel" aria-labelledby="help-tab-usage">
+          <table class="table table-sm help-table">
+            <caption class="sr-only">Mouse and keyboard actions</caption>
+            <tbody>
+              <tr class="help-table-group"><th colspan="2" scope="colgroup">Editing</th></tr>
+              <tr><th scope="row">Right-click an element</th><td>Open its menu: add, edit or delete</td></tr>
+              <tr><th scope="row">Double-click an element</th><td>Edit its text</td></tr>
+              <tr><th scope="row"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></th><td>Submit the text you are editing</td></tr>
+              <tr><th scope="row">Clear the text of a title, note, group or box</th><td>Delete that element</td></tr>
+              <tr><th scope="row"><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></th><td>Undo / redo</td></tr>
+
+              <tr class="help-table-group"><th colspan="2" scope="colgroup">Moving around</th></tr>
+              <tr><th scope="row">Left-click and drag the diagram</th><td>Pan</td></tr>
+              <tr><th scope="row">Mouse wheel or touchpad pinch</th><td>Zoom</td></tr>
+
+              <tr class="help-table-group"><th colspan="2" scope="colgroup">Code and diagram</th></tr>
+              <tr><th scope="row">Hover an element</th><td>Highlight its line in the editor</td></tr>
+              <tr><th scope="row">Hover or click a line in the editor</th><td>Highlight its element in the diagram</td></tr>
+
+              <tr class="help-table-group"><th colspan="2" scope="colgroup">Sharing</th></tr>
+              <tr><th scope="row">Copy the URL in the address bar</th><td>Share the diagram: the URL contains it</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Documentation and support -->
+        <div class="tab-pane fade" id="help-resources" role="tabpanel" aria-labelledby="help-tab-resources">
+          <h6>PlantUML documentation</h6>
+          <ul>
+            <li><a href="https://plantuml.com/activity-diagram-beta" target="_blank" rel="noopener noreferrer">Activity Diagram Documentation</a></li>
+            <li><a href="https://plantuml.com/sequence-diagram" target="_blank" rel="noopener noreferrer">Sequence Diagram Documentation</a></li>
+          </ul>
+
+          <h6>Supported features</h6>
+          <p>
+            <a href="https://github.com/Ericsson/PlantUML-Interactive-Editor/blob/main/FEATURES.md" target="_blank" rel="noopener noreferrer">FEATURES.md</a>
+            lists which PlantUML elements can be edited interactively and which only in the code.
+          </p>
+
+          <h6>Support</h6>
+          <p class="mb-0">
+            For support contact<br>
+            <a href="mailto:rima.safady@ericsson.com">rima.safady@ericsson.com</a><br>
+            <a href="mailto:filip.lange@ericsson.com">filip.lange@ericsson.com</a>
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,233 @@
+/*
+SPDX-License-Identifier: MIT
+Copyright (c) 2026 Ericsson
+*/
+
+/* Help modal (templates/partials/help_modal.html). Bootstrap supplies the
+   modal and tabs; this only lays out the content. */
+
+/* --- Header: icon, title and the tabs as one block --- */
+
+/* Rounder than Bootstrap's 0.3rem default. overflow: hidden clips the header's
+   tinted background to the same corners. */
+.help-modal .modal-content {
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+.help-header {
+    flex-shrink: 0;
+    padding: 18px 24px 0;
+    background: linear-gradient(180deg, var(--accent-bg) 0%, var(--panel-bg) 100%);
+    border-bottom: 1px solid var(--border-hover);
+}
+
+.help-header-top {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 14px;
+}
+
+.help-header-icon {
+    width: 40px;
+    height: 40px;
+    padding: 6px;
+    border-radius: var(--radius-panel);
+    background: var(--panel-bg);
+    border: 1px solid var(--accent-border);
+}
+
+.help-header .modal-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.help-header .close {
+    margin: 0 -8px 0 0;
+    padding: 4px 8px;
+}
+
+/* Underline tabs: the active one is marked by an accent bar that sits on the
+   header's bottom border, so tabs and header read as one control. */
+.help-tabs {
+    flex-wrap: nowrap;
+    gap: 4px;
+    margin-bottom: -1px;
+    /* A narrow window scrolls the tabs sideways rather than wrapping them. */
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.help-tabs .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px 10px;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+@media (max-width: 991px) {
+    .help-tabs {
+        gap: 0;
+    }
+
+    .help-tabs .nav-link {
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+
+    /* Icons are decoration; dropping them keeps all three labels visible. */
+    .help-tabs .nav-link svg {
+        display: none;
+    }
+}
+
+.help-tabs .nav-link svg {
+    width: 16px;
+    height: 16px;
+}
+
+.help-tabs .nav-link:hover {
+    color: var(--text-primary);
+    border-bottom-color: var(--border-hover);
+}
+
+.help-tabs .nav-link.active {
+    color: var(--accent-text);
+    border-bottom-color: var(--accent-text);
+}
+
+.help-tabs .nav-link:focus-visible {
+    outline: 2px solid var(--accent-border);
+    outline-offset: -2px;
+    border-radius: var(--radius-btn);
+}
+
+.help-modal .modal-body {
+    padding: 20px 24px;
+    color: var(--text-primary);
+}
+
+.help-modal h6 {
+    font-weight: 600;
+}
+
+.help-lead {
+    font-size: 15px;
+    color: var(--text-secondary);
+}
+
+/* --- Getting started walkthroughs --- */
+
+.help-walkthrough + .help-walkthrough {
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-color);
+}
+
+.help-walkthrough-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+/* GIF and steps side by side, so each step can be read while it plays. */
+.help-walkthrough-body {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 24px;
+    align-items: start;
+}
+
+@media (max-width: 991px) {
+    .help-walkthrough-body {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.help-gif {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--border-hover);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--panel-shadow);
+}
+
+.help-steps {
+    counter-reset: help-step;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.help-steps li {
+    counter-increment: help-step;
+    position: relative;
+    padding-left: 36px;
+    margin-bottom: 14px;
+    line-height: 1.5;
+}
+
+.help-steps li::before {
+    content: counter(help-step);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--accent-bg);
+    border: 1px solid var(--accent-border);
+    color: var(--accent-text);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 22px;
+    text-align: center;
+}
+
+.help-tip {
+    margin-top: 24px;
+    padding: 12px 16px;
+    border-radius: var(--radius-panel);
+    background: var(--accent-bg);
+    border: 1px solid var(--accent-border);
+}
+
+/* Bootstrap's <kbd> is white on black; a keycap reads better inline. */
+.help-modal kbd {
+    padding: 1px 6px;
+    border: 1px solid var(--border-hover);
+    border-bottom-width: 2px;
+    border-radius: var(--radius-btn);
+    background: var(--bg-toolbar);
+    color: var(--text-primary);
+    font-size: 0.85em;
+}
+
+/* --- Mouse and keyboard reference --- */
+
+.help-table th[scope="row"] {
+    width: 45%;
+    font-weight: normal;
+}
+
+.help-table .help-table-group th {
+    padding-top: 16px;
+    border-top: none;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.help-table tbody tr:first-child th {
+    padding-top: 0;
+}

@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### External
+
+- Redesigned the Help (`?`) modal. It now opens on a Getting started tab that walks through building an activity diagram and a sequence diagram, each with an animation and numbered steps beside it. The usage tips moved to a Mouse & keyboard tab, grouped by editing, moving around, code and diagram, and sharing. The documentation links and support contacts moved to a Docs & support tab, which also links to the list of supported features.
+
+### Internal
+
+- Moved the Help modal out of `partials/activity_menus.html` into its own `partials/help_modal.html` (id `helpModal`, was `usageModal`), included only by `index.html`. The extension's webview has no Help button, so it no longer carries the modal. Styled by the new `static/css/help.css`. The walkthrough GIFs live in `static/help/`, recorded by the new `scripts/record_demo_gif.py` (Playwright drives the app through scripted scenarios and ImageMagick encodes the frames), which writes its `activity-editing` and `sequence-editing` scenarios there and the README's demo to `images/`. Covered by `tests/e2e/test_help_modal.py`, which replaces the single help test in `test_ribbon.py`.
+
 ## [0.32.1] - 2026-11-23
 
 ### External
